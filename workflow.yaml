@@ -1,0 +1,72 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Workflow
+metadata:
+  generateName: automate-metashape-workflow-
+spec:
+  serviceAccountName: argo
+  entrypoint: main
+  volumes:
+  - name: data
+    persistentVolumeClaim:
+      claimName: ofo-share-nfs-pvc
+  - name: results
+    persistentVolumeClaim:
+      claimName: argo-output-nfs-pvc
+
+  templates:
+    - name: main
+      steps:
+        - - name: determine-datasets
+            template: determine-datasets
+        - - name: run-automate-metashape
+            template: run-automate-metashape
+            arguments:
+              parameters:
+                - name: dataset-names
+                  value: "{{item}}"
+            withParam: "{{steps.determine-datasets.outputs.result}}"
+    
+    # use subPath argument to mount dataset list argument (in /ofo-share/results/datasets.txt for now)
+    # assuming all separate runs for now
+    - name: determine-datasets
+      script:
+        image: python:3.9
+        volumeMounts:
+        - name: results
+          mountPath: /results
+          subPath: "{{workflow.parameters.DATASET_LIST}}"
+        command: ["python3"]
+        source: |
+          import json
+          import sys
+          file_path = "/results"
+          with open(file_path, "r") as f:
+            json.dump([line.strip() for line in f], sys.stdout)
+
+    - name: run-automate-metashape
+      inputs:
+        parameters:
+          - name: dataset-names
+      container:
+        image: ghcr.io/open-forest-observatory/automate-metashape
+        volumeMounts:
+        - name: data
+          mountPath: /data
+        - name: results
+          mountPath: /results
+          subPath: "{{workflow.parameters.RUN_FOLDER}}"
+        command: ["python3", "/app/python/metashape_workflow.py"]
+        args: 
+          - "--photo-path"
+          - "/data/{{inputs.parameters.dataset-names}}"
+          - "--project-path"
+          - "/results/project"
+          - "--output-path"
+          - "/results/output"
+          - "--run-name"
+          - "test-run-{{inputs.parameters.dataset-names}}"
+        env:
+          - name: AGISOFT_FLS
+            value: "{{workflow.parameters.AGISOFT_FLS}}"
+
+         
