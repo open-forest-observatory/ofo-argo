@@ -15,8 +15,8 @@ We use **Argo Workflows** to orchestrate and manage the execution of OFO workflo
 
 ---
 
-## 📄 Setup & Usage
+## Setup & Usage
 
 To get started or deploy workflows, refer to the detailed setup and usage guide:
 
-📖 [OFO Workflow Setup & Usage Documentation](https://docs.google.com/document/d/1ukaNrnbM4VINZeIyPb7z0lAMLhismMPMBCLoMxAaa30/edit?usp=sharing)
+[OFO Workflow Setup & Usage Documentation](https://docs.google.com/document/d/1ukaNrnbM4VINZeIyPb7z0lAMLhismMPMBCLoMxAaa30/edit?usp=sharing)
