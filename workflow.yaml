@@ -62,6 +62,12 @@ spec:
           - "--datasets-json"
           - "{{inputs.parameters.datasets}}"
         env:
+          - name: DB_HOST
+            value: "{{workflow.parameters.DB_HOST}}"
+          - name: DB_NAME
+            value: "{{workflow.parameters.DB_NAME}}"
+          - name: DB_USER
+            value: "{{workflow.parameters.DB_USER}}"
           - name: DB_PASSWORD
             value: "{{workflow.parameters.DB_PASSWORD}}"
             
@@ -110,6 +116,12 @@ spec:
           - "--dataset"
           - "{{inputs.parameters.dataset-name}}"
         env:
+          - name: DB_HOST
+            value: "{{workflow.parameters.DB_HOST}}"
+          - name: DB_NAME
+            value: "{{workflow.parameters.DB_NAME}}"
+          - name: DB_USER
+            value: "{{workflow.parameters.DB_USER}}"
           - name: DB_PASSWORD
             value: "{{workflow.parameters.DB_PASSWORD}}"
       
@@ -131,8 +143,15 @@ spec:
           - "--success"
           - "{{inputs.parameters.success}}"
         env:
+          - name: DB_HOST
+            value: "{{workflow.parameters.DB_HOST}}"
+          - name: DB_NAME
+            value: "{{workflow.parameters.DB_NAME}}"
+          - name: DB_USER
+            value: "{{workflow.parameters.DB_USER}}"
           - name: DB_PASSWORD
             value: "{{workflow.parameters.DB_PASSWORD}}"
+    
     # Run automate-metashape container
     - name: run-automate-metashape
       inputs:
@@ -155,7 +174,7 @@ spec:
           - "--output-path"
           - "/results/output"
           - "--run-name"
-          - "test-run-{{inputs.parameters.dataset-names}}-{{workflow-name}}"
+          - "test-run-{{inputs.parameters.dataset-names}}-{{workflow.name}}"
         env:
           - name: AGISOFT_FLS
             value: "{{workflow.parameters.AGISOFT_FLS}}"
