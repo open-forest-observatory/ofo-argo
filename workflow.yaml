@@ -18,20 +18,26 @@ spec:
       steps:
         - - name: determine-datasets
             template: determine-datasets
-        - - name: run-automate-metashape
-            template: run-automate-metashape
+        - - name: log-datasets-to-db
+            template: log-datasets-to-db
             arguments:
               parameters:
-                - name: dataset-names
+                - name: datasets
+                  value: "{{steps.determine-datasets.outputs.result}}"
+        - - name: process-datasets
+            template: process-dataset-workflow
+            arguments:
+              parameters:
+                - name: dataset-name
                   value: "{{item}}"
             withParam: "{{steps.determine-datasets.outputs.result}}"
     
-    # use subPath argument to mount dataset list argument (in /ofo-share/results/datasets.txt for now)
-    # assuming all separate runs for now
     - name: determine-datasets
       script:
         image: python:3.9
         volumeMounts:
+        - name: data
+          mountPath: /data
         - name: results
           mountPath: /results
           subPath: "{{workflow.parameters.DATASET_LIST}}"
@@ -39,10 +45,95 @@ spec:
         source: |
           import json
           import sys
-          file_path = "/results"
-          with open(file_path, "r") as f:
+          with open("/data/argo-output/datasets.txt", "r") as f:
             json.dump([line.strip() for line in f], sys.stdout)
 
+    - name: log-datasets-to-db
+      inputs:
+        parameters:
+          - name: datasets
+      container:
+        image: ghcr.io/open-forest-observatory/ofo-argo-utils:latest
+        command: ["python", "/app/db_logger.py"]
+        args:
+          - "log-initial"
+          - "--workflow-id"
+          - "{{workflow.name}}"
+          - "--datasets-json"
+          - "{{inputs.parameters.datasets}}"
+        env:
+          - name: DB_PASSWORD
+            value: "{{workflow.parameters.DB_PASSWORD}}"
+            
+
+    # Process dataset workflow with logging
+    - name: process-dataset-workflow
+      inputs:
+        parameters:
+          - name: dataset-name
+      steps:
+        - - name: log-start
+            template: log-dataset-start
+            arguments:
+              parameters:
+                - name: dataset-name
+                  value: "{{inputs.parameters.dataset-name}}"
+        - - name: run-processing
+            template: run-automate-metashape
+            arguments:
+              parameters:
+                - name: dataset-names
+                  value: "{{inputs.parameters.dataset-name}}"
+            continueOn:
+              failed: true
+        - - name: log-completion
+            template: log-dataset-completion
+            arguments:
+              parameters:
+                - name: dataset-name
+                  value: "{{inputs.parameters.dataset-name}}"
+                - name: success
+                  value: "{{steps.run-processing.status}}"
+
+    # Log dataset processing start
+    - name: log-dataset-start
+      inputs:
+        parameters:
+          - name: dataset-name
+      container:
+        image: ghcr.io/open-forest-observatory/ofo-argo-utils:latest
+        command: ["python", "/app/db_logger.py"]
+        args:
+          - "log-start"
+          - "--workflow-id"
+          - "{{workflow.name}}"
+          - "--dataset"
+          - "{{inputs.parameters.dataset-name}}"
+        env:
+          - name: DB_PASSWORD
+            value: "{{workflow.parameters.DB_PASSWORD}}"
+      
+    # Log dataset processing completion
+    - name: log-dataset-completion
+      inputs:
+        parameters:
+          - name: dataset-name
+          - name: success
+      container:
+        image: ghcr.io/open-forest-observatory/ofo-argo-utils:latest
+        command: ["python", "/app/db_logger.py"]
+        args:
+          - "log-completion"
+          - "--workflow-id"
+          - "{{workflow.name}}"
+          - "--dataset"
+          - "{{inputs.parameters.dataset-name}}"
+          - "--success"
+          - "{{inputs.parameters.success}}"
+        env:
+          - name: DB_PASSWORD
+            value: "{{workflow.parameters.DB_PASSWORD}}"
+    # Run automate-metashape container
     - name: run-automate-metashape
       inputs:
         parameters:
@@ -64,9 +155,7 @@ spec:
           - "--output-path"
           - "/results/output"
           - "--run-name"
-          - "test-run-{{inputs.parameters.dataset-names}}"
+          - "test-run-{{inputs.parameters.dataset-names}}-{{workflow-name}}"
         env:
           - name: AGISOFT_FLS
             value: "{{workflow.parameters.AGISOFT_FLS}}"
-
-         
