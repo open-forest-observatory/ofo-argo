@@ -1,4 +1,4 @@
-# ofo-data-pipeline
+# Argo Workflow
 
 This repository contains data workflows used by the **Open Forest Observatory (OFO)**. Currently, it is designed to run the `automate-metashape` pipeline, with more workflows to be added in the future.
 
