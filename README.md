@@ -45,12 +45,12 @@ On the left-side menu, select 'Templates' and look for the template called 'sing
 After clicking deploy, you will be stepped through a series of parameters to select
 
 * Cloud = Jetstream2
-* Project = <your js2 allocation>
+* Project = your js2 allocation name
 * Region = IU
-* Type a deployment name (e.g., <name>-<reason>-<date>)
+* Type a deployment name (e.g., jgillan-test-0618)
 * Make sure you are using Ubuntu22
 * Choose the number of instances. This should be a miminum of 3 VMs. One VM will be the master (does no work), the other two will be workers.
-* Choose the size of the VMs. It is recommended to start with `g3.medium` which has a gpu for each instance. GPUs are useful for accelerating some steps of the metashape pipeline. 
+* Choose the size of the VMs. It is recommended to start with `g3.medium` which has a gpu for each instance. GPUs are useful for accelerating some steps of the metashape pipeline. Having a GPU for the master instance seems wasteful, so we can `resize` the master instance later in Exosphere.
 
 
 <img width="400" alt="cacao_parameters" src="https://github.com/user-attachments/assets/bb34c732-311d-4710-beba-19da1d3c0ad7" />
