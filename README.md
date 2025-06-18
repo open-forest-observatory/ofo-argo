@@ -42,6 +42,7 @@ On the left-side menu, select 'Templates' and look for the template called 'sing
 <br/>
 <br/>
 
+
 After clicking deploy, you will be stepped through a series of parameters to select
 
 * Cloud = Jetstream2
@@ -58,7 +59,23 @@ After clicking deploy, you will be stepped through a series of parameters to sel
 
 
 <br/>
-<br/>
+
+### Check Status of Kubernetes
+
+
+### Install Argo on Master instance
+
+### Clone ofo-argo repository to Master instance
+
+In the home directory of your terminal, type in the following
+
+`git clone https://github.com/open-forest-observatory/ofo-argo.git`
+
+### Persistent volume 
+
+persistent volume (PV)
+
+persistent volume claim (PVC)
 
 ## Files In this Repository
 
