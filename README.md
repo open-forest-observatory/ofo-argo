@@ -35,11 +35,25 @@ CACAO is an interface for provisioning and launching virtual machines on Jetstre
 
 Log into CACAO at https://cacao.jetstream-cloud.org/ using your ACCESS credentials. Before launching VMs, you should [add public ssh keys](https://docs.jetstream-cloud.org/ui/cacao/credentials/) to CACAO if you would like to acccess VMs from your local IDE. These keys are specific to the local computer you are using. Once your keys are in CACAO, they will be uploaded to any VM you launch in CACAO.  
 
-<img width="400" alt="cacao_k3" src="https://github.com/user-attachments/assets/deaafcef-dd91-4972-a9fb-dfc87ec2fc96" />
+On the left-side menu, select 'Templates' and look for the template called 'single-image-k3s'. Deploy this template. 
+
+<img width="500" alt="cacao_k3" src="https://github.com/user-attachments/assets/deaafcef-dd91-4972-a9fb-dfc87ec2fc96" />
 
 <br/>
+<br/>
 
-<img width="300" alt="cacao_parameters" src="https://github.com/user-attachments/assets/bb34c732-311d-4710-beba-19da1d3c0ad7" />
+After clicking deploy, you will be stepped through a series of parameters to select
+
+* Cloud = Jetstream2
+* Project = <your js2 allocation>
+* Region = IU
+* Type a deployment name (e.g., <name>-<reason>-<date>)
+* Make sure you are using Ubuntu22
+* Choose the number of instances. This should be a miminum of 3 VMs. One VM will be the master (does no work), the other two will be workers.
+* Choose the size of the VMs. It is recommended to start with `g3.medium` which has a gpu for each instance. GPUs are useful for accelerating some steps of the metashape pipeline. 
+
+
+<img width="400" alt="cacao_parameters" src="https://github.com/user-attachments/assets/bb34c732-311d-4710-beba-19da1d3c0ad7" />
 
 
 
