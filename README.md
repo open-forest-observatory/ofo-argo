@@ -62,8 +62,11 @@ After clicking deploy, you will be stepped through a series of parameters to sel
 
 ### Check Status of Kubernetes
 
+<br/>
 
 ### Install Argo on Master instance
+
+<br/>
 
 ### Clone ofo-argo repository to Master instance
 
@@ -71,11 +74,17 @@ In the home directory of your terminal, type in the following
 
 `git clone https://github.com/open-forest-observatory/ofo-argo.git`
 
-### Persistent volume 
+<br/>
+
+### Connect VM instances to shared volume
+
+The following is about connecting the kubernetes instances with the `/ofo-share` volume so it can read the drone imagery to process and write the outputs.
 
 persistent volume (PV)
 
 persistent volume claim (PVC)
+
+<br/>
 
 ## Files In this Repository
 
