@@ -9,6 +9,18 @@ This repository contains [Argo Workflows](https://argoproj.github.io/workflows) 
 
 
 ## Setup
+
+### Add drone imagery data to shared volume
+
+https://jetstream2.exosphere.app/exosphere/
+
+start a new VM from `ofo-dev` image. Make it tiny. Starting an `ofo-dev` VM will automatically attach a shared volume `/ofo-share
+
+location of drone data projects
+
+output path: /ofo-share-serve/argo-output
+
+
 ### Lauch VMs with CACAO
 
 CACAO is an interface for provisioning and launching virtual machines on Jetstream2 Cloud. OFO is using this interface because it has the ability to quickly launch multiple VMs with kubernetes pre-installed. This capability does not currently exist in Exosphere (the default UI for JS2). 
