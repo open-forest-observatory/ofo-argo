@@ -26,7 +26,8 @@ Path for metashape output: `/ofo-share-serve/argo-output`
 
 so the far the benchmarking datasets are: benchmarking-inputs, emerald-point-benchmark, benchmarking-swetnam-house, benchmarking-greasewood
 
-
+<br/>
+<br/>
 
 ### Lauch VMs with CACAO
 
@@ -34,8 +35,9 @@ CACAO is an interface for provisioning and launching virtual machines on Jetstre
 
 Log into CACAO at https://cacao.jetstream-cloud.org/ using your ACCESS credentials. Before launching VMs, you should [add public ssh keys](https://docs.jetstream-cloud.org/ui/cacao/credentials/) to CACAO if you would like to acccess VMs from your local IDE. These keys are specific to the local computer you are using. Once your keys are in CACAO, they will be uploaded to any VM you launch in CACAO.  
 
+<img width="1095" alt="cacao_k3" src="https://github.com/user-attachments/assets/deaafcef-dd91-4972-a9fb-dfc87ec2fc96" />
 
-
+<img width="891" alt="cacao_parameters" src="https://github.com/user-attachments/assets/bb34c732-311d-4710-beba-19da1d3c0ad7" />
 
 
 
