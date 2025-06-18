@@ -61,7 +61,7 @@ After clicking deploy, you will be stepped through a series of parameters to sel
 <br/>
 
 ### Check Status of Kubernetes
-
+Kubernetes (k3s) have been pre-installed on the instances. 
 <br/>
 
 ### Install Argo on Master instance
