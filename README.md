@@ -60,15 +60,15 @@ After clicking deploy, you will be stepped through a series of parameters to sel
 
 <br/>
 
-### Check Status of Kubernetes
+### 3. Check Status of Kubernetes
 Kubernetes (k3s) have been pre-installed on the instances. 
 <br/>
 
-### Install Argo on Master instance
+### 4. Install Argo on Master instance
 
 <br/>
 
-### Clone ofo-argo repository to Master instance
+### 5. Clone ofo-argo repository to Master instance
 
 In the home directory of your terminal, type in the following
 
@@ -76,7 +76,7 @@ In the home directory of your terminal, type in the following
 
 <br/>
 
-### Connect VM instances to shared volume
+### 6. Connect VM instances to shared volume
 
 The following is about connecting the kubernetes instances with the `/ofo-share` volume so it can read the drone imagery to process and write the outputs.
 
