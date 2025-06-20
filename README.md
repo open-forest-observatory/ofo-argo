@@ -275,6 +275,9 @@ e. Check the PVs
 
 `kubectl get pvc -n argo`
 
+<br/>
+<br/>
+
 ## Run the Workflow
 
 ### Declare the ip address of the metashape license server
@@ -293,6 +296,7 @@ argo submit -n argo workflow.yaml --watch \
 -p RUN_FOLDER=gillan_test_0620 \
 -p DATASET_LIST=datasets.txt
 ```
+<br/>
 
 ### Monitor Argo Workflow
 
