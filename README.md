@@ -105,12 +105,16 @@ gunzip "argo-$ARGO_OS-amd64.gz"
 chmod +x "argo-$ARGO_OS-amd64"
 
 # Move binary to path
-mv "./argo-$ARGO_OS-amd64" /usr/local/bin/argo
+sudo mv "./argo-$ARGO_OS-amd64" /usr/local/bin/argo
 
 # Test installation
 argo version
 ```
+<br/>
 
+The output of `argo version` should look like this:
+
+<img width="545" alt="Screenshot 2025-06-20 at 10 03 30 AM" src="https://github.com/user-attachments/assets/06000374-86db-40f2-95f3-e89166a43a31" />
 
 
 
