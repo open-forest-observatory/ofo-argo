@@ -13,18 +13,24 @@ This repository contains [Argo Workflows](https://argoproj.github.io/workflows) 
 ### 1. Add drone imagery data to OFO shared volume
 
 The drone data to be processed and the workflow outputs are on the `ofo-share` volume. This volume will be automatically mounted to any VM built from `ofo-dev` image using [Exosphere interface](https://jetstream2.exosphere.app/exosphere/). The volume is mounted at `/ofo-share` of the VM. 
+<br/>
 
 To add new drone imagery projects to be processed using Argo, transfer files from your local machine to the `/ofo-share` volume.
 
 `scp -r <local/directory/drone_images> exouser@<vm.ip.address:/ofo-share/`
 
-location of drone imagery projects to be processed: `/ofo-share`
+Put the drone imagery projects to be processed in it's own directory in `/ofo-share`. For example, there are 4 testing datasets already in the directory called `benchmarking-inputs`, `emerald-point-benchmark`, `benchmarking-swetnam-house`, `benchmarking-greasewood`
 
-Path for metashape output: `/ofo-share-serve/argo-output`
+The path for metashape output is: `/ofo-share/argo-output`
+
+<br/>
+
+#### Specify which datasets to process in Argo
 
 You need to specify which datasets to be processed in the file `/ofo-share/datasets.txt`
 
-so the far the benchmarking datasets are: benchmarking-inputs, emerald-point-benchmark, benchmarking-swetnam-house, benchmarking-greasewood
+
+so the far the benchmarking datasets are: 
 
 <br/>
 <br/>
