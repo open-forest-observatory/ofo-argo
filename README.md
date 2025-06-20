@@ -310,20 +310,26 @@ a. In the CACAO interface, launch a WebDesktop for your master instance
 
 <img width="660" alt="Screenshot 2025-06-20 at 9 33 53 AM" src="https://github.com/user-attachments/assets/a3ee09ba-d701-4fa5-97d3-586b4c640dc1" />
 
+<br/>
+
 b. Launch a terminal in the WebDesktop and type the following
 
 `argo server --auth-mode server -n argo`
+
+<br/>
 
 c. Now go to a browser (firefox) in the WebDesktop and go the address:
 
 `https://<master_public_ip_address>:2746`
 
+<br/>
+
 <img width="1190" alt="Screenshot 2025-06-20 at 12 48 46 PM" src="https://github.com/user-attachments/assets/bd6bd991-f108-4be9-a1aa-6cb0f1ab1db5" />
 
 
 
-
-
+<br/>
+<br/>
 
 
 ![argo_workflow](https://github.com/user-attachments/assets/b2b1d6db-3543-4156-bd61-14ddc725b095)
