@@ -90,6 +90,7 @@ Describe a specific node in your cluster
 <br/>
 
 ### 5. Install Argo on Master instance
+The following commands will download argo, unzip it, and bring it into your system path ready for use. 
 
 ```
 # Detect OS
@@ -114,12 +115,28 @@ argo version
 
 The output of `argo version` should look like this:
 
-<img width="545" alt="Screenshot 2025-06-20 at 10 03 30 AM" src="https://github.com/user-attachments/assets/06000374-86db-40f2-95f3-e89166a43a31" />
-
-
+<img width="400" alt="Screenshot 2025-06-20 at 10 03 30 AM" src="https://github.com/user-attachments/assets/06000374-86db-40f2-95f3-e89166a43a31" />
 
 
 <br/>
+
+Create a isolated environment for the argo workflow on kubernetes
+`kubectl create namespace argo`
+
+Put argo on to new environment on kubernetes. Controller & Server
+`kubectl apply -n argo -f https://github.com/argoproj/argo-workflows/releases/download/v3.6.5/install.yaml`
+
+Check if pods are running
+`kubectl get pods -n argo`
+
+<img width="682" alt="Screenshot 2025-06-20 at 10 15 41 AM" src="https://github.com/user-attachments/assets/9002ab34-f5f6-499b-a61d-a2588b0ef708" />
+
+Describe pods
+`kubectl describe pod <pod-name> -n argo`
+
+
+
+
 
 ### 5. Clone ofo-argo repository to Master instance
 
