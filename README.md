@@ -294,7 +294,9 @@ argo submit -n argo workflow.yaml --watch \
 -p DATASET_LIST=datasets.txt
 ```
 
+### Monitor Argo Workflow
 
+![argo_workflow](https://github.com/user-attachments/assets/b2b1d6db-3543-4156-bd61-14ddc725b095)
 
 
 <br/>
