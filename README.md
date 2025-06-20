@@ -74,7 +74,7 @@ You can connect to the terminal of any of the VMs through two methods:
 <br/>
 <br/>
 
-### 3. Check Status of Kubernetes
+### 4. Check Status of Kubernetes
 Kubernetes (k3s) have been pre-installed on each of the instances. 
 
 View nodes in your cluster
@@ -87,8 +87,33 @@ Describe a specific node in your cluster
 
 
 <br/>
+<br/>
 
-### 4. Install Argo on Master instance
+### 5. Install Argo on Master instance
+
+```
+# Detect OS
+ARGO_OS="linux"
+
+# Download the binary
+curl -sLO "https://github.com/argoproj/argo-workflows/releases/download/v3.6.5/argo-$ARGO_OS-amd64.gz"
+
+# Unzip
+gunzip "argo-$ARGO_OS-amd64.gz"
+
+# Make binary executable
+chmod +x "argo-$ARGO_OS-amd64"
+
+# Move binary to path
+mv "./argo-$ARGO_OS-amd64" /usr/local/bin/argo
+
+# Test installation
+argo version
+```
+
+
+
+
 
 <br/>
 
