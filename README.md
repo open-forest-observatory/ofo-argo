@@ -60,8 +60,24 @@ After clicking deploy, you will be stepped through a series of parameters to sel
 
 <br/>
 
+### 3. Connecting to the VM Instances
+
+You can connect to the terminal of any of the VMs through two methods:
+
+#### Click on the webshell icon associated with the VM 
+<img width="660" alt="Screenshot 2025-06-20 at 9 33 53 AM" src="https://github.com/user-attachments/assets/a3ee09ba-d701-4fa5-97d3-586b4c640dc1" />
+
+#### SSH into the VM from your local terminal or IDE
+`ssh exouser@<vm_ip_address>`
+
+
 ### 3. Check Status of Kubernetes
-Kubernetes (k3s) have been pre-installed on the instances. 
+Kubernetes (k3s) have been pre-installed on each of the instances. 
+
+Connect to the master instance, either through the webshell or through ssh on your local machine
+
+
+
 <br/>
 
 ### 4. Install Argo on Master instance
