@@ -284,25 +284,28 @@ e. Check the PVs
 
 ## Run the Workflow
 
-### Declare the ip address of the metashape license server
+### 1. Declare the ip address of the metashape license server
 
-On the master node terminal, type:
+On the master instance terminal, type:
 
 `export AGISOFT_FLS=<ip_address>:5842`
 
 <br/>
 
-### Run!!
+### 2. Run!!
 
 ```
 argo submit -n argo workflow.yaml --watch \
--p AGISOFT_FLS=$AGISOFT_FLS \
--p RUN_FOLDER=gillan_test_0620 \
--p DATASET_LIST=datasets.txt
+-p AGISOFT_FLS=$AGISOFT_FLS \ ## specifies metashape license
+-p RUN_FOLDER=gillan_test_0620 \  ## output folder name that is written to /ofo-share/argo-output
+-p DATASET_LIST=datasets.txt  ## datasets to be processed as discussed in step 1 of Setup
 ```
 <br/>
 
 ### Monitor Argo Workflow
+
+
+
 
 ![argo_workflow](https://github.com/user-attachments/assets/b2b1d6db-3543-4156-bd61-14ddc725b095)
 
