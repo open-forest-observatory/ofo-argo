@@ -30,8 +30,6 @@ The path for metashape output is: `/ofo-share/argo-output`
 You need to specify which datasets to be processed in the file `/ofo-share/datasets.txt`
 
 
-so the far the benchmarking datasets are: 
-
 <br/>
 <br/>
 
