@@ -144,18 +144,90 @@ Check if pods are running
 <br/>
 
 Describe pods
+
 `kubectl describe pod <pod-name> -n argo`
 
+<br/>
+<br/>
+
+Set up ofo-srv role in argo
+
+`kubectl create role ofo-argo-srv -n argo --verb=list,update, --resource=workflows.argoproj.io`
+
+`kubectl create rolebinding ofo-argo-srv -n argo --role=ofo-argo-srv --serviceaccount=argo:argo-server`
+
+```
+kubectl apply -f - <<EOF
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: argo-workflow-role
+rules:
+- apiGroups: ["argoproj.io"]
+  resources: 
+    - workflows
+    - workflowtaskresults
+  verbs: 
+    - create
+    - get
+    - list
+    - watch
+    - update
+    - patch
+    - delete
+EOF
+```
+<br/>
+<br/>
+
+```
+kubectl apply -f - <<EOF
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: argo-workflow-binding
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: argo-workflow-role
+subjects:
+- kind: ServiceAccount
+  name: argo
+  namespace: argo
+EOF
+```
+<br/>
+<br/>
+
+Run the following command. The output should say 'yes'. 
+`kubectl auth can-i create workflowtaskresults.argoproj.io -n argo --as=system:serviceaccount:argo:argo`
 
 <br/>
 <br/>
 
+Optional: check roles and role-bindings
+
+`kubectl get role -n argo`
+
+<img width="660" alt="Screenshot 2025-06-20 at 10 27 29 AM" src="https://github.com/user-attachments/assets/a62b6253-1c89-4008-bbbb-8c8403f5db45" />
+
+<br/>
+
+`kubectl describe role <role_name> -n argo`
+
+<img width="807" alt="Screenshot 2025-06-20 at 10 29 35 AM" src="https://github.com/user-attachments/assets/0357d932-ca01-4e52-8762-c8480700e3ed" />
+
+<img width="822" alt="Screenshot 2025-06-20 at 10 30 17 AM" src="https://github.com/user-attachments/assets/9ab3d32a-4239-48d0-8129-1a191b0b2a76" />
+
+<br/>
+<br/>
 
 ### 6. Clone ofo-argo repository to Master instance
 
 In the home directory of your terminal, type in the following
 
 `git clone https://github.com/open-forest-observatory/ofo-argo.git`
+
 
 <br/>
 
