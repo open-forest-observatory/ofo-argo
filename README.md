@@ -117,7 +117,7 @@ The output of `argo version` should look like this:
 
 <img width="400" alt="Screenshot 2025-06-20 at 10 03 30 AM" src="https://github.com/user-attachments/assets/06000374-86db-40f2-95f3-e89166a43a31" />
 
-
+<br/>
 <br/>
 
 Create a isolated environment for the argo workflow on kubernetes
@@ -125,11 +125,13 @@ Create a isolated environment for the argo workflow on kubernetes
 `kubectl create namespace argo`
 
 <br/>
+<br/>
 
 Put argo on to new environment on kubernetes. Controller & Server
 
 `kubectl apply -n argo -f https://github.com/argoproj/argo-workflows/releases/download/v3.6.5/install.yaml`
 
+<br/>
 <br/>
 
 Check if pods are running
@@ -139,15 +141,17 @@ Check if pods are running
 <img width="682" alt="Screenshot 2025-06-20 at 10 15 41 AM" src="https://github.com/user-attachments/assets/9002ab34-f5f6-499b-a61d-a2588b0ef708" />
 
 <br/>
+<br/>
 
 Describe pods
 `kubectl describe pod <pod-name> -n argo`
 
 
+<br/>
+<br/>
 
 
-
-### 5. Clone ofo-argo repository to Master instance
+### 6. Clone ofo-argo repository to Master instance
 
 In the home directory of your terminal, type in the following
 
