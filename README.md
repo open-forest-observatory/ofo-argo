@@ -22,7 +22,7 @@ location of drone imagery projects to be processed: `/ofo-share`
 
 Path for metashape output: `/ofo-share-serve/argo-output`
 
-
+You need to specify which datasets to be processed in the file `/ofo-share/datasets.txt`
 
 so the far the benchmarking datasets are: benchmarking-inputs, emerald-point-benchmark, benchmarking-swetnam-house, benchmarking-greasewood
 
@@ -275,8 +275,30 @@ e. Check the PVs
 
 `kubectl get pvc -n argo`
 
+## Run the Workflow
+
+### Declare the ip address of the metashape license server
+
+On the master node terminal, type:
+
+`export AGISOFT_FLS=<ip_address>:5842`
+
+<br/>
+
+### Run!!
+
+```
+argo submit -n argo workflow.yaml --watch \
+-p AGISOFT_FLS=$AGISOFT_FLS \
+-p RUN_FOLDER=gillan_test_0620 \
+-p DATASET_LIST=datasets.txt
+```
 
 
+
+
+<br/>
+<br/>
 <br/>
 
 ## Files In this Repository
