@@ -90,7 +90,7 @@ Describe a specific node in your cluster
 <br/>
 
 ### 5. Install Argo on Master instance
-The following commands will download argo, unzip it, and bring it into your system path ready for use. 
+a. The following commands will download argo, unzip it, and bring it into your system path ready for use. 
 
 ```
 # Detect OS
@@ -120,21 +120,21 @@ The output of `argo version` should look like this:
 <br/>
 <br/>
 
-Create a isolated environment for the argo workflow on kubernetes
+b. Create a isolated environment for the argo workflow on kubernetes
 
 `kubectl create namespace argo`
 
 <br/>
 <br/>
 
-Put argo on to new environment on kubernetes. Controller & Server
+c. Put argo on to new environment on kubernetes. Controller & Server
 
 `kubectl apply -n argo -f https://github.com/argoproj/argo-workflows/releases/download/v3.6.5/install.yaml`
 
 <br/>
 <br/>
 
-Check if pods are running
+d. Check if pods are running
 
 `kubectl get pods -n argo`
 
@@ -143,14 +143,14 @@ Check if pods are running
 <br/>
 <br/>
 
-Describe pods
+e. Describe pods
 
 `kubectl describe pod <pod-name> -n argo`
 
 <br/>
 <br/>
 
-Set up ofo-srv role in argo
+f. Set up ofo-srv role in argo
 
 `kubectl create role ofo-argo-srv -n argo --verb=list,update, --resource=workflows.argoproj.io`
 
@@ -199,14 +199,14 @@ EOF
 <br/>
 <br/>
 
-Run the following command. The output should say 'yes'.
+g. Run the following command. The output should say 'yes'.
 
 `kubectl auth can-i create workflowtaskresults.argoproj.io -n argo --as=system:serviceaccount:argo:argo`
 
 <br/>
 <br/>
 
-Optional: check roles and role-bindings
+h. Optional: check roles and role-bindings
 
 `kubectl get role -n argo`
 
