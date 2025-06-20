@@ -331,9 +331,7 @@ c. Now go to a browser (firefox) in the WebDesktop and go the address:
 <br/>
  The 'Workflows' tab on the left side menu shows you all running workflows. If you click a current workflow, it will show you a schematic of the jobs spread across multiple instances. 
 
-<br/>
 
-![argo_workflow](https://github.com/user-attachments/assets/b2b1d6db-3543-4156-bd61-14ddc725b095)
 
 <br/>
 <br/>
