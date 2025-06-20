@@ -298,13 +298,30 @@ On the master instance terminal, type:
 argo submit -n argo workflow.yaml --watch \
 -p AGISOFT_FLS=$AGISOFT_FLS \ ## specifies metashape license
 -p RUN_FOLDER=gillan_test_0620 \  ## output folder name that is written to /ofo-share/argo-output
--p DATASET_LIST=datasets.txt  ## datasets to be processed as discussed in [step 1 of Setup](#1-add-drone-imagery-data-to-ofo-shared-volume)
+-p DATASET_LIST=datasets.txt  ## datasets to be processed as discussed in step 1 of Setup
 ```
 <br/>
 
-[step 1 of Setup](#1-add-drone-imagery-data-to-ofo-shared-volume)
 
-### Monitor Argo Workflow
+### 3. Monitor Argo Workflow
+The Argo UI is great for troubleshooting and checking additional logs. You can access it with the following steps
+
+a. In the CACAO interface, launch a WebDesktop for your master instance
+
+<img width="660" alt="Screenshot 2025-06-20 at 9 33 53 AM" src="https://github.com/user-attachments/assets/a3ee09ba-d701-4fa5-97d3-586b4c640dc1" />
+
+b. Launch a terminal in the WebDesktop and type the following
+
+`argo server --auth-mode server -n argo`
+
+c. Now go to a browser (firefox) in the WebDesktop and go the address:
+
+`https://<master_public_ip_address>:2746`
+
+<img width="1190" alt="Screenshot 2025-06-20 at 12 48 46 PM" src="https://github.com/user-attachments/assets/bd6bd991-f108-4be9-a1aa-6cb0f1ab1db5" />
+
+
+
 
 
 
