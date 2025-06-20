@@ -344,7 +344,29 @@ If you click on a specific job, it will show you lots of information of the proc
 <br/>
 <br/>
 
-## PostGIS Database
+## ofo-argo-utils
+There is a subfolder in ofo-argo called ofo-argo-utils. The intention of this is to contain code that helps with utility functions for automate-metashape (or in the future, any other data pipeline tasks). Right now, the main functionality is handling database logging (see more below). There is a GitHub actions workflow setup to automatically build an image for ofo-argo-utils on commits to ofo-argo. The purpose of this image is so that we can reference it in our Argo Workflows for reusability and portability. Here is an example of the image being used:
+
+<img width="422" alt="Screenshot 2025-06-20 at 4 50 00 PM" src="https://github.com/user-attachments/assets/a9a5ccf9-6197-4223-94b3-e1b140e928d1" />
+
+<br/>
+
+### PostGIS Database
+There is a JS2 VM called ofo-postgis that hosts a postgis DB. When we process drone imagery in Metashape, we want some information to be put into this postGIS database. 
+
+```
+argo submit -n argo workflow.yaml --watch \
+  -p AGISOFT_FLS=$AGISOFT_FLS \
+  -p RUN_FOLDER=$RUN_FOLDER \
+  -p DATASET_LIST=$DATASET_LIST \
+  -p DB_PASSWORD=$DB_PASSWORD \
+  -p DB_HOST=$DB_HOST \
+  -p DB_NAME=$DB_NAME \
+  -p DB_USER=$DB_USER
+```
+Replace the variables above (e.g., $AGISOFT_FLS, $RUN_FOLDER) with your actual environment values or export them beforehand. Get all variables associated with the database from the internal credentials doc.
+
+
 
 
 ## Files In this Repository
