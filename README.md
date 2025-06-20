@@ -243,13 +243,39 @@ a. Install Network File System (NFS) on all instances including the master and e
 
 `sudo apt install nfs-common -y`
 
+`sudo reboot`
+
+<br/>
+
+b. Reconnect to the master instance and navigate into the cloned repository
+
+`cd ~/ofo-argo`
+
+<br/>
+
+c. Set up the persistent volumes (PV) defined by the workflow. You are specifying the read (raw drone imagery on `ofo-share`) and the write (metashape output location)
+
+`kubectl apply -f argo-output-pv.yaml`
+
+`kubectl apply -f ofo-share-pv.yaml`
+
+<br/>
+
+d. Set up persistent volume claims (PVC)
+
+`kubectl apply -f argo-output-pvc.yaml -n argo`
+
+`kubectl apply -f ofo-share-pvc.yaml -n argo`
+
+<br/>
+
+e. Check the PVs
+
+`kubectl get pv`
+
+`kubectl get pvc -n argo`
 
 
-
-
-persistent volume (PV)
-
-persistent volume claim (PVC)
 
 <br/>
 
