@@ -319,7 +319,7 @@ b. Launch a terminal in the WebDesktop and type the following
 
 <br/>
 
-c. Now go to a browser (firefox) in the WebDesktop and go the address:
+c. Now go to a browser (firefox) in the WebDesktop and go the address. You may receive a "Connection not secure" error but just bypass it.
 
 `https://<master_public_ip_address>:2746`
 
