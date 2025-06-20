@@ -298,9 +298,11 @@ On the master instance terminal, type:
 argo submit -n argo workflow.yaml --watch \
 -p AGISOFT_FLS=$AGISOFT_FLS \ ## specifies metashape license
 -p RUN_FOLDER=gillan_test_0620 \  ## output folder name that is written to /ofo-share/argo-output
--p DATASET_LIST=datasets.txt  ## datasets to be processed as discussed in [step 1 of Setup](./README.md#1-add-drone-imagery-data-to-ofo-shared-volume)
+-p DATASET_LIST=datasets.txt  ## datasets to be processed as discussed in [step 1 of Setup](#1-add-drone-imagery-data-to-ofo-shared-volume)
 ```
 <br/>
+
+[step 1 of Setup](#1-add-drone-imagery-data-to-ofo-shared-volume)
 
 ### Monitor Argo Workflow
 
