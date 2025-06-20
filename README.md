@@ -311,6 +311,7 @@ a. In the CACAO interface, launch a WebDesktop for your master instance
 <img width="660" alt="Screenshot 2025-06-20 at 9 33 53 AM" src="https://github.com/user-attachments/assets/a3ee09ba-d701-4fa5-97d3-586b4c640dc1" />
 
 <br/>
+<br/>
 
 b. Launch a terminal in the WebDesktop and type the following
 
@@ -326,14 +327,20 @@ c. Now go to a browser (firefox) in the WebDesktop and go the address:
 
 <img width="1190" alt="Screenshot 2025-06-20 at 12 48 46 PM" src="https://github.com/user-attachments/assets/bd6bd991-f108-4be9-a1aa-6cb0f1ab1db5" />
 
-
-
 <br/>
 <br/>
+ The 'Workflows' tab on the left side menu shows you all running workflows. If you click a current workflow, it will show you a schematic of the jobs spread across multiple instances. 
 
+<br/>
 
 ![argo_workflow](https://github.com/user-attachments/assets/b2b1d6db-3543-4156-bd61-14ddc725b095)
 
+<br/>
+<br/>
+
+If you click on a specific job, it will show you lots of information of the process including which VM it is running on, the duration of the process, and logs. 
+
+<img width="1190" alt="Screenshot 2025-06-20 at 12 58 55 PM" src="https://github.com/user-attachments/assets/ab10f2b4-3120-47be-b1dd-601687707f0c" />
 
 <br/>
 <br/>
