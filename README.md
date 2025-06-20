@@ -233,9 +233,19 @@ In the home directory of your terminal, type in the following
 
 <br/>
 
-### 6. Connect VM instances to shared volume
+### 7. Connect VM instances to shared volume
 
-The following is about connecting the kubernetes instances with the `/ofo-share` volume so it can read the drone imagery to process and write the outputs.
+The following is about connecting the VM instances with the `/ofo-share` volume so it can read the drone imagery to process and write the outputs.
+
+a. Install Network File System (NFS) on all instances including the master and each worker. You will need to connect to each VM terminal to do installation. 
+
+`sudo apt update`
+
+`sudo apt install nfs-common -y`
+
+
+
+
 
 persistent volume (PV)
 
