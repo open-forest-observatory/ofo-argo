@@ -199,7 +199,8 @@ EOF
 <br/>
 <br/>
 
-Run the following command. The output should say 'yes'. 
+Run the following command. The output should say 'yes'.
+
 `kubectl auth can-i create workflowtaskresults.argoproj.io -n argo --as=system:serviceaccount:argo:argo`
 
 <br/>
@@ -211,6 +212,7 @@ Optional: check roles and role-bindings
 
 <img width="660" alt="Screenshot 2025-06-20 at 10 27 29 AM" src="https://github.com/user-attachments/assets/a62b6253-1c89-4008-bbbb-8c8403f5db45" />
 
+<br/>
 <br/>
 
 `kubectl describe role <role_name> -n argo`
