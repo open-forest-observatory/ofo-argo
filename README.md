@@ -301,6 +301,20 @@ argo submit -n argo workflow.yaml --watch \
 -p DATASET_LIST=datasets.txt  ## datasets to be processed as discussed in step 1 of Setup
 ```
 <br/>
+<br/>
+For running the workflow with postGIS db
+```
+argo submit -n argo workflow.yaml --watch \
+  -p AGISOFT_FLS=$AGISOFT_FLS \
+  -p RUN_FOLDER=$RUN_FOLDER \
+  -p DATASET_LIST=$DATASET_LIST \
+  -p DB_PASSWORD=$DB_PASSWORD \
+  -p DB_HOST=$DB_HOST \
+  -p DB_NAME=$DB_NAME \
+  -p DB_USER=$DB_USER
+```
+Replace the variables above (e.g., $AGISOFT_FLS, $RUN_FOLDER) with your actual environment values or export them beforehand. Get all variables associated with the database from the internal credentials doc.
+
 
 
 ### 3. Monitor Argo Workflow
@@ -352,19 +366,41 @@ There is a subfolder in ofo-argo called ofo-argo-utils. The intention of this is
 <br/>
 
 ### PostGIS Database
-There is a JS2 VM called ofo-postgis that hosts a postgis DB. When we process drone imagery in Metashape, we want some information to be put into this postGIS database. 
+There is a JS2 VM called ofo-postgis that hosts a postgis DB in docker. When we process drone imagery in Metashape, we want some information to be put into this postGIS database. This server has persistent storage, tied to a storage volume made in Jetstream.
 
-```
-argo submit -n argo workflow.yaml --watch \
-  -p AGISOFT_FLS=$AGISOFT_FLS \
-  -p RUN_FOLDER=$RUN_FOLDER \
-  -p DATASET_LIST=$DATASET_LIST \
-  -p DB_PASSWORD=$DB_PASSWORD \
-  -p DB_HOST=$DB_HOST \
-  -p DB_NAME=$DB_NAME \
-  -p DB_USER=$DB_USER
-```
-Replace the variables above (e.g., $AGISOFT_FLS, $RUN_FOLDER) with your actual environment values or export them beforehand. Get all variables associated with the database from the internal credentials doc.
+As of right now, the PostGIS server stores the following keys
+id: unique identifier for each call of automate-metashape (not run)
+dataset-name: dataset running for the individual call of automate-metashape
+workflow-id: identifier for run of ofo-argo
+status: either queued, processing, or failed, based on current and final status of automate-metashape
+start_time: start time of automate-metashape run
+end_time: end time of automate-metashape run (if it was able to finish)
+created_at: creation time of entry in database
+
+During an automate-metashape run, we update an entry as the run progresses. We do NOT add new rows to update the status. Moving forward, we might want to see if this is the best practice.
+
+1. SSH into ofo-postgis
+
+`ssh <user>@<ip>`
+
+
+2. Enter the Docker container running the PostGIS server
+
+`sudo docker exec -ti ofo-postgis bash`
+
+
+3. Launch the PostgreSQL CLI as the intended user (grab from DB credentials)
+
+`psql -U <user>`
+
+
+4. View table
+
+`SELECT * FROM automate_metashape;`
+
+
+
+
 
 
 
