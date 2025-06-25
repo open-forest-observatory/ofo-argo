@@ -377,22 +377,13 @@ As of right now, the PostGIS server stores the following keys:
 | **Column**   | **Type** | **Description**  |
 |  --- | ----  | --- |
 |id | integer | unique identifier for each call of automate-metashape (not run) |
-| |  |
+|dataset_name | character varying(100) | dataset running for the individual call of automate-metashape |
+| workflow_id | character varying(100) | identifier for run of ofo-argo |
+| status | character varying(50)  | either queued, processing, or failed, based on current and final status of automate-metashape |
+| start_time | timestamp without time zone | start time of automate-metashape run |
+| finish_time  | timestamp without time zone | end time of automate-metashape run (if it was able to finish) |
+| created_at | timestamp without time zone | creation time of entry in database |
 
-
-* id: unique identifier for each call of automate-metashape (not run)
-  
-* dataset-name: dataset running for the individual call of automate-metashape
-  
-* workflow-id: identifier for run of ofo-argo
-
-* status: either queued, processing, or failed, based on current and final status of automate-metashape
-
-* start_time: start time of automate-metashape run
-
-* end_time: end time of automate-metashape run (if it was able to finish)
-
-* created_at: creation time of entry in database
 
 During an automate-metashape run, we update an entry as the run progresses. We do NOT add new rows to update the status. Moving forward, we might want to see if this is the best practice.
 
