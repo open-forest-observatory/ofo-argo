@@ -362,15 +362,10 @@ If you click on a specific job, it will show you lots of information of the proc
 <br/>
 <br/>
 
-## ofo-argo-utils
-There is a subfolder in ofo-argo called ofo-argo-utils. The intention of this is to contain code that helps with utility functions for automate-metashape (or in the future, any other data pipeline tasks). Right now, the main functionality is handling database logging (see more below). There is a GitHub actions workflow setup to automatically build an image for ofo-argo-utils on commits to ofo-argo. The purpose of this image is so that we can reference it in our Argo Workflows for reusability and portability. Here is an example of the image being used:
 
-<img width="422" alt="Screenshot 2025-06-20 at 4 50 00 PM" src="https://github.com/user-attachments/assets/a9a5ccf9-6197-4223-94b3-e1b140e928d1" />
+## Argo Workflow Logging in postGIS database
 
-<br/>
-
-## PostGIS Database
-There is a JS2 VM called `ofo-postgis` that hosts a postgis DB in docker. When we process drone imagery in Metashape, we want some information to be put into this postGIS database. This server has persistent storage, tied to a storage volume made in Jetstream.
+There is a JS2 VM called `ofo-postgis` that hosts a postgis DB in docker. When we process drone imagery in Metashape, we want workflow  information to be put into this postGIS database. This server has persistent storage, tied to a storage volume made in Jetstream.
 
 As of right now, the PostGIS server stores the following keys:
 
@@ -385,7 +380,30 @@ As of right now, the PostGIS server stores the following keys:
 | created_at | timestamp without time zone | creation time of entry in database |
 
 
+
+## ofo-argo-utils
+in the `ofo-argo-utils` directory: 
+
+a docker file to create an image with python and some libraries
+
+a requirements.txt the defines the python libraries to install on the docker image
+
+db_logger.py - python code to log argo workflow status into the postgis DM
+
+
+<br/>
+<br/>
+
+There is a subfolder in ofo-argo called ofo-argo-utils. The intention of this is to contain code that helps with utility functions for automate-metashape (or in the future, any other data pipeline tasks). Right now, the main functionality is handling database logging (see more below). There is a GitHub actions workflow setup to automatically build an image for ofo-argo-utils on commits to ofo-argo. The purpose of this image is so that we can reference it in our Argo Workflows for reusability and portability. Here is an example of the image being used:
+
 During an automate-metashape run, we update an entry as the run progresses. We do NOT add new rows to update the status. Moving forward, we might want to see if this is the best practice.
+
+
+<img width="422" alt="Screenshot 2025-06-20 at 4 50 00 PM" src="https://github.com/user-attachments/assets/a9a5ccf9-6197-4223-94b3-e1b140e928d1" />
+
+<br/>
+
+
 
 ### Access and Navigation of postgis DB  
 
