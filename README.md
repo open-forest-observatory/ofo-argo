@@ -374,6 +374,12 @@ There is a JS2 VM called `ofo-postgis` that hosts a postgis DB in docker. When w
 
 As of right now, the PostGIS server stores the following keys:
 
+| **Column**   | **Type** | **Description**  |
+|  --- | ----  | --- |
+|id | integer | unique identifier for each call of automate-metashape (not run) |
+| |  |
+
+
 * id: unique identifier for each call of automate-metashape (not run)
   
 * dataset-name: dataset running for the individual call of automate-metashape
@@ -394,9 +400,7 @@ During an automate-metashape run, we update an entry as the run progresses. We d
 
 * SSH into ofo-postgis `ssh exouser@<ip>`
 
-
 * Enter the Docker container running the PostGIS server `sudo docker exec -ti ofo-postgis bash`
-
 
 * Launch the PostgreSQL CLI as the intended user (grab from DB credentials) `psql -U postgres`
 
@@ -405,6 +409,7 @@ During an automate-metashape run, we update an entry as the run progresses. We d
 * Show the structure of a specific table (column names & data types) `\d automate_metashape`
 
 * View all data records for a specific table `select * from automate_metashape;`
+
 
 
 
@@ -420,7 +425,7 @@ During an automate-metashape run, we update an entry as the run progresses. We d
 
 ## Files In this Repository
 
-| File Name   | Purpose       |
+| File Name   | Purpose       | 
 |  --- | ----  |
 | argo-output-pv.yaml | Defines read-write PV for workflow output storage mounted at /ofo-share/argo-output |
 | argo-output-pvc.yaml | PVC bound to output volume | 
