@@ -392,36 +392,29 @@ During an automate-metashape run, we update an entry as the run progresses. We d
 
 ### Access and Navigation of postgis DB  
 
-* SSH into ofo-postgis
-
-`ssh exouser@<ip>`
+* SSH into ofo-postgis `ssh exouser@<ip>`
 
 
-* Enter the Docker container running the PostGIS server
-
-`sudo docker exec -ti ofo-postgis bash`
+* Enter the Docker container running the PostGIS server `sudo docker exec -ti ofo-postgis bash`
 
 
-* Launch the PostgreSQL CLI as the intended user (grab from DB credentials)
+* Launch the PostgreSQL CLI as the intended user (grab from DB credentials) `psql -U postgres`
 
-`psql -U postgres`
+* List all tables in the database `\dt`
 
-* List all tables in the database
+* Show the structure of a specific table (column names & data types) `\d automate_metashape`
 
-`\dt`
-
-* Show the structure of a specific table (column names & data types)
-
-`\d automate_metashape`
-
-* View all data records for a specific table
-
-`select * from automate_metashape;`
+* View all data records for a specific table `select * from automate_metashape;`
 
 
 
 
-
+<br/>
+<br/>
+<br/>
+<br/>
+<br/>
+<br/>
 
 
 
