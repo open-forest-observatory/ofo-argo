@@ -59,6 +59,8 @@ spec:
           subPath: "{{workflow.parameters.RUN_FOLDER}}"
         command: ["python3", "/app/python/metashape_workflow.py"]
         args: 
+          - "--config_file"
+          - "{{workflow.parameters.CONFIG_PATH}}"
           - "--photo-path"
           - "/data/{{inputs.parameters.dataset-names}}"
           - "--project-path"
