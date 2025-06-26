@@ -2,7 +2,6 @@
 
 This repository contains [Argo Workflows](https://argoproj.github.io/workflows) used by the **Open Forest Observatory (OFO)**. It is being developed to run the [automate-metashape](https://github.com/open-forest-observatory/automate-metashape) pipeline simultaneously across multiple virtual machines on [Jetstream2 Cloud](https://jetstream-cloud.org/). This type of scaling enables OFO to process many photogrammetry projects simultaneously (instead of sequentially) and vastly reduce total processing time. Argo is meant to work on [Kubernetes](https://kubernetes.io/docs/concepts/overview/) which orchestrates containers (ie, automate-metashape in docker), scales the processing to multiple VMs, and balances the load between the VMs. 
 
-Outputs of the metashape runs are intended to be automatically funneled into a postGIS DB.
 
 ---
 
