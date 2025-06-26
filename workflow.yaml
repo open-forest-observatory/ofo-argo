@@ -6,11 +6,6 @@ spec:
   serviceAccountName: argo
   entrypoint: main
 
-  arguments:
-    parameters:
-      - name: config_path
-        description: "Path to Metashape config.yml"
-        default: "/app/config/config-base.yml"
   volumes:
   - name: data
     persistentVolumeClaim:
@@ -53,7 +48,7 @@ spec:
       inputs:
         parameters:
           - name: dataset-names
-          - name: config-path # ✅ Accept per-workflow config file path
+      
       container:
         image: ghcr.io/open-forest-observatory/automate-metashape
         volumeMounts:
@@ -64,8 +59,6 @@ spec:
           subPath: "{{workflow.parameters.RUN_FOLDER}}"
         command: ["python3", "/app/python/metashape_workflow.py"]
         args: 
-          - "--config_file"
-          - "{{inputs.parameters.config-path}}"  # ✅ Used in args
           - "--photo-path"
           - "/data/{{inputs.parameters.dataset-names}}"
           - "--project-path"
