@@ -67,7 +67,6 @@ spec:
           - "/results/{{workflow.parameters.RUN_FOLDER}}/project"
           - "--output-path"
           - "/results/{{workflow.parameters.RUN_FOLDER}}/output"
-          - "/results/output"
           - "--run-name"
           - "test-run-{{inputs.parameters.dataset-names}}"
         env:
