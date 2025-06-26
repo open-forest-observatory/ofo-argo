@@ -305,7 +305,7 @@ argo submit -n argo workflow.yaml --watch \
 <br/>
 
 argo submit -n argo workflow.yaml --watch \
--p CONFIG_PATH=/ofo-share/argo-output/config.yml \
+-p CONFIG_FILE=/ofo-share/argo-output/config.yml \
 -p AGISOFT_FLS=$AGISOFT_FLS \
 -p RUN_FOLDER=gillan_test_test \
 -p DATASET_LIST=datasets.txt  
