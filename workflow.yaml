@@ -56,16 +56,17 @@ spec:
           mountPath: /data
         - name: results
           mountPath: /results
-          subPath: "{{workflow.parameters.RUN_FOLDER}}"
+          #subPath: "{{workflow.parameters.RUN_FOLDER}}"
         command: ["python3", "/app/python/metashape_workflow.py"]
         args: 
           - "--config_file"
-          - "/results/{{workflow.parameters.CONFIG_FILE}}"
+          - "/results/config.yml"
           - "--photo-path"
           - "/data/{{inputs.parameters.dataset-names}}"
           - "--project-path"
-          - "/results/project"
+          - "/results/{{workflow.parameters.RUN_FOLDER}}/project"
           - "--output-path"
+          - "/results/{{workflow.parameters.RUN_FOLDER}}/output"
           - "/results/output"
           - "--run-name"
           - "test-run-{{inputs.parameters.dataset-names}}"
