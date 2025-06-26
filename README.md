@@ -354,7 +354,7 @@ If you click on a specific job, it will show you lots of information of the proc
 
 ## Argo Workflow Logging in postGIS database (in development)
 
-There is a [development branch of `ofo-argo`](https://github.com/open-forest-observatory/ofo-argo/tree/aa_setup_argo_utils) repo created by Arnav. This branch has developed a workflow to log argo process status (eg., started, finished, successful, failed) into a postGIS DB. This is done through an additional docker container (hosted on ghcr). The workflow is in the folder `ofo-argo-utils`. There is also a github action workflow that rebuilds this container if changes have been made in `workflow.yml`. This workflow is in the directory `.github/workflows`.
+There is a [development branch of `ofo-argo`](https://github.com/open-forest-observatory/ofo-argo/tree/aa_setup_argo_utils) repo created by Arnav. This branch has developed a workflow to log argo process status (eg., started, finished, successful, failed) into a postGIS DB. This is done through an additional docker container (hosted on ghcr). The workflow is in the folder `ofo-argo-utils`. There is also a github action workflow that rebuilds this container if changes have been made in `workflow.yml`. This workflow is in the directory `.github/workflows`. There is an outstanding pull request regarding this development. 
 
 To run this experimental workflow navigate to the `ofo-argo` repo and go into the branch `git checkout aa_setup_argo_utils`
 
