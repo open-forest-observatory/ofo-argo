@@ -305,19 +305,7 @@ argo submit -n argo workflow.yaml --watch \
 <br/>
 <br/>
 
-For running the workflow with postGIS db
 
-```
-argo submit -n argo workflow.yaml --watch \
-  -p AGISOFT_FLS=$AGISOFT_FLS \
-  -p RUN_FOLDER=$RUN_FOLDER \
-  -p DATASET_LIST=$DATASET_LIST \
-  -p DB_PASSWORD=$DB_PASSWORD \
-  -p DB_HOST=$DB_HOST \
-  -p DB_NAME=$DB_NAME \
-  -p DB_USER=$DB_USER
-```
-Replace the variables above (e.g., $AGISOFT_FLS, $RUN_FOLDER) with your actual environment values or export them beforehand. Get all variables associated with the database from the internal credentials doc.
 
 
 
@@ -361,11 +349,32 @@ If you click on a specific job, it will show you lots of information of the proc
 <br/>
 <br/>
 <br/>
+<br/>
+<br/>
+<br/>
 
+## Argo Workflow Logging in postGIS database (in development)
 
-## Argo Workflow Logging in postGIS database
+There is a [development branch of `ofo-argo`](https://github.com/open-forest-observatory/ofo-argo/tree/aa_setup_argo_utils) repo created by Arnav. This branch has developed a workflow to log argo process status (eg., started, finished, successful, failed) into a postGIS DB. This is done through an additional docker container (hosted on ghcr). The workflow is in the folder `ofo-argo-utils`. There is also a github action workflow that rebuilds this container if changes have been made in `workflow.yml`. This workflow is in the directory `.github/workflows`.
 
-There is a JS2 VM called `ofo-postgis` that hosts a postgis DB in docker. When we process drone imagery in Metashape, we want workflow  information to be put into this postGIS database. This server has persistent storage, tied to a storage volume made in Jetstream.
+To run this experimental workflow navigate to the `ofo-argo` repo and go into the branch `git checkout aa_setup_argo_utils`
+
+<br/>
+
+```
+argo submit -n argo workflow.yaml --watch \
+  -p AGISOFT_FLS=$AGISOFT_FLS \
+  -p RUN_FOLDER=$RUN_FOLDER \
+  -p DATASET_LIST=$DATASET_LIST \
+  -p DB_PASSWORD=$DB_PASSWORD \
+  -p DB_HOST=$DB_HOST \
+  -p DB_NAME=$DB_NAME \
+  -p DB_USER=$DB_USER
+```
+Replace the variables above (e.g., $AGISOFT_FLS, $RUN_FOLDER) with your actual environment values or export them beforehand. Get all variables associated with the database from the internal credentials doc.
+
+### Info on the postGIS DB
+There is a JS2 VM called `ofo-postgis` that hosts a postgis DB in docker. When we process drone imagery in Metashape, we want workflow metadata to be put into this postGIS database. This server has persistent storage, tied to a storage volume made in Jetstream.
 
 As of right now, the PostGIS server stores the following keys:
 
@@ -379,17 +388,21 @@ As of right now, the PostGIS server stores the following keys:
 | finish_time  | timestamp without time zone | end time of automate-metashape run (if it was able to finish) |
 | created_at | timestamp without time zone | creation time of entry in database |
 
+### Access and Navigation of postgis DB  
 
+* SSH into ofo-postgis `ssh exouser@<ip>`
+
+* Enter the Docker container running the PostGIS server `sudo docker exec -ti ofo-postgis bash`
+
+* Launch the PostgreSQL CLI as the intended user (grab from DB credentials) `psql -U postgres`
+
+* List all tables in the database `\dt`
+
+* Show the structure of a specific table (column names & data types) `\d automate_metashape`
+
+* View all data records for a specific table `select * from automate_metashape;`
 
 ## ofo-argo-utils
-in the `ofo-argo-utils` directory: 
-
-a docker file to create an image with python and some libraries
-
-a requirements.txt the defines the python libraries to install on the docker image
-
-db_logger.py - python code to log argo workflow status into the postgis DM
-
 
 <br/>
 <br/>
@@ -405,19 +418,7 @@ During an automate-metashape run, we update an entry as the run progresses. We d
 
 
 
-### Access and Navigation of postgis DB  
 
-* SSH into ofo-postgis `ssh exouser@<ip>`
-
-* Enter the Docker container running the PostGIS server `sudo docker exec -ti ofo-postgis bash`
-
-* Launch the PostgreSQL CLI as the intended user (grab from DB credentials) `psql -U postgres`
-
-* List all tables in the database `\dt`
-
-* Show the structure of a specific table (column names & data types) `\d automate_metashape`
-
-* View all data records for a specific table `select * from automate_metashape;`
 
 
 
