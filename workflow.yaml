@@ -5,11 +5,12 @@ metadata:
 spec:
   serviceAccountName: argo
   entrypoint: main
-  # ✅ Added parameter for runtime config path override
-  parameters:
-    - name: config_path
-      description: "Path to Metashape config.yml"
-      default: "/app/config/config-base.yml"
+
+  arguments:
+    parameters:
+      - name: config_path
+        description: "Path to Metashape config.yml"
+        default: "/app/config/config-base.yml"
   volumes:
   - name: data
     persistentVolumeClaim:
