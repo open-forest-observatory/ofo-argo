@@ -297,7 +297,6 @@ On the master instance terminal, type:
 
 ```
 argo submit -n argo workflow.yaml --watch \
--p config_path=/ofo-share/argo-output/config.yml \
 -p AGISOFT_FLS=$AGISOFT_FLS \ ## specifies metashape license
 -p RUN_FOLDER=gillan_test_0626 \  ## output folder name that is written to /ofo-share/argo-output
 -p DATASET_LIST=datasets.txt  ## datasets to be processed as discussed in step 1 of Setup
@@ -306,7 +305,6 @@ argo submit -n argo workflow.yaml --watch \
 <br/>
 
 argo submit -n argo workflow.yaml --watch \
--p config_path=/ofo-share/argo-output/config.yml \
 -p AGISOFT_FLS=$AGISOFT_FLS \
 -p RUN_FOLDER=gillan_test_0626 \
 -p DATASET_LIST=datasets.txt  
