@@ -60,7 +60,7 @@ spec:
         command: ["python3", "/app/python/metashape_workflow.py"]
         args: 
           - "--config_file"
-          - "{{if workflow.parameters.CONFIG_FILE}}{{workflow.parameters.CONFIG_FILE}}{{else}}/app/config/config-base.yml{{end}}"
+          - "{{workflow.parameters.CONFIG_FILE}}"
           - "--photo-path"
           - "/data/{{inputs.parameters.dataset-names}}"
           - "--project-path"
