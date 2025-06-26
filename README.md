@@ -19,7 +19,7 @@ The drone data to be processed and the workflow outputs are on the `ofo-share` v
 
 To add new drone imagery projects to be processed using Argo, transfer files from your local machine to the `/ofo-share` volume.
 
-`scp -r <local/directory/drone_images> exouser@<vm.ip.address:/ofo-share/`
+`scp -r <local/directory/drone_images> exouser@<vm.ip.address>:/ofo-share/`
 
 Put the drone imagery projects to be processed in it's own directory in `/ofo-share`. For example, there are 4 testing datasets already in the directory called `benchmarking-inputs`, `emerald-point-benchmark`, `benchmarking-swetnam-house`, `benchmarking-greasewood`
 
