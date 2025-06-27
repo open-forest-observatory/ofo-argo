@@ -331,8 +331,11 @@ argo submit -n argo workflow.yaml --watch \
 ```
 
 CONFIG_FILE is the config which specifies the metashape parameters which should be located in `/ofo-share/argo-output`
+
 AGISOFT_FLS is the ip address of the metashape license server
+
 RUN_FOLDER is what you want to name the parent directory of your output
+
 DATSET_LIST is the txt file where you specified the names of the datasets you want to process located at `/ofo-share/argo-output`
 
 <br/>
