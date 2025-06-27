@@ -36,7 +36,7 @@ You need to specify which datasets to be processed in the file `/ofo-share/datas
 
 ### 2. Specify Metashape Parameters
 
-All metashape parameters are specified in a config.yml file which is located at `/ofo-share/argo-output`. You can create your own config yml as long as it is kept in this directory. The exact file (e.g., config2.yml or <projectname>_config.yml) will be specified as a parameter in the argo run command later in this workflow. 
+All metashape parameters are specified in a config.yml file which is located at `/ofo-share/argo-output`. You can create your own config yml as long as it is kept in this directory. The exact file (e.g., config2.yml or projectname_config.yml) will be specified as a parameter in the argo run command later in this workflow. 
 
 <br/>
 <br/>
