@@ -298,8 +298,9 @@ On the master instance terminal, type:
 
 ```
 argo submit -n argo workflow.yaml --watch \
+-p CONFIG_FILE=config2.yml \
 -p AGISOFT_FLS=$AGISOFT_FLS \
--p RUN_FOLDER=gillan_test_test \
+-p RUN_FOLDER=gillan_test \
 -p DATASET_LIST=datasets.txt  
 ```
 
