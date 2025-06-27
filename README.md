@@ -89,6 +89,8 @@ IMPORTANT NOTE. If you have launched VMs from Cacao, the ssh username is **<acce
 <br/>
 
 ### 5. Check Status of Kubernetes
+Connect to the master VM instance either through webshell or local IDE
+
 Kubernetes (k3s) have been pre-installed on each of the instances. 
 
 View nodes in your cluster
