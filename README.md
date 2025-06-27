@@ -16,7 +16,7 @@ This repository contains [Argo Workflows](https://argoproj.github.io/workflows) 
 The drone data to be processed and the workflow outputs are on the `ofo-share` volume. This volume will be automatically mounted to any VM built from `ofo-dev` image using [Exosphere interface](https://jetstream2.exosphere.app/exosphere/). The volume is mounted at `/ofo-share` of the VM. 
 <br/>
 
-To add new drone imagery projects to be processed using Argo, transfer files from your local machine to the `/ofo-share` volume.
+To add new drone imagery datasets to be processed using Argo, transfer files from your local machine to the `/ofo-share` volume.
 
 `scp -r <local/directory/drone_images> exouser@<vm.ip.address>:/ofo-share/`
 
@@ -316,6 +316,8 @@ On the master instance terminal, type:
 
 `export AGISOFT_FLS=<ip_address>:5842`
 
+This variable will only last during the terminal session and will have to be re-declared each time you start a new master terminal. 
+
 <br/>
 
 ### 2. Run!!
@@ -324,11 +326,16 @@ On the master instance terminal, type:
 argo submit -n argo workflow.yaml --watch \
 -p CONFIG_FILE=config2.yml \
 -p AGISOFT_FLS=$AGISOFT_FLS \
--p RUN_FOLDER=gillan_test \
+-p RUN_FOLDER=gillan_test_june27 \
 -p DATASET_LIST=datasets.txt  
 ```
 
+CONFIG_FILE is the config which specifies the metashape parameters which should be located in `/ofo-share/argo-output`
+AGISOFT_FLS is the ip address of the metashape license server
+RUN_FOLDER is what you want to name the parent directory of your output
+DATSET_LIST is the txt file where you specified the names of the datasets you want to process located at `/ofo-share/argo-output`
 
+<br/>
 
 ### 3. Monitor Argo Workflow
 The Argo UI is great for troubleshooting and checking additional logs. You can access it with the following steps
@@ -369,6 +376,14 @@ If you click on a specific job, it will show you lots of information of the proc
 
 <br/>
 <br/>
+
+### 4. Metashape Outputs
+The metashape outputs will be written to `/ofo-share/argo-outputs/<RUN_FOLDER>`. Each dataset will have its own subdirectory in the <RUN_FOLDER>. Output imagery products (DEMs, orthomosaics, point clouds, report) will be written to `/ofo-share/argo-outputs/<RUN_FOLDER>/<dataset_name>/output`. Metashape projects .psx will be written to `/ofo-share/argo-outputs/<RUN_FOLDER>/<dataset_name>/project`.
+
+
+
+
+
 <br/>
 <br/>
 <br/>
