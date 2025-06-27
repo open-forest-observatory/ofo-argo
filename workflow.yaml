@@ -6,6 +6,17 @@ spec:
   serviceAccountName: argo
   entrypoint: main
 
+  arguments:
+    parameters:
+      - name: CONFIG_FILE
+        default: "config.yml"
+      - name: RUN_FOLDER
+        default: "default-run"
+      - name: DATASET_LIST
+        default: "datasets.txt"
+      - name: AGISOFT_FLS
+        default: ""
+        
   volumes:
   - name: data
     persistentVolumeClaim:
@@ -25,6 +36,8 @@ spec:
               parameters:
                 - name: dataset-names
                   value: "{{item}}"
+                - name: config-file
+                  value: "{{workflow.parameters.CONFIG_FILE}}"
             withParam: "{{steps.determine-datasets.outputs.result}}"
     
     # use subPath argument to mount dataset list argument (in /ofo-share/results/datasets.txt for now)
@@ -48,6 +61,7 @@ spec:
       inputs:
         parameters:
           - name: dataset-names
+          - name: config-file
       
       container:
         image: ghcr.io/open-forest-observatory/automate-metashape
@@ -60,7 +74,7 @@ spec:
         command: ["python3", "/app/python/metashape_workflow.py"]
         args: 
           - "--config_file"
-          - "/results/config.yml"
+          - "/results/{{inputs.parameters.config-file}}"
           - "--photo-path"
           - "/data/{{inputs.parameters.dataset-names}}"
           - "--project-path"
