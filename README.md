@@ -74,7 +74,9 @@ You can connect to the terminal of any of the VMs through two methods:
 <img width="660" alt="Screenshot 2025-06-20 at 9 33 53 AM" src="https://github.com/user-attachments/assets/a3ee09ba-d701-4fa5-97d3-586b4c640dc1" />
 
 #### SSH into the VM from your local terminal or IDE
-`ssh exouser@<vm_public_ip_address>`
+`ssh <access_username>@<vm_public_ip_address>`
+
+IMPORTANT NOTE. If you have launched VMs from Cacao, the ssf username is **<access_username>**! I you launch VMs from Exosphere, the ssh username is **exouser**!
 
 <br/>
 <br/>
