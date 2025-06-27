@@ -1,6 +1,6 @@
 # Argo Workflow
 
-This repository contains [Argo Workflows](https://argoproj.github.io/workflows) used by the **Open Forest Observatory (OFO)**. It is being developed to run the [automate-metashape](https://github.com/open-forest-observatory/automate-metashape) pipeline simultaneously across multiple virtual machines on [Jetstream2 Cloud](https://jetstream-cloud.org/). This type of scaling enables OFO to process many photogrammetry projects simultaneously (instead of sequentially) and vastly reduce total processing time. Argo is meant to work on [Kubernetes](https://kubernetes.io/docs/concepts/overview/) which orchestrates containers (ie, automate-metashape in docker), scales the processing to multiple VMs, and balances the load between the VMs. 
+This repository contains [Argo Workflows](https://argoproj.github.io/workflows) used by the **Open Forest Observatory (OFO)**. It is being developed to run the [automate-metashape](https://github.com/open-forest-observatory/automate-metashape) pipeline simultaneously across multiple virtual machines on [Jetstream2 Cloud](https://jetstream-cloud.org/). This type of scaling enables OFO to process many photogrammetry projects simultaneously with a single run command. Argo is meant to work on [Kubernetes](https://kubernetes.io/docs/concepts/overview/) which orchestrates containers (ie, automate-metashape in docker), scales the processing to multiple VMs, and balances the load between the VMs. 
 
 
 ---
@@ -34,7 +34,11 @@ You need to specify which datasets to be processed in the file `/ofo-share/datas
 <br/>
 <br/>
 
-### 2. Lauch VMs with CACAO
+### 2. Specify Metashape Parameters
+
+All metashape parameters are specified in a config.yml file which is located at '/ofo-share/argo-output`. You can create your own config yml as long as it is kept in this directory. The exact file (e.g., config2.yml or <projectname>_config.yml) will be specified as a parameter in the argo run command later in this workflow. 
+
+### 3. Lauch VMs with CACAO
 
 CACAO is an interface for provisioning and launching virtual machines on Jetstream2 Cloud. OFO is using this interface because it has the ability to quickly launch multiple VMs with kubernetes pre-installed. This capability does not currently exist in Exosphere (the default UI for JS2). 
 
@@ -66,7 +70,7 @@ After clicking deploy, you will be stepped through a series of parameters to sel
 <br/>
 <br/>
 
-### 3. Connecting to the VM Instances
+### 4. Connecting to the VM Instances
 
 You can connect to the terminal of any of the VMs through two methods:
 
@@ -81,7 +85,7 @@ IMPORTANT NOTE. If you have launched VMs from Cacao, the ssh username is **<acce
 <br/>
 <br/>
 
-### 4. Check Status of Kubernetes
+### 5. Check Status of Kubernetes
 Kubernetes (k3s) have been pre-installed on each of the instances. 
 
 View nodes in your cluster
@@ -96,7 +100,20 @@ Describe a specific node in your cluster
 <br/>
 <br/>
 
-### 5. Install Argo on Master instance
+### 6 Label each worker VM with a common role (for load-balancing)
+
+Once each worker is labeled with a role, we will be able to ensure a VM has a single metashape project (unless there are more projects than nodes)
+
+```
+# Label all non-master nodes with role=worker
+for node in $(kubectl get nodes --no-headers | awk '{print $1}'); do
+  if ! kubectl get node "$node" -o json | grep -q '"node-role.kubernetes.io/master"'; then
+    kubectl label node "$node" role=worker --overwrite
+  fi
+done
+```
+
+### 7. Install Argo on Master instance
 a. The following commands will download argo, unzip it, and bring it into your system path ready for use. 
 
 ```
@@ -231,16 +248,17 @@ h. Optional: check roles and role-bindings
 <br/>
 <br/>
 
-### 6. Clone ofo-argo repository to Master instance
+### 8. Clone ofo-argo repository to Master instance
 
 In the home directory of your terminal, type in the following
 
 `git clone https://github.com/open-forest-observatory/ofo-argo.git`
 
+NOTE: if you want to use a development branch of the repo `git checkout <branch name>`
 
 <br/>
 
-### 7. Connect VM instances to shared volume
+### 9. Connect VM instances to shared volume
 
 The following is about connecting the VM instances with the `/ofo-share` volume so it can read the drone imagery to process and write the outputs.
 
@@ -296,7 +314,6 @@ On the master instance terminal, type:
 <br/>
 
 ### 2. Run!!
-
 
 ```
 argo submit -n argo workflow.yaml --watch \
