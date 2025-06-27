@@ -38,6 +38,9 @@ You need to specify which datasets to be processed in the file `/ofo-share/datas
 
 All metashape parameters are specified in a config.yml file which is located at '/ofo-share/argo-output`. You can create your own config yml as long as it is kept in this directory. The exact file (e.g., config2.yml or <projectname>_config.yml) will be specified as a parameter in the argo run command later in this workflow. 
 
+<br/>
+<br/>
+
 ### 3. Lauch VMs with CACAO
 
 CACAO is an interface for provisioning and launching virtual machines on Jetstream2 Cloud. OFO is using this interface because it has the ability to quickly launch multiple VMs with kubernetes pre-installed. This capability does not currently exist in Exosphere (the default UI for JS2). 
