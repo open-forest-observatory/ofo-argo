@@ -103,7 +103,7 @@ Describe a specific node in your cluster
 <br/>
 <br/>
 
-### 6 Label each worker VM with a common role (for load-balancing)
+### 6. Label each worker VM with a common role (for load-balancing)
 
 Once each worker is labeled with a role, we will be able to ensure a VM has a single metashape project (unless there are more projects than nodes)
 
@@ -115,6 +115,8 @@ for node in $(kubectl get nodes --no-headers | awk '{print $1}'); do
   fi
 done
 ```
+<br/>
+<br/>
 
 ### 7. Install Argo on Master instance
 a. The following commands will download argo, unzip it, and bring it into your system path ready for use. 
