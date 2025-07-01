@@ -40,7 +40,7 @@ spec:
                   value: "{{workflow.parameters.CONFIG_FILE}}"
             withParam: "{{steps.determine-datasets.outputs.result}}"
     
-    # use subPath argument to mount dataset list argument (in /ofo-share/results/datasets.txt for now)
+    # use subPath argument to mount dataset list argument (in /ofo-share/argo-output/datasets.txt for now)
     # assuming all separate runs for now
     - name: determine-datasets
       script:
