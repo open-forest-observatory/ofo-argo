@@ -349,46 +349,54 @@ DATSET_LIST is the txt file where you specified the names of the datasets you wa
 The Argo UI is great for troubleshooting and checking additional logs. You can access it either through the Cacao WebDesktop or ssh from your local terminal.
 
 #### WebDesktop Method
-a. In the CACAO interface, launch a WebDesktop for your master instance
+* In the CACAO interface, launch a WebDesktop for your master instance
 
 <img width="660" alt="Screenshot 2025-06-20 at 9 33 53 AM" src="https://github.com/user-attachments/assets/a3ee09ba-d701-4fa5-97d3-586b4c640dc1" />
 
 <br/>
 <br/>
 
-b. Launch a terminal in the WebDesktop and type the following
+* Launch a terminal in the WebDesktop 
 
+* Get around a known issue with v3.6.10
+  
 `export GRPC_ENFORCE_ALPN_ENABLED=false`
 
-Then type
+* Then type this to launch the server UI
 
 `argo server --auth-mode server -n argo`
 
 <br/>
 
-c. Now go to a browser (firefox) in the WebDesktop and go the address. You may receive a "Connection not secure" error but just bypass it.
+* Now go to a browser (firefox) in the WebDesktop and go the address. You may receive a "Connection not secure" error but just bypass it.
 
-`https://localhost:2746`x
+`https://localhost:2746`
 
-<br/>
 <br/>
 
 #### Local ssh method
 
-Open a terminal or IDE on your local machine
+* Open a terminal or IDE on your local machine
 
-Connect via ssh to the master node 
+* Connect via ssh to the master node 
 
 `ssh <access_username>@<master_ip_address>` 
 
+* Get around a known issue with v3.6.10
+  
 `export GRPC_ENFORCE_ALPN_ENABLED=false`
+
+* Lauch server UI
 
 `argo server --auth-mode server -n argo`
 
-Next, open a web browser on your local computer and type in the address `https://<master_ip_address:2746`
+* Open a web browser on your local computer and type in the address (bypass the security warning)
 
-####
- The 'Workflows' tab on the left side menu shows you all running workflows. If you click a current workflow, it will show you a schematic of the jobs spread across multiple instances. 
+* `https://<master_ip_address:2746`
+
+#### Navigating Argo UI
+
+The 'Workflows' tab on the left side menu shows you all running workflows. If you click a current workflow, it will show you a schematic of the jobs spread across multiple instances. 
 
 <img width="1190" alt="Screenshot 2025-06-20 at 12 48 46 PM" src="https://github.com/user-attachments/assets/bd6bd991-f108-4be9-a1aa-6cb0f1ab1db5" />
 
