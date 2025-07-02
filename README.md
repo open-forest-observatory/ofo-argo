@@ -156,7 +156,7 @@ b. Create a isolated environment for the argo workflow on kubernetes
 
 c. Put argo on to new environment on kubernetes. Installs workflow Controller which manages overall lifecycle of workflows. Also installs argo server which includes a web-based user interface. 
 
-`kubectl apply -n argo -f https://github.com/argoproj/argo-workflows/releases/download/v3.6.5/install.yaml`
+`kubectl apply -n argo -f https://github.com/argoproj/argo-workflows/releases/download/v3.6.10/namespace-install.yaml`
 
 <br/>
 <br/>
