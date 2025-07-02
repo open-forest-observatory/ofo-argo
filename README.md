@@ -93,8 +93,7 @@ Connect to the master VM instance either through webshell or local IDE
 
 Kubernetes (k3s) have been pre-installed on each of the instances. 
 
-View nodes in your cluster
-`kubectl get nodes`
+View nodes in your cluster `kubectl get nodes`
 
 Describe a specific node in your cluster
 `kubectl describe <node-name>`
@@ -119,6 +118,15 @@ done
 ```
 <br/>
 <br/>
+
+### 6. Prevent the Master Node from Processing a Job
+
+`kubectl get nodes`
+
+note the name of the master node
+
+`kubectl taint nodes <master-node-name> node-role.kubernetes.io/master=:NoSchedule`
+
 
 ### 7. Install Argo on Master instance
 a. The following commands will download argo, unzip it, and bring it into your system path ready for use. 
