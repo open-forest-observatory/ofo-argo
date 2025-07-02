@@ -179,11 +179,15 @@ e. Describe pods
 
 f. Set up ofo-srv role in argo
 
-These next two commands are not necessary 
+These next two commands are not necessary but I'll leave it here for now
 
 `kubectl create role ofo-argo-srv -n argo --verb=list,update, --resource=workflows.argoproj.io`
 
 `kubectl create rolebinding ofo-argo-srv -n argo --role=ofo-argo-srv --serviceaccount=argo:argo-server`
+
+<br/>
+
+Please run the following command
 
 ```
 kubectl apply -f - <<EOF
@@ -208,6 +212,8 @@ EOF
 ```
 <br/>
 <br/>
+
+Please run the following command
 
 ```
 kubectl apply -f - <<EOF
@@ -273,7 +279,6 @@ a. Install Network File System (NFS) on all instances including the master and e
 
 `sudo apt install nfs-common -y`
 
-`sudo reboot`
 
 <br/>
 
