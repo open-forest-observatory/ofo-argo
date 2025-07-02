@@ -179,6 +179,8 @@ e. Describe pods
 
 f. Set up ofo-srv role in argo
 
+These next two commands are not necessary 
+
 `kubectl create role ofo-argo-srv -n argo --verb=list,update, --resource=workflows.argoproj.io`
 
 `kubectl create rolebinding ofo-argo-srv -n argo --role=ofo-argo-srv --serviceaccount=argo:argo-server`
