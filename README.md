@@ -104,20 +104,6 @@ Describe a specific node in your cluster
 <br/>
 <br/>
 
-### 6. Label each worker VM with a common role (for load-balancing)
-
-Once each worker is labeled with a role, we will be able to ensure a VM has a single metashape project (unless there are more projects than nodes)
-
-```
-# Label all non-master nodes with role=worker
-for node in $(kubectl get nodes --no-headers | awk '{print $1}'); do
-  if ! kubectl get node "$node" -o json | grep -q '"node-role.kubernetes.io/master"'; then
-    kubectl label node "$node" role=worker --overwrite
-  fi
-done
-```
-<br/>
-<br/>
 
 ### 6. Prevent the Master Node from Processing a Job
 
@@ -127,6 +113,8 @@ note the name of the master node
 
 `kubectl taint nodes <master-node-name> node-role.kubernetes.io/master=:NoSchedule`
 
+<br/>
+<br/>
 
 ### 7. Install Argo on Master instance
 a. The following commands will download argo, unzip it, and bring it into your system path ready for use. 
