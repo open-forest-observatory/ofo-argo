@@ -392,7 +392,10 @@ The Argo UI is great for troubleshooting and checking additional logs. You can a
 
 * Open a web browser on your local computer and type in the address (bypass the security warning)
 
-* `https://<master_ip_address:2746`
+  `https://<master_ip_address:2746`
+
+<br/>
+<br/>
 
 #### Navigating Argo UI
 
