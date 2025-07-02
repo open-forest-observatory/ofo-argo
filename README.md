@@ -257,7 +257,7 @@ In the home directory of your terminal, type in the following
 
 `git clone https://github.com/open-forest-observatory/ofo-argo.git`
 
-NOTE: if you want to use a development branch of the repo `git checkout <branch name>`
+NOTE: if you want to use a development branch of the repo `git checkout docs/JG/readme-editing`
 
 <br/>
 
