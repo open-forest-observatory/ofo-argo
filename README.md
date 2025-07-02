@@ -321,7 +321,7 @@ On the master instance terminal, type:
 
 `export AGISOFT_FLS=<ip_address>:5842`
 
-This variable will only last during the terminal session and will have to be re-declared each time you start a new master terminal. 
+This variable will only last during the terminal session and will have to be re-declared each time you start a new master terminal. We are not putting the ip address here to prevent unauthorized people from using it. 
 
 <br/>
 
@@ -346,8 +346,9 @@ DATSET_LIST is the txt file where you specified the names of the datasets you wa
 <br/>
 
 ### 3. Monitor Argo Workflow
-The Argo UI is great for troubleshooting and checking additional logs. You can access it with the following steps
+The Argo UI is great for troubleshooting and checking additional logs. You can access it either through the Cacao WebDesktop or ssh from your local terminal.
 
+#### WebDesktop Method
 a. In the CACAO interface, launch a WebDesktop for your master instance
 
 <img width="660" alt="Screenshot 2025-06-20 at 9 33 53 AM" src="https://github.com/user-attachments/assets/a3ee09ba-d701-4fa5-97d3-586b4c640dc1" />
@@ -357,23 +358,39 @@ a. In the CACAO interface, launch a WebDesktop for your master instance
 
 b. Launch a terminal in the WebDesktop and type the following
 
+`export GRPC_ENFORCE_ALPN_ENABLED=false`
+
+Then type
+
 `argo server --auth-mode server -n argo`
 
 <br/>
 
 c. Now go to a browser (firefox) in the WebDesktop and go the address. You may receive a "Connection not secure" error but just bypass it.
 
-`https://<master_public_ip_address>:2746`
-
-<br/>
-
-<img width="1190" alt="Screenshot 2025-06-20 at 12 48 46 PM" src="https://github.com/user-attachments/assets/bd6bd991-f108-4be9-a1aa-6cb0f1ab1db5" />
+`https://localhost:2746`x
 
 <br/>
 <br/>
+
+#### Local ssh method
+
+Open a terminal or IDE on your local machine
+
+Connect via ssh to the master node 
+
+`ssh <access_username>@<master_ip_address>` 
+
+`export GRPC_ENFORCE_ALPN_ENABLED=false`
+
+`argo server --auth-mode server -n argo`
+
+Next, open a web browser on your local computer and type in the address `https://<master_ip_address:2746`
+
+####
  The 'Workflows' tab on the left side menu shows you all running workflows. If you click a current workflow, it will show you a schematic of the jobs spread across multiple instances. 
 
-
+<img width="1190" alt="Screenshot 2025-06-20 at 12 48 46 PM" src="https://github.com/user-attachments/assets/bd6bd991-f108-4be9-a1aa-6cb0f1ab1db5" />
 
 <br/>
 <br/>
