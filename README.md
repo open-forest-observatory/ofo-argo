@@ -61,9 +61,10 @@ After clicking deploy, you will be stepped through a series of parameters to sel
 * Project = your js2 allocation name
 * Region = IU
 * Type a deployment name (e.g., jgillan-test-0618)
-* Make sure you are using Ubuntu22
+* Featured Ubuntu24 
 * Choose the number of instances. This should be a miminum of 3 VMs. One VM will be the master (does no work), the other two will be workers.
-* Choose the size of the VMs. It is recommended to start with `g3.medium` which has a gpu for each instance. GPUs are useful for accelerating some steps of the metashape pipeline. Having a GPU for the master instance seems wasteful, so we can `resize` the master instance later in Exosphere.
+* Choose the size of the VMs. It is recommended to start with `g3.medium` which has a gpu for each instance. GPUs are useful for accelerating some steps of the metashape pipeline. Because the master node does no processing, it doesn't need to be GPU. After launch, you can resize to CPU using Exophere interface.
+* Under Advanced Settings, specify to use a boot volume with 60 GB of storage. This will allow you to later resize the nodes to the smaller flavors. (If you leave the default of “local volume”, you will be unable to later resize any nodes to m3.quad or smaller.)
 
 
 <img width="400" alt="cacao_parameters" src="https://github.com/user-attachments/assets/bb34c732-311d-4710-beba-19da1d3c0ad7" />
@@ -265,7 +266,7 @@ In the home directory of your terminal, type in the following
 
 `git clone https://github.com/open-forest-observatory/ofo-argo.git`
 
-NOTE: if you want to use a development branch of the repo `git checkout docs/JG/readme-editing`
+NOTE: if you want to use a development branch of the repo. eg, `git checkout docs/JG/readme-editing`
 
 <br/>
 
@@ -362,7 +363,7 @@ The Argo UI is great for troubleshooting and checking additional logs. You can a
   
 `export GRPC_ENFORCE_ALPN_ENABLED=false`
 
-* Then type this to launch the server UI
+* Then type this to launch the server UI. 
 
 `argo server --auth-mode server -n argo`
 
@@ -393,6 +394,11 @@ The Argo UI is great for troubleshooting and checking additional logs. You can a
 * Open a web browser on your local computer and type in the address (bypass the security warning)
 
   `https://<master_ip_address:2746`
+
+<br/>
+<br/>
+
+**Note on UI Server.** The command `argo server --auth-mode server -n argo`is not the most secure method because it is exposed to the open internet. In the future we may use `argo server --auth-mode client -n argo` which restricts access to users with tokens. More information on the topic [here](https://docs.google.com/document/d/1H1TWZAvRbiRLD4jBOIUFKLgV1vvD7FeXNG58IH0irJ8/edit?tab=t.0)
 
 <br/>
 <br/>
