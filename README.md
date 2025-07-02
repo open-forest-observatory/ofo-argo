@@ -124,7 +124,7 @@ a. The following commands will download argo, unzip it, and bring it into your s
 ARGO_OS="linux"
 
 # Download the binary
-curl -sLO "https://github.com/argoproj/argo-workflows/releases/download/v3.6.5/argo-$ARGO_OS-amd64.gz"
+curl -sLO "https://github.com/argoproj/argo-workflows/releases/download/v3.6.10/argo-$ARGO_OS-amd64.gz"
 
 # Unzip
 gunzip "argo-$ARGO_OS-amd64.gz"
