@@ -12,6 +12,11 @@ This repository contains [Argo Workflows](https://argoproj.github.io/workflows) 
 
 ## Setup
 
+### 1. Inputs
+
+Inputs to the metashape argo workflow include **1.** drone imagery datasets consisting of jpegs, **2.** a list (datasets.txt) of the dataset names to be processed, and **3.** a metashape config.yml All of these inputs need to be on the `ofo-share` volume. This volume will be automatically mounted to any VM built from `ofo-dev` image using [Exosphere interface](https://jetstream2.exosphere.app/exosphere/). The volume is mounted at `/ofo-share` of the VM.
+
+Here is a schematic of the `/ofo-share` director. 
 ```bash
 /ofo-share/
 ├── argo-input/
@@ -41,41 +46,31 @@ This repository contains [Argo Workflows](https://argoproj.github.io/workflows) 
                 └── metashape_project.psx
 ```
 
-
-
-
-
-### 1. Add drone imagery data to OFO shared volume
-
-The drone data to be processed and the workflow outputs are on the `ofo-share` volume. This volume will be automatically mounted to any VM built from `ofo-dev` image using [Exosphere interface](https://jetstream2.exosphere.app/exosphere/). The volume is mounted at `/ofo-share` of the VM. 
-<br/>
-
+#### Add drone imagery to OFO shared volume
 To add new drone imagery datasets to be processed using Argo, transfer files from your local machine to the `/ofo-share` volume.
 
-`scp -r <local/directory/drone_images> exouser@<vm.ip.address>:/ofo-share/`
+`scp -r <local/directory/drone_image_dataset> exouser@<vm.ip.address>:/ofo-share/argo-input`
 
-Put the drone imagery projects to be processed in it's own directory in `/ofo-share`. For example, there are 4 testing datasets already in the directory called `benchmarking-inputs`, `emerald-point-benchmark`, `benchmarking-swetnam-house`, `benchmarking-greasewood`
+Put the drone imagery projects to be processed in it's own directory in `/ofo-share/argo-input`. For example, there are 4 testing datasets already in the directory called `benchmarking-emerald-subset`, `benchmarking-emerald-full`, `benchmarking-swetnam-house`, `benchmarking-greasewood`
 
-The path for metashape output is: `/ofo-share/argo-output`
 
 <br/>
 
 #### Specify which datasets to process in Argo
+The file `/ofo-share/argo-input/datasets.txt` contains of list of the named datasets to process in argo. 
 
-You need to specify which datasets to be processed in the file `/ofo-share/datasets.txt`
-
-
-<br/>
-<br/>
-
-### 2. Specify Metashape Parameters
-
-All metashape parameters are specified in a config.yml file which is located at `/ofo-share/argo-output`. You can create your own config yml as long as it is kept in this directory. The exact file (e.g., config2.yml or projectname_config.yml) will be specified as a parameter in the argo run command later in this workflow. 
 
 <br/>
 <br/>
 
-### 3. Lauch VMs with CACAO
+#### Specify Metashape Parameters
+
+All metashape parameters are specified in a config.yml file which is located at `/ofo-share/argo-input`. You can create your own config yml as long as it is kept in this directory. The exact file (e.g., config2.yml or projectname_config.yml) will be specified as a parameter in the argo run command later in this workflow. 
+
+<br/>
+<br/>
+
+### 2. Lauch VMs with CACAO
 
 CACAO is an interface for provisioning and launching virtual machines on Jetstream2 Cloud. OFO is using this interface because it has the ability to quickly launch multiple VMs with kubernetes pre-installed. This capability does not currently exist in Exosphere (the default UI for JS2). 
 
@@ -108,7 +103,7 @@ After clicking deploy, you will be stepped through a series of parameters to sel
 <br/>
 <br/>
 
-### 4. Connecting to the VM Instances
+### 3. Connecting to the VM Instances
 
 You can connect to the terminal of any of the VMs through two methods:
 
@@ -123,7 +118,7 @@ IMPORTANT NOTE. If you have launched VMs from Cacao, the ssh username is **<acce
 <br/>
 <br/>
 
-### 5. Check Status of Kubernetes
+### 4. Check Status of Kubernetes
 Connect to the master VM instance either through webshell or local IDE
 
 Kubernetes (k3s) have been pre-installed on each of the instances. 
@@ -140,7 +135,7 @@ Describe a specific node in your cluster
 <br/>
 
 
-### 6. Prevent the Master Node from Processing a Job
+### 5. Prevent the Master Node from Processing a Job
 
 `kubectl get nodes`
 
@@ -151,7 +146,7 @@ note the name of the master node
 <br/>
 <br/>
 
-### 7. Install Argo on Master instance
+### 6. Install Argo on Master instance
 a. The following commands will download argo, unzip it, and bring it into your system path ready for use. 
 
 ```
@@ -294,7 +289,7 @@ h. Optional: check roles and role-bindings
 <br/>
 <br/>
 
-### 8. Clone ofo-argo repository to Master instance
+### 7. Clone ofo-argo repository to Master instance
 
 In the home directory of your terminal, type in the following
 
@@ -304,7 +299,7 @@ NOTE: if you want to use a development branch of the repo. eg, `git checkout doc
 
 <br/>
 
-### 9. Connect VM instances to shared volume
+### 8. Connect VM instances to shared volume
 
 The following is about connecting the VM instances with the `/ofo-share` volume so it can read the drone imagery to process and write the outputs.
 
@@ -345,6 +340,7 @@ e. Check the PVs
 
 `kubectl get pvc -n argo`
 
+<br/>
 <br/>
 <br/>
 
