@@ -7,34 +7,6 @@ This repository contains [Argo Workflows](https://argoproj.github.io/workflows) 
 
 <br/>
 
-
-/ofo-share/
-  argo-input/
-      config.yml
-      datasets.txt
-      benchmarking-greasewood/
-        image_01.jpg
-        image_02.jpg
-      benchmarking-swetnam-house/
-        image_01.jpg
-        image_02.jpg
-/argo-output/
-  <RUN_FOLDER>/
-    benchmarking-greasewood/
-      output/
-        orthomosaic.tif
-        dsm.tif
-        point-cloud.laz
-      project/
-        metashape_project.psx
-    benchmarking-swetnam-house/
-      output/
-        orthomosaic.tif
-        dsm.tif
-        point-cloud.laz
-      project/
-        metashape_project.psx
-  
     
 
 
