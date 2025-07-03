@@ -40,7 +40,36 @@ This repository contains [Argo Workflows](https://argoproj.github.io/workflows) 
 
 ## Setup
 
-<pre lang="markdown"> ```bash /ofo-share/ └── argo-input/ ├── config.yml ├── datasets.txt ├── benchmarking-greasewood/ │ ├── image_01.jpg │ └── image_02.jpg └── benchmarking-swetnam-house/ ├── image_01.jpg └── image_02.jpg /argo-output/ └── &lt;RUN_FOLDER&gt;/ ├── benchmarking-greasewood/ │ ├── output/ │ │ ├── orthomosaic.tif │ │ ├── dsm.tif │ │ └── point-cloud.laz │ └── project/ │ └── metashape_project.psx └── benchmarking-swetnam-house/ ├── output/ │ ├── orthomosaic.tif │ ├── dsm.tif │ └── point-cloud.laz └── project/ └── metashape_project.psx ``` </pre>
+```bash
+/ofo-share/
+└── argo-input/
+    ├── config.yml
+    ├── datasets.txt
+    ├── benchmarking-greasewood/
+    │   ├── image_01.jpg
+    │   └── image_02.jpg
+    └── benchmarking-swetnam-house/
+        ├── image_01.jpg
+        └── image_02.jpg
+
+/argo-output/
+└── <RUN_FOLDER>/
+    ├── benchmarking-greasewood/
+    │   ├── output/
+    │   │   ├── orthomosaic.tif
+    │   │   ├── dsm.tif
+    │   │   └── point-cloud.laz
+    │   └── project/
+    │       └── metashape_project.psx
+    └── benchmarking-swetnam-house/
+        ├── output/
+        │   ├── orthomosaic.tif
+        │   ├── dsm.tif
+        │   └── point-cloud.laz
+        └── project/
+            └── metashape_project.psx
+```
+
 
 
 
