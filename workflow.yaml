@@ -13,7 +13,7 @@ spec:
       - name: RUN_FOLDER
         default: "default-run"
       - name: DATASET_LIST
-        default: "datasets.txt"
+        default: "argo-input/datasets.txt"
       - name: AGISOFT_FLS
         default: ""
         
