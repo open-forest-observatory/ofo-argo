@@ -16,7 +16,7 @@ This repository contains [Argo Workflows](https://argoproj.github.io/workflows) 
 
 Inputs to the metashape argo workflow include **1.** drone imagery datasets consisting of jpegs, **2.** a list (datasets.txt) of the dataset names to be processed, and **3.** a metashape config.yml. All of these inputs need to be on the `ofo-share` volume. This volume will be automatically mounted to any VM built from `ofo-dev` image using [Exosphere interface](https://jetstream2.exosphere.app/exosphere/). The volume is mounted at `/ofo-share` of the VM.
 
-Here is a schematic of the `/ofo-share` director. 
+Here is a schematic of the `/ofo-share` directory. 
 ```bash
 /ofo-share/
 ├── argo-input/
@@ -452,7 +452,34 @@ If you click on a specific job, it will show you lots of information of the proc
 ### 4. Metashape Outputs
 The metashape outputs will be written to `/ofo-share/argo-outputs/<RUN_FOLDER>`. Each dataset will have its own subdirectory in the <RUN_FOLDER>. Output imagery products (DEMs, orthomosaics, point clouds, report) will be written to `/ofo-share/argo-outputs/<RUN_FOLDER>/<dataset_name>/output`. Metashape projects .psx will be written to `/ofo-share/argo-outputs/<RUN_FOLDER>/<dataset_name>/project`.
 
-
+```bash
+/ofo-share/
+├── argo-input/
+│   ├── config.yml
+│   ├── datasets.txt
+│   ├── benchmarking-greasewood/
+│   │   ├── image_01.jpg
+│   │   └── image_02.jpg
+│   └── benchmarking-swetnam-house/
+│       ├── image_01.jpg
+│       └── image_02.jpg
+└── argo-output/
+    └── <RUN_FOLDER>/
+        ├── benchmarking-greasewood/
+        │   ├── output/
+        │   │   ├── orthomosaic.tif
+        │   │   ├── dsm.tif
+        │   │   └── point-cloud.laz
+        │   └── project/
+        │       └── metashape_project.psx
+        └── benchmarking-swetnam-house/
+            ├── output/
+            │   ├── orthomosaic.tif
+            │   ├── dsm.tif
+            │   └── point-cloud.laz
+            └── project/
+                └── metashape_project.psx
+```
 
 
 
