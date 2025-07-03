@@ -85,7 +85,6 @@ spec:
           mountPath: /data
         - name: results
           mountPath: /results
-          #subPath: "{{workflow.parameters.RUN_FOLDER}}"
         command: ["python3", "/app/python/metashape_workflow.py"]
         args: 
           - "--config_file"
