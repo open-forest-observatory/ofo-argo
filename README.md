@@ -46,7 +46,7 @@ Here is a schematic of the `/ofo-share` director.
                 └── metashape_project.psx
 ```
 
-#### Add drone imagery to OFO shared volume
+#### a. Add drone imagery to OFO shared volume
 To add new drone imagery datasets to be processed using Argo, transfer files from your local machine to the `/ofo-share` volume.
 
 `scp -r <local/directory/drone_image_dataset> exouser@<vm.ip.address>:/ofo-share/argo-input`
@@ -56,14 +56,14 @@ Put the drone imagery projects to be processed in it's own directory in `/ofo-sh
 
 <br/>
 
-#### Specify which datasets to process in Argo
+#### b. Specify which datasets to process in Argo
 The file `/ofo-share/argo-input/datasets.txt` contains of list of the named datasets to process in argo. 
 
 
 <br/>
 <br/>
 
-#### Specify Metashape Parameters
+#### c. Specify Metashape Parameters
 
 All metashape parameters are specified in a config.yml file which is located at `/ofo-share/argo-input`. You can create your own config yml as long as it is kept in this directory. The exact file (e.g., config2.yml or projectname_config.yml) will be specified as a parameter in the argo run command later in this workflow. 
 
