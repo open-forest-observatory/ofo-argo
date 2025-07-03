@@ -41,19 +41,19 @@ spec:
             withParam: "{{steps.determine-datasets.outputs.result}}"
     
     # use subPath argument to mount dataset list argument (in /ofo-share/argo-output/datasets.txt for now)
-    # assuming all separate runs for now
+    
     - name: determine-datasets
       script:
         image: python:3.9
         volumeMounts:
-        - name: results
-          mountPath: /results
+        - name: data
+          mountPath: /data/argo-input
           subPath: "{{workflow.parameters.DATASET_LIST}}"
         command: ["python3"]
         source: |
           import json
           import sys
-          file_path = "/results"
+          file_path = "/data/argo-input"
           with open(file_path, "r") as f:
             json.dump([line.strip() for line in f], sys.stdout)
 
@@ -65,7 +65,7 @@ spec:
       #the following 'metadata' and 'affinity' language is about ensuring one metashape project on one VM
       metadata:
         labels:
-          workload-type: metashape-job  # arbitrary, but used for spreading
+          workload-type: metashape-job  # arbitrary, but used for pod spreading
       
       affinity:
         podAntiAffinity:
@@ -89,15 +89,15 @@ spec:
         command: ["python3", "/app/python/metashape_workflow.py"]
         args: 
           - "--config_file"
-          - "/results/{{inputs.parameters.config-file}}"
+          - "/data/argo-input/{{inputs.parameters.config-file}}"
           - "--photo-path"
-          - "/data/{{inputs.parameters.dataset-names}}"
+          - "/data/argo-input/{{inputs.parameters.dataset-names}}"
           - "--project-path"
           - "/results/{{workflow.parameters.RUN_FOLDER}}/{{inputs.parameters.dataset-names}}/project"
           - "--output-path"
           - "/results/{{workflow.parameters.RUN_FOLDER}}/{{inputs.parameters.dataset-names}}/output"
           - "--run-name"
-          - "test-run-{{inputs.parameters.dataset-names}}"
+          - "{{inputs.parameters.dataset-names}}"
         env:
           - name: AGISOFT_FLS
             value: "{{workflow.parameters.AGISOFT_FLS}}"
