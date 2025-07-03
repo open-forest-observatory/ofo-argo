@@ -62,7 +62,7 @@ spec:
         parameters:
           - name: dataset-names
           - name: config-file
-      #the following 'metadata' and 'affinity' language is about ensuring one metashape project on one VM (unless more projects than nodes)
+      #the following 'metadata' and 'affinity' language is about ensuring one metashape project on one VM
       metadata:
         labels:
           workload-type: metashape-job  # arbitrary, but used for spreading
