@@ -14,7 +14,7 @@ This repository contains [Argo Workflows](https://argoproj.github.io/workflows) 
 
 ### 1. Inputs
 
-Inputs to the metashape argo workflow include **1.** drone imagery datasets consisting of jpegs, **2.** a list (datasets.txt) of the dataset names to be processed, and **3.** a metashape config.yml All of these inputs need to be on the `ofo-share` volume. This volume will be automatically mounted to any VM built from `ofo-dev` image using [Exosphere interface](https://jetstream2.exosphere.app/exosphere/). The volume is mounted at `/ofo-share` of the VM.
+Inputs to the metashape argo workflow include **1.** drone imagery datasets consisting of jpegs, **2.** a list (datasets.txt) of the dataset names to be processed, and **3.** a metashape config.yml. All of these inputs need to be on the `ofo-share` volume. This volume will be automatically mounted to any VM built from `ofo-dev` image using [Exosphere interface](https://jetstream2.exosphere.app/exosphere/). The volume is mounted at `/ofo-share` of the VM.
 
 Here is a schematic of the `/ofo-share` director. 
 ```bash
