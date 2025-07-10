@@ -51,15 +51,6 @@ spec:
                 - name: dataset-name
                   value: "{{item}}"
             withParam: "{{steps.determine-datasets.outputs.result}}"
-        #- - name: run-automate-metashape
-            #template: run-automate-metashape
-            #arguments:
-              #parameters:
-                #- name: dataset-names
-                  #value: "{{item}}"
-                #- name: config-file
-                  #value: "{{workflow.parameters.CONFIG_FILE}}"
-            #withParam: "{{steps.determine-datasets.outputs.result}}"
     
     - name: determine-datasets
       script:
@@ -121,11 +112,11 @@ spec:
             continueOn:
               failed: true
         - - name: determine-success
-              template: evaluate-success
-              arguments:
-                parameters:
-                  - name: step-status
-                    value: "{{steps.run-processing.status}}"
+            template: evaluate-success
+            arguments:
+              parameters:
+                - name: step-status
+                  value: "{{steps.run-processing.status}}"
         - - name: log-completion
             template: log-dataset-completion
             arguments:
