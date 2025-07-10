@@ -124,7 +124,7 @@ spec:
                 - name: dataset-name
                   value: "{{inputs.parameters.dataset-name}}"
                 - name: success
-                  value: "{{steps.determine-success.outputs.results}}"      
+                  value: "{{steps.determine-success.outputs.result}}"      
                   
     - name: log-dataset-start
       inputs:
