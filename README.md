@@ -362,8 +362,13 @@ This variable will only last during the terminal session and will have to be re-
 argo submit -n argo workflow.yaml --watch \
 -p CONFIG_FILE=config2.yml \
 -p AGISOFT_FLS=$AGISOFT_FLS \
--p RUN_FOLDER=gillan_test_june27 \
--p DATASET_LIST=datasets.txt  
+-p RUN_FOLDER=gillan_june27 \
+-p DATASET_LIST=datasets.txt \
+-p DB_PASSWORD=ujJ1tsY9OizN0IpOgl1mY1cQGvgja3SI \
+-p DB_HOST=10.0.205.207 \
+-p DB_NAME=postgres \
+-p DB_USER=postgres
+ 
 ```
 
 CONFIG_FILE is the config which specifies the metashape parameters which should be located in `/ofo-share/argo-output`
@@ -373,6 +378,8 @@ AGISOFT_FLS is the ip address of the metashape license server
 RUN_FOLDER is what you want to name the parent directory of your output
 
 DATSET_LIST is the txt file where you specified the names of the datasets you want to process located at `/ofo-share/argo-output`
+
+The rest of the parameters are for logging argo status in a postGIS database. Do not change these. 
 
 <br/>
 
@@ -437,17 +444,25 @@ The Argo UI is great for troubleshooting and checking additional logs. You can a
 
 The 'Workflows' tab on the left side menu shows you all running workflows. If you click a current workflow, it will show you a schematic of the jobs spread across multiple instances. 
 
-<img width="1190" alt="Screenshot 2025-06-20 at 12 48 46 PM" src="https://github.com/user-attachments/assets/bd6bd991-f108-4be9-a1aa-6cb0f1ab1db5" />
+<img width="1000" alt="Screenshot 2025-06-20 at 12 48 46 PM" src="https://github.com/user-attachments/assets/bd6bd991-f108-4be9-a1aa-6cb0f1ab1db5" />
 
 <br/>
 <br/>
 
 If you click on a specific job, it will show you lots of information of the process including which VM it is running on, the duration of the process, and logs. 
 
-<img width="1190" alt="Screenshot 2025-06-20 at 12 58 55 PM" src="https://github.com/user-attachments/assets/ab10f2b4-3120-47be-b1dd-601687707f0c" />
+<img width="1000" alt="Screenshot 2025-06-20 at 12 58 55 PM" src="https://github.com/user-attachments/assets/ab10f2b4-3120-47be-b1dd-601687707f0c" />
 
 <br/>
 <br/>
+
+A successfull argo run 
+
+<img width="800" height="789" alt="argo_success" src="https://github.com/user-attachments/assets/201b0594-7557-4d85-a99b-677e6c173a44" />
+
+<br/>
+<br/>
+
 
 ### 4. Metashape Outputs
 The metashape outputs will be written to `/ofo-share/argo-outputs/<RUN_FOLDER>`. Each dataset will have its own subdirectory in the <RUN_FOLDER>. Output imagery products (DEMs, orthomosaics, point clouds, report) will be written to `/ofo-share/argo-outputs/<RUN_FOLDER>/<dataset_name>/output`. Metashape projects .psx will be written to `/ofo-share/argo-outputs/<RUN_FOLDER>/<dataset_name>/project`.
@@ -490,45 +505,29 @@ The metashape outputs will be written to `/ofo-share/argo-outputs/<RUN_FOLDER>`.
 
 ## Argo Workflow Logging in postGIS database (in development)
 
-There is a [development branch of `ofo-argo`](https://github.com/open-forest-observatory/ofo-argo/tree/aa_setup_argo_utils) repo created by Arnav. This branch has developed a workflow to log argo process status (eg., started, finished, successful, failed) into a postGIS DB. This is done through an additional docker container (hosted on ghcr). The workflow is in the folder `ofo-argo-utils`. There is also a github action workflow that rebuilds this container if changes have been made in `workflow.yml`. This workflow is in the directory `.github/workflows`. There is an outstanding pull request regarding this development. 
-
-To run this experimental workflow navigate to the `ofo-argo` repo and go into the branch `git checkout aa_setup_argo_utils`
+Argo run status is logged into a postGIS DB. This is done through an additional docker container (hosted on ghcr). The files to make the docker image are in the folder `ofo-argo-utils`. 
 
 <br/>
-
-```
-argo submit -n argo workflow.yaml --watch \
-  -p AGISOFT_FLS=$AGISOFT_FLS \
-  -p RUN_FOLDER=$RUN_FOLDER \
-  -p DATASET_LIST=$DATASET_LIST \
-  -p DB_PASSWORD=$DB_PASSWORD \
-  -p DB_HOST=$DB_HOST \
-  -p DB_NAME=$DB_NAME \
-  -p DB_USER=$DB_USER
-```
-Replace the variables above (e.g., $AGISOFT_FLS, $RUN_FOLDER) with your actual environment values or export them beforehand. Get all variables associated with the database from the internal credentials doc.
-
-During an automate-metashape run, we update an entry in the db as the run progresses. We do NOT add new rows to update the status. Moving forward, we might want to see if this is the best practice.
 
 
 ### Info on the postGIS DB
 There is a JS2 VM called `ofo-postgis` that hosts a postgis DB in docker. When we process drone imagery in Metashape, we want workflow metadata to be put into this postGIS database. This server has persistent storage, tied to a storage volume made in Jetstream.
 
-As of right now, the PostGIS server stores the following keys:
+As of right now, the PostGIS server stores the following keys in the `automate_metashape` table:
 
 | **Column**   | **Type** | **Description**  |
 |  --- | ----  | --- |
 |id | integer | unique identifier for each call of automate-metashape (not run) |
 |dataset_name | character varying(100) | dataset running for the individual call of automate-metashape |
 | workflow_id | character varying(100) | identifier for run of ofo-argo |
-| status | character varying(50)  | either queued, processing, or failed, based on current and final status of automate-metashape |
+| status | character varying(50)  | either queued, processing, failed or completed, based on current and final status of automate-metashape |
 | start_time | timestamp without time zone | start time of automate-metashape run |
 | finish_time  | timestamp without time zone | end time of automate-metashape run (if it was able to finish) |
 | created_at | timestamp without time zone | creation time of entry in database |
 
 ### Access and Navigation of postgis DB  
 
-* SSH into ofo-postgis `ssh exouser@<ip>`
+* SSH into ofo-postgis `ssh exouser@149.165.153.127`
 
 * Enter the Docker container running the PostGIS server `sudo docker exec -ti ofo-postgis bash`
 
@@ -538,13 +537,17 @@ As of right now, the PostGIS server stores the following keys:
 
 * Show the structure of a specific table (column names & data types) `\d automate_metashape`
 
-* View all data records for a specific table `select * from automate_metashape;`
+* View all data records for a specific table `select * from automate_metashape ORDER BY id DESC;`
 
 
 
 <br/>
 <br/>
 <br/>
+
+### Github action to rebuild logging docker image
+
+workflow that rebuilds this container if changes have been made at all in the repo. This workflow is in the directory `.github/workflows`.
 <br/>
 <br/>
 <br/>
