@@ -503,14 +503,14 @@ The metashape outputs will be written to `/ofo-share/argo-outputs/<RUN_FOLDER>`.
 <br/>
 <br/>
 
-## Argo Workflow Logging in postGIS database (in development)
+### 5. Argo Workflow Logging in postGIS database 
 
-Argo run status is logged into a postGIS DB. This is done through an additional docker container (hosted on ghcr). The files to make the docker image are in the folder `ofo-argo-utils`. 
+Argo run status is logged into a postGIS DB. This is done through an additional docker container (hosted on github container registry `ghcr.io/open-forest-observatory/ofo-argo-utils:latest`). The files to make the docker image are in the folder `ofo-argo-utils`. 
 
 <br/>
 
 
-### Info on the postGIS DB
+#### Info on the postGIS DB
 There is a JS2 VM called `ofo-postgis` that hosts a postgis DB in docker. When we process drone imagery in Metashape, we want workflow metadata to be put into this postGIS database. This server has persistent storage, tied to a storage volume made in Jetstream.
 
 As of right now, the PostGIS server stores the following keys in the `automate_metashape` table:
@@ -525,7 +525,7 @@ As of right now, the PostGIS server stores the following keys in the `automate_m
 | finish_time  | timestamp without time zone | end time of automate-metashape run (if it was able to finish) |
 | created_at | timestamp without time zone | creation time of entry in database |
 
-### Access and Navigation of postgis DB  
+#### Access and Navigation of postgis DB  
 
 * SSH into ofo-postgis `ssh exouser@149.165.153.127`
 
@@ -545,9 +545,11 @@ As of right now, the PostGIS server stores the following keys in the `automate_m
 <br/>
 <br/>
 
-### Github action to rebuild logging docker image
+#### Github action to rebuild logging docker image
 
-workflow that rebuilds this container if changes have been made at all in the repo. This workflow is in the directory `.github/workflows`.
+There is github action workflow that rebuilds the logging docker image if any changes have been made at all in the repo. This workflow is in the directory `.github/workflows`. **The workflow is currently disabled in the 'Actions' section of the repository.**
+
+
 <br/>
 <br/>
 <br/>
