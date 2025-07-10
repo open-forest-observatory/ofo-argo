@@ -120,6 +120,12 @@ spec:
                   value: "{{workflow.parameters.CONFIG_FILE}}"
             continueOn:
               failed: true
+        - - name: determine-success
+              template: evaluate-success
+              arguments:
+                parameters:
+                  - name: step-status
+                    value: "{{steps.run-processing.status}}"
         - - name: log-completion
             template: log-dataset-completion
             arguments:
@@ -127,7 +133,7 @@ spec:
                 - name: dataset-name
                   value: "{{inputs.parameters.dataset-name}}"
                 - name: success
-                  value: "{{steps.run-processing.status}}"      
+                  value: "{{steps.determine-success.outputs.results}}"      
                   
     - name: log-dataset-start
       inputs:
@@ -176,7 +182,18 @@ spec:
             value: "{{workflow.parameters.DB_USER}}"
           - name: DB_PASSWORD
             value: "{{workflow.parameters.DB_PASSWORD}}"
-
+    - name: evaluate-success
+      inputs:
+        parameters:
+          - name: step-status
+      script:
+        image: python:3.9
+        command: ["python3"]
+        source: |
+          import sys
+          status = "{{inputs.parameters.step-status}}"
+          sys.stdout.write("true" if status == "Succeeded" else "false")
+          
     - name: run-automate-metashape
       inputs:
         parameters:
