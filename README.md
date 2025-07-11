@@ -583,11 +583,16 @@ Currently, the PostGIS server stores the following keys in the `automate_metasha
 <br/>
 <br/>
 
-
-
 View all data records for a specific table `select * from automate_metashape ORDER BY id DESC;`
+<img width="800" height="183" alt="sql_query" src="https://github.com/user-attachments/assets/cba4532a-21de-4c35-8b2d-635eec326ef7" />
 
+<br/>
 
+Exit out of psql command-line `\q`
+
+<br/>
+
+Exit out of container `exit`
 
 <br/>
 <br/>
