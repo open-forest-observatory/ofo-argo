@@ -511,7 +511,15 @@ Argo run status is logged into a postGIS DB. This is done through an additional 
 
 
 #### Info on the postGIS DB
-There is a JS2 VM called `ofo-postgis` that hosts a postGIS DB for storing metadata of argo workflows. The DB is running in a docker container (`postgis/postgis`). The DB storage is a 10 GB volume at `/media/volume/ofo-postgis` on the VM. 
+There is a JS2 VM called `ofo-postgis` that hosts a postGIS DB for storing metadata of argo workflows. 
+
+<br/>
+
+SSH into ofo-postgis `ssh exouser@149.165.153.127`
+
+<br/>
+
+The DB is running in a docker container (`postgis/postgis`). The DB storage is a 10 GB volume at `/media/volume/ofo-postgis` on the VM. 
 
 <br/>
 
@@ -539,8 +547,25 @@ Run the docker container DB
 ```
 sudo docker run --name ofo-postgis   -e POSTGRES_PASSWORD=ujJ1tsY9OizN0IpOgl1mY1cQGvgja3SI   -p 5432:5432   -v /media/volume/ofo-postgis/data:/var/lib/postgresql/data  -d postgis/postgis
 ```
+<br/>
+<br/>
 
+Enter the Docker container running the PostGIS server `sudo docker exec -ti ofo-postgis bash`
 
+<br/>
+<br/>
+
+Launch the PostgreSQL CLI as the intended user (grab from DB credentials) `psql -U postgres`
+
+<br/>
+
+List all tables in the database `\dt`
+
+<br/>
+
+Show the structure of a specific table (column names & data types) `\d automate_metashape`
+
+<br/>
 
 Currently, the PostGIS server stores the following keys in the `automate_metashape` table:
 
@@ -554,19 +579,13 @@ Currently, the PostGIS server stores the following keys in the `automate_metasha
 | finish_time  | timestamp without time zone | end time of automate-metashape run (if it was able to finish) |
 | created_at | timestamp without time zone | creation time of entry in database |
 
-#### Access and Navigation of postgis DB  
 
-* SSH into ofo-postgis `ssh exouser@149.165.153.127`
+<br/>
+<br/>
 
-* Enter the Docker container running the PostGIS server `sudo docker exec -ti ofo-postgis bash`
 
-* Launch the PostgreSQL CLI as the intended user (grab from DB credentials) `psql -U postgres`
 
-* List all tables in the database `\dt`
-
-* Show the structure of a specific table (column names & data types) `\d automate_metashape`
-
-* View all data records for a specific table `select * from automate_metashape ORDER BY id DESC;`
+View all data records for a specific table `select * from automate_metashape ORDER BY id DESC;`
 
 
 
