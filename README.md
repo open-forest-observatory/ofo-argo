@@ -7,7 +7,21 @@ This repository contains [Argo Workflows](https://argoproj.github.io/workflows) 
 
 <br/>
 
-    
+## Files & Directories In this Repository
+
+| File Name   | Purpose       | 
+|  --- | ----  |
+| argo-output-pv.yaml | Defines read-write PV for workflow output storage mounted at /ofo-share/argo-output |
+| argo-output-pvc.yaml | PVC bound to output volume | 
+| ofo-share-pv.yaml | Defines read-only NFS PV for /ofo-share (input data) |
+| ofo-share-pvc.yaml | PVC bound to shared data volume |
+| workflow.yaml | Argo Workflow to automate Metashape runs per dataset |
+| /ofo-argo-utils | files to build a docker image for database logging of argo workflow metadata |
+| /.github/workflows | a github action workflow to automatically build a new DB logging docker image if any changes have been made to repo. **CURRENTLY DISABLED in GITHUB ACTIONS** |     
+
+<br/>
+<br/>
+<br/>
 
 
 ## Setup
@@ -609,12 +623,4 @@ There is github action workflow that rebuilds the logging docker image if any ch
 
 
 
-## Files In this Repository
 
-| File Name   | Purpose       | 
-|  --- | ----  |
-| argo-output-pv.yaml | Defines read-write PV for workflow output storage mounted at /ofo-share/argo-output |
-| argo-output-pvc.yaml | PVC bound to output volume | 
-| ofo-share-pv.yaml | Defines read-only NFS PV for /ofo-share (input data) |
-| ofo-share-pvc.yaml | PVC bound to shared data volume |
-| workflow.yaml | Argo Workflow to automate Metashape runs per dataset |
