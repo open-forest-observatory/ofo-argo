@@ -515,17 +515,24 @@ There is a JS2 VM called `ofo-postgis` that hosts a postGIS DB for storing metad
 
 <br/>
 
-See if the DB container is running
+View all running and stopped containers
 
-`docker ps`
+`docker ps -a`
+
+<br/>
+
+Stop a running container
+
+`docker stop <container_id>`
 
 <br/>
 
-Stop the running container
+Remove container
 
-`docker stop <container_ID>`
+`docker rm <container_id>`
 
 <br/>
+
 
 Run the docker container DB
 
@@ -534,7 +541,6 @@ sudo docker run --name ofo-postgis   -e POSTGRES_PASSWORD=ujJ1tsY9OizN0IpOgl1mY1
 ```
 
 
-When we process drone imagery in Metashape, we want workflow metadata to be put into this postGIS database. This server has persistent storage, tied to a storage volume made in Jetstream.
 
 Currently, the PostGIS server stores the following keys in the `automate_metashape` table:
 
