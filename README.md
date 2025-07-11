@@ -1,4 +1,4 @@
-# Argo Workflow
+# Open Forest Observatory Argo Workflow
 
 This repository contains [Argo Workflows](https://argoproj.github.io/workflows) used by the **Open Forest Observatory (OFO)**. It is being developed to run the [automate-metashape](https://github.com/open-forest-observatory/automate-metashape) pipeline simultaneously across multiple virtual machines on [Jetstream2 Cloud](https://jetstream-cloud.org/). This type of scaling enables OFO to process many photogrammetry projects simultaneously with a single run command. Argo is meant to work on [Kubernetes](https://kubernetes.io/docs/concepts/overview/) which orchestrates containers (ie, automate-metashape in docker), scales the processing to multiple VMs, and balances the load between the VMs. 
 
@@ -379,7 +379,7 @@ RUN_FOLDER is what you want to name the parent directory of your output
 
 DATSET_LIST is the txt file where you specified the names of the datasets you want to process located at `/ofo-share/argo-output`
 
-The rest of the parameters are for logging argo status in a postGIS database. Do not change these. 
+The rest of the 'DB' parameters are for logging argo status in a postGIS database. Do not change these. 
 
 <br/>
 
@@ -430,7 +430,7 @@ The Argo UI is great for troubleshooting and checking additional logs. You can a
 
 * Open a web browser on your local computer and type in the address (bypass the security warning)
 
-  `https://<master_ip_address:2746`
+  `https://<master_ip_address>:2746`
 
 <br/>
 <br/>
@@ -458,7 +458,7 @@ If you click on a specific job, it will show you lots of information of the proc
 
 A successfull argo run 
 
-<img width="800" height="789" alt="argo_success" src="https://github.com/user-attachments/assets/201b0594-7557-4d85-a99b-677e6c173a44" />
+<img width="650" height="789" alt="argo_success" src="https://github.com/user-attachments/assets/201b0594-7557-4d85-a99b-677e6c173a44" />
 
 <br/>
 <br/>
@@ -505,7 +505,7 @@ The metashape outputs will be written to `/ofo-share/argo-outputs/<RUN_FOLDER>`.
 
 ### 5. Argo Workflow Logging in postGIS database 
 
-Argo run status is logged into a postGIS DB. This is done through an additional docker container (hosted on github container registry `ghcr.io/open-forest-observatory/ofo-argo-utils:latest`). The files to make the docker image are in the folder `ofo-argo-utils`. 
+Argo run status is logged into a postGIS DB. This is done through an additional docker container (hosted on github container registry `ghcr.io/open-forest-observatory/ofo-argo-utils:latest`) that is included in the argo workflow. The files to make the docker image are in the folder `ofo-argo-utils`. 
 
 <br/>
 
@@ -513,7 +513,7 @@ Argo run status is logged into a postGIS DB. This is done through an additional 
 #### Info on the postGIS DB
 There is a JS2 VM called `ofo-postgis` that hosts a postgis DB in docker. When we process drone imagery in Metashape, we want workflow metadata to be put into this postGIS database. This server has persistent storage, tied to a storage volume made in Jetstream.
 
-As of right now, the PostGIS server stores the following keys in the `automate_metashape` table:
+Currently, the PostGIS server stores the following keys in the `automate_metashape` table:
 
 | **Column**   | **Type** | **Description**  |
 |  --- | ----  | --- |
