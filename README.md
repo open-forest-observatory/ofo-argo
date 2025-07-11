@@ -511,7 +511,30 @@ Argo run status is logged into a postGIS DB. This is done through an additional 
 
 
 #### Info on the postGIS DB
-There is a JS2 VM called `ofo-postgis` that hosts a postgis DB in docker. When we process drone imagery in Metashape, we want workflow metadata to be put into this postGIS database. This server has persistent storage, tied to a storage volume made in Jetstream.
+There is a JS2 VM called `ofo-postgis` that hosts a postGIS DB for storing metadata of argo workflows. The DB is running in a docker container (`postgis/postgis`). The DB storage is a 10 GB volume at `/media/volume/ofo-postgis` on the VM. 
+
+<br/>
+
+See if the DB container is running
+
+`docker ps`
+
+<br/>
+
+Stop the running container
+
+`docker stop <container_ID>`
+
+<br/>
+
+Run the docker container DB
+
+```
+sudo docker run --name ofo-postgis   -e POSTGRES_PASSWORD=ujJ1tsY9OizN0IpOgl1mY1cQGvgja3SI   -p 5432:5432   -v /media/volume/ofo-postgis/data:/var/lib/postgresql/data  -d postgis/postgis
+```
+
+
+When we process drone imagery in Metashape, we want workflow metadata to be put into this postGIS database. This server has persistent storage, tied to a storage volume made in Jetstream.
 
 Currently, the PostGIS server stores the following keys in the `automate_metashape` table:
 
