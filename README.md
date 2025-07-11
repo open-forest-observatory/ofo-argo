@@ -18,10 +18,13 @@ This repository contains [Argo Workflows](https://argoproj.github.io/workflows) 
 | /.github/workflows | a github action workflow to automatically build a new DB logging docker image if any changes have been made to repo. **CURRENTLY DISABLED in GITHUB ACTIONS** |     
 
 <br/>
+
+---
+
 <br/>
 <br/>
 
----
+
 
 ## Setup
 
