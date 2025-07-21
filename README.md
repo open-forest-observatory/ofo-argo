@@ -129,7 +129,7 @@ You can connect to the terminal of any of the VMs through two methods:
 #### SSH into the VM from your local terminal or IDE
 `ssh <access_username>@<vm_public_ip_address>`
 
-IMPORTANT NOTE. If you have launched VMs from Cacao, the ssh username is **<access_username>**! If you launch VMs from Exosphere, the ssh username is **exouser**!
+IMPORTANT NOTE. If you have created VMs from Cacao, the ssh username is **<access_username>**! If you have created VMs in Exosphere, the ssh username is **exouser**!
 
 <br/>
 <br/>
@@ -142,8 +142,9 @@ Kubernetes (k3s) have been pre-installed on each of the instances.
 View nodes in your cluster `kubectl get nodes`
 
 Describe a specific node in your cluster
-`kubectl describe <node-name>`
+`kubectl describe node <node-name>`
 
+Provides a summary of your Kubernetes cluster's core components and services.
 `kubectl cluster-info`
 
 
@@ -166,20 +167,17 @@ note the name of the master node
 a. The following commands will download argo, unzip it, and bring it into your system path ready for use. 
 
 ```
-# Detect OS
-ARGO_OS="linux"
-
 # Download the binary
-curl -sLO "https://github.com/argoproj/argo-workflows/releases/download/v3.6.10/argo-$ARGO_OS-amd64.gz"
+curl -sLO "https://github.com/argoproj/argo-workflows/releases/download/v3.6.10/argo-linux-amd64.gz"
 
 # Unzip
-gunzip "argo-$ARGO_OS-amd64.gz"
+gunzip "argo-linux-amd64.gz"
 
 # Make binary executable
-chmod +x "argo-$ARGO_OS-amd64"
+chmod +x "argo-linux-amd64"
 
 # Move binary to path
-sudo mv "./argo-$ARGO_OS-amd64" /usr/local/bin/argo
+sudo mv "./argo-linux-amd64" /usr/local/bin/argo
 
 # Test installation
 argo version
