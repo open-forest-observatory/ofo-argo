@@ -184,8 +184,10 @@ argo version
 ```
 <br/>
 
-The output of `argo version` should look similar to the following screen shot. However, it should say '3.6.10'. 
-<img width="400" alt="Screenshot 2025-06-20 at 10 03 30 AM" src="https://github.com/user-attachments/assets/06000374-86db-40f2-95f3-e89166a43a31" />
+The output of `argo version` should look similar to the following screen shot. 
+
+<img width="400" alt="argo_version" src="https://github.com/user-attachments/assets/ae423ae7-56b9-4362-b88a-396eceec48cc" />
+
 
 <br/>
 <br/>
