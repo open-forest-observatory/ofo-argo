@@ -184,21 +184,20 @@ argo version
 ```
 <br/>
 
-The output of `argo version` should look like this:
-
+The output of `argo version` should look similar to the following screen shot. However, it should say '3.6.10'. 
 <img width="400" alt="Screenshot 2025-06-20 at 10 03 30 AM" src="https://github.com/user-attachments/assets/06000374-86db-40f2-95f3-e89166a43a31" />
 
 <br/>
 <br/>
 
-b. Create a isolated environment for the argo workflow on kubernetes
+b. Create a isolated namespace for the argo workflow on kubernetes
 
 `kubectl create namespace argo`
 
 <br/>
 <br/>
 
-c. Put argo on to new environment on kubernetes. Installs workflow Controller which manages overall lifecycle of workflows. Also installs argo server which includes a web-based user interface. 
+c. Installs workflow Controller which manages overall lifecycle of workflows and installs argo server which includes a web-based user interface. This specific url will install Argo workflow components in the `argo` kubernetes namespace, instead of cluster-wide. It provides an isolated environment separate from other applications in your cluster. The namespace acts as a virtual boundary that keeps Argo's resources (like its controller, server, and configurations) organized and segregated from other workloads.  
 
 `kubectl apply -n argo -f https://github.com/argoproj/argo-workflows/releases/download/v3.6.10/namespace-install.yaml`
 
@@ -366,7 +365,7 @@ On the master instance terminal, type:
 
 `export AGISOFT_FLS=<ip_address>:5842`
 
-This variable will only last during the terminal session and will have to be re-declared each time you start a new master terminal. We are not putting the ip address here to prevent unauthorized people from using it. 
+This variable will only last during the terminal session and will have to be re-declared each time you start a new master terminal. We are not putting the ip address here to prevent unauthorized people from using it. Contact Derek Young (djyoung@ucdavis.edu).
 
 <br/>
 
@@ -529,7 +528,7 @@ There is a JS2 VM called `ofo-postgis` that hosts a postGIS DB for storing metad
 
 <br/>
 
-SSH into ofo-postgis `ssh exouser@149.165.153.127`
+You can access the `ofo-postgis` VM through Webshell in Exosphere. Another access option is to local SSH into ofo-postgis `ssh exouser@149.165.153.127`. This is not public and will require a password. 
 
 <br/>
 
