@@ -222,17 +222,12 @@ e. Describe pods
 <br/>
 <br/>
 
-f. Set up ofo-srv role in argo
+f. Create a ClusterRole - a set of permissions that can be used across the entire Kubernetes cluster (not just one namespace). Then assign the permissions to the argo namespace in a process called ClusterRoleBinding. 
 
-These next two commands are not necessary but I'll leave it here for now
-
-`kubectl create role ofo-argo-srv -n argo --verb=list,update, --resource=workflows.argoproj.io`
-
-`kubectl create rolebinding ofo-argo-srv -n argo --role=ofo-argo-srv --serviceaccount=argo:argo-server`
 
 <br/>
 
-Please run the following command
+Please run the following command to define the role and global permissions
 
 ```
 kubectl apply -f - <<EOF
@@ -258,7 +253,7 @@ EOF
 <br/>
 <br/>
 
-Please run the following command
+Please run the following command to assing the permissions to namesspace argo
 
 ```
 kubectl apply -f - <<EOF
@@ -279,7 +274,7 @@ EOF
 <br/>
 <br/>
 
-g. Run the following command. The output should say 'yes'.
+g. Run the following command to check permissions. The output should say 'yes'.
 
 `kubectl auth can-i create workflowtaskresults.argoproj.io -n argo --as=system:serviceaccount:argo:argo`
 
