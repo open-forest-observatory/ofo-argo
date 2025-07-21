@@ -2,7 +2,9 @@ import argparse
 import json
 import os
 import sys
+
 import psycopg2
+
 
 def get_db_connection():
     host = os.environ.get("DB_HOST", "")
