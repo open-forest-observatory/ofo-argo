@@ -362,7 +362,7 @@ On the master instance terminal, type:
 
 `export AGISOFT_FLS=<ip_address>:5842`
 
-This variable will only last during the terminal session and will have to be re-declared each time you start a new master terminal. We are not putting the ip address here to prevent unauthorized people from using it. Contact Derek Young (djyoung@ucdavis.edu).
+This variable will only last during the terminal session and will have to be re-declared each time you start a new master terminal. We are not putting the ip address here to prevent unauthorized people from using it. Authorized users can find it [here](https://docs.google.com/document/d/155AP0P3jkVa-yT53a-QLp7vBAfjRa78gdST1Dfb4fls/edit?tab=t.0).
 
 <br/>
 
@@ -374,14 +374,14 @@ argo submit -n argo workflow.yaml --watch \
 -p AGISOFT_FLS=$AGISOFT_FLS \
 -p RUN_FOLDER=gillan_june27 \
 -p DATASET_LIST=datasets.txt \
--p DB_PASSWORD=ujJ1tsY9OizN0IpOgl1mY1cQGvgja3SI \
--p DB_HOST=10.0.205.207 \
--p DB_NAME=postgres \
--p DB_USER=postgres
+-p DB_PASSWORD=<password> \
+-p DB_HOST=<vm_ip_address> \
+-p DB_NAME=<db_name> \
+-p DB_USER=<user_name>
  
 ```
 
-CONFIG_FILE is the config which specifies the metashape parameters which should be located in `/ofo-share/argo-output`
+CONFIG_FILE is the configuration yml which specifies the metashape parameters which should be located in `/ofo-share/argo-output`
 
 AGISOFT_FLS is the ip address of the metashape license server
 
@@ -389,7 +389,7 @@ RUN_FOLDER is what you want to name the parent directory of your output
 
 DATSET_LIST is the txt file where you specified the names of the datasets you want to process located at `/ofo-share/argo-output`
 
-The rest of the 'DB' parameters are for logging argo status in a postGIS database. Do not change these. 
+The rest of the 'DB' parameters are for logging argo status in a postGIS database. These are not public credentials. Authorized users can find them [here](https://docs.google.com/document/d/155AP0P3jkVa-yT53a-QLp7vBAfjRa78gdST1Dfb4fls/edit?tab=t.0).
 
 <br/>
 
@@ -525,7 +525,7 @@ There is a JS2 VM called `ofo-postgis` that hosts a postGIS DB for storing metad
 
 <br/>
 
-You can access the `ofo-postgis` VM through Webshell in Exosphere. Another access option is to local SSH into ofo-postgis `ssh exouser@149.165.153.127`. This is not public and will require a password. 
+You can access the `ofo-postgis` VM through Webshell in Exosphere. Another access option is to SSH into `ofo-postgis` with the command `ssh exouser@<ip_address>`. This is not public and will require a password. 
 
 <br/>
 
