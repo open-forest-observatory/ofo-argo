@@ -52,7 +52,7 @@ spec:
             arguments:
               parameters:
                 - name: dataset-name
-                  value: "{{item}}"
+                  value: "{{item.name}}"
                 - name: config-file
                   value: "{{item.config}}"
             withParam: "{{steps.determine-datasets.outputs.parameters.dataset-configs}}"
