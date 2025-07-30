@@ -133,7 +133,7 @@ spec:
             template: run-automate-metashape
             arguments:
               parameters:
-                - name: dataset-names
+                - name: dataset-name
                   value: "{{inputs.parameters.dataset-name}}" # Pass dataset name to Metashape container
                 - name: config-file
                   value: "{{inputs.parameters.config-file}}" # Pass the config file name to control processing options
@@ -224,7 +224,7 @@ spec:
     - name: run-automate-metashape
       inputs:
         parameters:
-          - name: dataset-names
+          - name: dataset-name
           - name: config-file
       # the following 'metadata' and 'affinity' language is about ensuring one metashape project on one VM
       metadata:
@@ -255,13 +255,13 @@ spec:
           - "--config_file"
           - "/data/argo-input/configs/{{inputs.parameters.config-file}}"
           - "--photo-path"
-          - "/data/argo-input/{{inputs.parameters.dataset-names}}"
+          - "/data/argo-input/{{inputs.parameters.dataset-name}}"
           - "--project-path"
-          - "/results/{{workflow.parameters.RUN_FOLDER}}/{{inputs.parameters.dataset-names}}/project"
+          - "/results/{{workflow.parameters.RUN_FOLDER}}/{{inputs.parameters.dataset-name}}/project"
           - "--output-path"
-          - "/results/{{workflow.parameters.RUN_FOLDER}}/{{inputs.parameters.dataset-names}}/output"
+          - "/results/{{workflow.parameters.RUN_FOLDER}}/{{inputs.parameters.dataset-name}}/output"
           - "--run-name"
-          - "{{inputs.parameters.dataset-names}}"
+          - "{{inputs.parameters.dataset-name}}"
         env:
           - name: AGISOFT_FLS
             value: "{{workflow.parameters.AGISOFT_FLS}}"
