@@ -10,12 +10,10 @@ spec:
   # These parameters can be referenced throughout the workflow templates using {{workflow.parameters.<name>}}.
   arguments:
     parameters:
-      - name: CONFIG_FILE
-        default: "config.yml"
       - name: RUN_FOLDER
         default: "default-run"
       - name: DATASET_LIST
-        default: "datasets.txt"
+        default: "dataset_config.txt"
       - name: AGISOFT_FLS
         default: ""
       - name: DB_HOST
@@ -48,14 +46,16 @@ spec:
             arguments:
               parameters:
                 - name: datasets
-                  value: "{{steps.determine-datasets.outputs.result}}"
+                  value: "{{steps.determine-datasets.outputs.parameters.dataset-names}}"
         - - name: process-datasets
             template: process-dataset-workflow
             arguments:
               parameters:
                 - name: dataset-name
                   value: "{{item}}"
-            withParam: "{{steps.determine-datasets.outputs.result}}"
+                - name: config-file
+                  value: "{{item.config}}"
+            withParam: "{{steps.determine-datasets.outputs.parameters.dataset-configs}}"
 
     ## here we define what the main steps actually do 
     
@@ -71,10 +71,25 @@ spec:
         command: ["python3"]
         source: |
           import json
-          import sys
-          file_path = "/input"
-          with open(file_path, "r") as f:
-            json.dump([line.strip() for line in f], sys.stdout)
+
+          with open("/input", "r") as f:
+              lines = [line.strip() for line in f if line.strip()]
+          
+          data = [{"name": l.split("|")[0], "config": l.split("|")[1]} for l in lines]
+
+          with open("/tmp/dataset-configs.json", "w") as f:
+              json.dump(data, f)
+
+          with open("/tmp/dataset-names.json", "w") as f:
+              json.dump([d["name"] for d in data], f)
+      outputs:
+        parameters:
+          - name: dataset-configs
+            valueFrom:
+              path: /tmp/dataset-configs.json
+          - name: dataset-names
+            valueFrom:
+              path: /tmp/dataset-names.json
 
     # launches a docker container which contains our custom py script to log the dataset names into a postgis database
     # takes the json list of dataset names (from the 'determine datasets' step)
@@ -105,7 +120,8 @@ spec:
     - name: process-dataset-workflow
       inputs:
         parameters:
-          - name: dataset-name  
+          - name: dataset-name
+          - name: config-file
       steps:
         - - name: log-start
             template: log-dataset-start
@@ -120,7 +136,7 @@ spec:
                 - name: dataset-names
                   value: "{{inputs.parameters.dataset-name}}" # Pass dataset name to Metashape container
                 - name: config-file
-                  value: "{{workflow.parameters.CONFIG_FILE}}" # Pass the global config file to control processing options
+                  value: "{{inputs.parameters.config-file}}" # Pass the config file name to control processing options
             continueOn:
               failed: true  # EVEN IF this step fails, keep the workflow running (needed to log failure in DB later)
         - - name: determine-success
@@ -237,7 +253,7 @@ spec:
         command: ["python3", "/app/python/metashape_workflow.py"]
         args: 
           - "--config_file"
-          - "/data/argo-input/{{inputs.parameters.config-file}}"
+          - "/data/argo-input/configs/{{inputs.parameters.config-file}}"
           - "--photo-path"
           - "/data/argo-input/{{inputs.parameters.dataset-names}}"
           - "--project-path"
