@@ -381,6 +381,18 @@ argo submit -n argo workflow.yaml --watch \
  
 ```
 
+```
+argo submit -n argo workflow.yaml --watch \
+-p DATASET_LIST=dataset_config.txt \
+-p AGISOFT_FLS=$AGISOFT_FLS \
+-p RUN_FOLDER=gillan_july31 \
+-p DB_PASSWORD=ujJ1tsY9OizN0IpOgl1mY1cQGvgja3SI \
+-p DB_HOST=10.0.205.207 \
+-p DB_NAME=postgres \
+-p DB_USER=postgres
+
+```
+
 CONFIG_FILE is the configuration yml which specifies the metashape parameters which should be located in `/ofo-share/argo-output`
 
 AGISOFT_FLS is the ip address of the metashape license server
