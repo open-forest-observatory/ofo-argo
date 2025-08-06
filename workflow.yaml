@@ -59,7 +59,7 @@ spec:
     
     # Use containerized python to parse through the list of datasets as specified from runtime parameter 'DATASET_LIST'
     # outputs a json of dataset names that is passed to the next steps
-    - name: determine-datasets
+    - name: determine-configs
       script:
         image: python:3.9
         volumeMounts:
