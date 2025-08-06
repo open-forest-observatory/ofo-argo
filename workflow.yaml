@@ -210,7 +210,7 @@ spec:
         command: ["python3", "/app/python/metashape_workflow.py"]
         args:
           - "--config_file"
-          - "/data/argo-input/configs/{{inputs.parameters.dataset-name}}"
+          - "/data/argo-input/configs/{{inputs.parameters.dataset-name}}.yml"
           - "--project-path"
           - "/results/{{workflow.parameters.RUN_FOLDER}}/{{inputs.parameters.dataset-name}}/project"
           - "--output-path"
