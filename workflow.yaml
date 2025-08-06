@@ -10,12 +10,10 @@ spec:
   # These parameters can be referenced throughout the workflow templates using {{workflow.parameters.<name>}}.
   arguments:
     parameters:
-      - name: CONFIG_FILE
-        default: "config.yml"
+      - name: CONFIG_LIST
+        default: "config_list.txt"
       - name: RUN_FOLDER
         default: "default-run"
-      - name: DATASET_LIST
-        default: "datasets.txt"
       - name: AGISOFT_FLS
         default: ""
       - name: DB_HOST
@@ -41,21 +39,21 @@ spec:
     # the 'process-datasets' step has a looping directive (withParam) which goes through each dataset name and processes it. 
     - name: main
       steps:
-        - - name: determine-datasets
-            template: determine-datasets
-        - - name: log-datasets-to-db
-            template: log-datasets-to-db
+        - - name: determine-configs
+            template: determine-configs
+        - - name: log-configs-to-db
+            template: log-configs-to-db
             arguments:
               parameters:
-                - name: datasets
-                  value: "{{steps.determine-datasets.outputs.result}}"
-        - - name: process-datasets
-            template: process-dataset-workflow
+                - name: configs
+                  value: "{{steps.determine-configs.outputs.result}}"
+        - - name: process-configs
+            template: process-config-workflow
             arguments:
               parameters:
-                - name: dataset-name
+                - name: config-file
                   value: "{{item}}"
-            withParam: "{{steps.determine-datasets.outputs.result}}"
+            withParam: "{{steps.determine-configs.outputs.result}}"
 
     ## here we define what the main steps actually do 
     
@@ -67,7 +65,7 @@ spec:
         volumeMounts:
         - name: data
           mountPath: /input
-          subPath: "argo-input/{{workflow.parameters.DATASET_LIST}}"
+          subPath: "argo-input/{{workflow.parameters.CONFIG_LIST}}"
         command: ["python3"]
         source: |
           import json
@@ -78,10 +76,10 @@ spec:
 
     # launches a docker container which contains our custom py script to log the dataset names into a postgis database
     # takes the json list of dataset names (from the 'determine datasets' step)
-    - name: log-datasets-to-db
+    - name: log-configs-to-db
       inputs:
         parameters:
-          - name: datasets
+          - name: configs
       container:
         image: ghcr.io/open-forest-observatory/ofo-argo-utils:latest
         command: ["python", "/app/db_logger.py"]
@@ -89,8 +87,8 @@ spec:
           - "log-initial"
           - "--workflow-id"
           - "{{workflow.name}}"
-          - "--datasets-json"
-          - "{{inputs.parameters.datasets}}"
+          - "--configs-json"
+          - "{{inputs.parameters.configs}}"
         env:
           - name: DB_HOST
             value: "{{workflow.parameters.DB_HOST}}"
@@ -102,25 +100,23 @@ spec:
             value: "{{workflow.parameters.DB_PASSWORD}}"
     
     # High-level order of steps in the workflow. Each step will be defined later.      
-    - name: process-dataset-workflow
+    - name: process-config-workflow
       inputs:
         parameters:
           - name: dataset-name  
       steps:
         - - name: log-start
-            template: log-dataset-start
+            template: log-config-start
             arguments:
               parameters:
-                - name: dataset-name
-                  value: "{{inputs.parameters.dataset-name}}"
+                - name: config-file
+                  value: "{{inputs.parameters.config-file}}"
         - - name: run-processing
             template: run-automate-metashape
             arguments:
               parameters:
-                - name: dataset-names
-                  value: "{{inputs.parameters.dataset-name}}" # Pass dataset name to Metashape container
                 - name: config-file
-                  value: "{{workflow.parameters.CONFIG_FILE}}" # Pass the global config file to control processing options
+                  value: "{{inputs.parameters.config-file}}" 
             continueOn:
               failed: true  # EVEN IF this step fails, keep the workflow running (needed to log failure in DB later)
         - - name: determine-success
@@ -130,21 +126,21 @@ spec:
                 - name: step-status
                   value: "{{steps.run-processing.status}}"
         - - name: log-completion
-            template: log-dataset-completion
+            template: log-config-completion
             arguments:
               parameters:
-                - name: dataset-name
-                  value: "{{inputs.parameters.dataset-name}}"
+                - name: config-file
+                  value: "{{inputs.parameters.config-file}}"
                 - name: success
                   value: "{{steps.determine-success.outputs.result}}"      
 
     ## Here we define what each step does
     
     # use our custom containerized db_logger.py to log 'processing' in the postgis DB
-    - name: log-dataset-start
+    - name: log-config-start
       inputs:
         parameters:
-          - name: dataset-name
+          - name: config-file
       container:
         image: ghcr.io/open-forest-observatory/ofo-argo-utils:latest
         command: ["python", "/app/db_logger.py"]
@@ -152,8 +148,8 @@ spec:
           - "log-start"
           - "--workflow-id"
           - "{{workflow.name}}"
-          - "--dataset"
-          - "{{inputs.parameters.dataset-name}}"
+          - "--config"
+          - "{{inputs.parameters.config-file}}"
         env:
           - name: DB_HOST
             value: "{{workflow.parameters.DB_HOST}}"
@@ -165,10 +161,10 @@ spec:
             value: "{{workflow.parameters.DB_PASSWORD}}"
     
     # use our custom containerized db_logger.py to log 'completed' or 'failed' in the postgis DB
-    - name: log-dataset-completion
+    - name: log-config-completion
       inputs:
         parameters:
-          - name: dataset-name
+          - name: config-file
           - name: success
       container:
         image: ghcr.io/open-forest-observatory/ofo-argo-utils:latest
@@ -177,8 +173,8 @@ spec:
           - "log-completion"
           - "--workflow-id"
           - "{{workflow.name}}"
-          - "--dataset"
-          - "{{inputs.parameters.dataset-name}}"
+          - "--config"
+          - "{{inputs.parameters.config-file}}"
           - "--success"
           - "{{inputs.parameters.success}}"
         env:
@@ -208,7 +204,6 @@ spec:
     - name: run-automate-metashape
       inputs:
         parameters:
-          - name: dataset-names
           - name: config-file
       # the following 'metadata' and 'affinity' language is about ensuring one metashape project on one VM
       metadata:
@@ -237,15 +232,15 @@ spec:
         command: ["python3", "/app/python/metashape_workflow.py"]
         args: 
           - "--config_file"
-          - "/data/argo-input/{{inputs.parameters.config-file}}"
-          - "--photo-path"
-          - "/data/argo-input/{{inputs.parameters.dataset-names}}"
+          - "/data/argo-input/configs/{{inputs.parameters.config-file}}"
+          #- "--photo-path"
+          #- "/data/argo-input/{{inputs.parameters.dataset-names}}"
           - "--project-path"
-          - "/results/{{workflow.parameters.RUN_FOLDER}}/{{inputs.parameters.dataset-names}}/project"
+          - "/results/{{workflow.parameters.RUN_FOLDER}}/{{inputs.parameters.config-file}}/project"
           - "--output-path"
-          - "/results/{{workflow.parameters.RUN_FOLDER}}/{{inputs.parameters.dataset-names}}/output"
+          - "/results/{{workflow.parameters.RUN_FOLDER}}/{{inputs.parameters.config-file}}/output"
           - "--run-name"
-          - "{{inputs.parameters.dataset-names}}"
+          - "{{inputs.parameters.config-file}}"
         env:
           - name: AGISOFT_FLS
             value: "{{workflow.parameters.AGISOFT_FLS}}"
