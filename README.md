@@ -370,10 +370,9 @@ This variable will only last during the terminal session and will have to be re-
 
 ```
 argo submit -n argo workflow.yaml --watch \
--p CONFIG_FILE=config2.yml \
+-p CONFIG_LIST=config_list.txt \
 -p AGISOFT_FLS=$AGISOFT_FLS \
 -p RUN_FOLDER=gillan_june27 \
--p DATASET_LIST=datasets.txt \
 -p DB_PASSWORD=<password> \
 -p DB_HOST=<vm_ip_address> \
 -p DB_NAME=<db_name> \
@@ -381,13 +380,11 @@ argo submit -n argo workflow.yaml --watch \
  
 ```
 
-CONFIG_FILE is the configuration yml which specifies the metashape parameters which should be located in `/ofo-share/argo-output`
+CONFIG_LIST is a text file that lists each of the metashape parameter config files to be processed which should be located in `/ofo-share/argo-output`
 
 AGISOFT_FLS is the ip address of the metashape license server
 
 RUN_FOLDER is what you want to name the parent directory of your output
-
-DATSET_LIST is the txt file where you specified the names of the datasets you want to process located at `/ofo-share/argo-output`
 
 The rest of the 'DB' parameters are for logging argo status in a postGIS database. These are not public credentials. Authorized users can find them [here](https://docs.google.com/document/d/155AP0P3jkVa-yT53a-QLp7vBAfjRa78gdST1Dfb4fls/edit?tab=t.0).
 
