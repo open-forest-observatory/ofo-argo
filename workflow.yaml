@@ -103,7 +103,7 @@ spec:
     - name: process-config-workflow
       inputs:
         parameters:
-          - name: dataset-name  
+          - name: config-file  
       steps:
         - - name: log-start
             template: log-config-start
