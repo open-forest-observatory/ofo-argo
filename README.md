@@ -68,11 +68,11 @@ Here is a schematic of the `/ofo-share` directory.
 ```
 
 #### a. Add drone imagery to OFO shared volume
-To add new drone imagery datasets to be processed using Argo, transfer files from your local machine to the `/ofo-share` volume.
+To add new drone imagery datasets to be processed using Argo, transfer files from your local machine to the `/ofo-share` volume. Put the drone imagery projects to be processed in there own directory in `/ofo-share/argo-input/datasets`. 
 
-`scp -r <local/directory/drone_image_dataset> exouser@<vm.ip.address>:/ofo-share/argo-input`
+`scp -r <local/directory/drone_image_dataset/> exouser@<vm.ip.address>:/ofo-share/argo-input/datasets`
 
-Put the drone imagery projects to be processed in it's own directory in `/ofo-share/argo-input`. For example, there are 4 testing datasets already in the directory called `benchmarking-emerald-subset`, `benchmarking-emerald-full`, `benchmarking-swetnam-house`, `benchmarking-greasewood`
+
 
 
 <br/>
