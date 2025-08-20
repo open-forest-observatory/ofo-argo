@@ -493,24 +493,27 @@ The metashape outputs will be written to `/ofo-share/argo-outputs/<RUN_FOLDER>`.
 ```bash
 /ofo-share/
 ├── argo-input/
-│   ├── config.yml
-│   ├── datasets.txt
-│   ├── benchmarking-greasewood/
-│   │   ├── image_01.jpg
-│   │   └── image_02.jpg
-│   └── benchmarking-swetnam-house/
-│       ├── image_01.jpg
-│       └── image_02.jpg
+│   ├── datasets/
+│   │   ├──dataset_1/
+│   │   │   ├── image_01.jpg
+│   │   │   └── image_02.jpg
+│   │   └──dataset_2/
+│   │       ├── image_01.jpg
+│   │       └── image_02.jpg
+│   ├── configs/
+│   │   ├──config_dataset_1.yml
+│   │   └──config_dataset_2.yml
+│   └── config_list.txt
 └── argo-output/
     └── <RUN_FOLDER>/
-        ├── benchmarking-greasewood/
+        ├── dataset_1/
         │   ├── output/
         │   │   ├── orthomosaic.tif
         │   │   ├── dsm.tif
         │   │   └── point-cloud.laz
         │   └── project/
         │       └── metashape_project.psx
-        └── benchmarking-swetnam-house/
+        └── dataset_2/
             ├── output/
             │   ├── orthomosaic.tif
             │   ├── dsm.tif
@@ -518,6 +521,7 @@ The metashape outputs will be written to `/ofo-share/argo-outputs/<RUN_FOLDER>`.
             └── project/
                 └── metashape_project.psx
 ```
+
 
 
 
@@ -546,32 +550,7 @@ The DB is running in a docker container (`postgis/postgis`). The DB storage is a
 
 <br/>
 
-View all running and stopped containers
-
-`docker ps -a`
-
-<br/>
-
-Stop a running container
-
-`docker stop <container_id>`
-
-<br/>
-
-Remove container
-
-`docker rm <container_id>`
-
-<br/>
-
-
-Run the docker container DB
-
-```
-sudo docker run --name ofo-postgis   -e POSTGRES_PASSWORD=ujJ1tsY9OizN0IpOgl1mY1cQGvgja3SI   -p 5432:5432   -v /media/volume/ofo-postgis/data:/var/lib/postgresql/data  -d postgis/postgis
-```
-<br/>
-<br/>
+#### Steps to View the Logged Results
 
 Enter the Docker container running the PostGIS server `sudo docker exec -ti ofo-postgis bash`
 
@@ -607,6 +586,7 @@ Currently, the PostGIS server stores the following keys in the `automate_metasha
 <br/>
 
 View all data records for a specific table `select * from automate_metashape ORDER BY id DESC;`
+
 <img width="1000" height="183" alt="sql_query" src="https://github.com/user-attachments/assets/cba4532a-21de-4c35-8b2d-635eec326ef7" />
 
 <br/>
@@ -616,6 +596,39 @@ Exit out of psql command-line `\q`
 <br/>
 
 Exit out of container `exit`
+
+
+<br/>
+<br/>
+
+#### Other useful commands
+
+View all running and stopped containers
+
+`docker ps -a`
+
+<br/>
+
+Stop a running container
+
+`docker stop <container_id>`
+
+<br/>
+
+Remove container
+
+`docker rm <container_id>`
+
+<br/>
+
+
+Run the docker container DB
+
+```
+sudo docker run --name ofo-postgis   -e POSTGRES_PASSWORD=ujJ1tsY9OizN0IpOgl1mY1cQGvgja3SI   -p 5432:5432   -v /media/volume/ofo-postgis/data:/var/lib/postgresql/data  -d postgis/postgis
+```
+
+
 
 <br/>
 <br/>
