@@ -46,8 +46,8 @@ Here is a schematic of the `/ofo-share` directory.
 │   │       ├── image_01.jpg
 │   │       └── image_02.jpg
 │   ├── configs/
-│   │   ├──config_1.yml
-│   │   └──config_2.yml
+│   │   ├──config_dataset_1.yml
+│   │   └──config_dataset_2.yml
 │   └── config_list.txt
 └── argo-output/
     └── <RUN_FOLDER>/
