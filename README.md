@@ -74,13 +74,22 @@ To add new drone imagery datasets to be processed using Argo, transfer files fro
 
 
 <br/>
+
+#### b. Specify Metashape Parameters
+
+Metashape processing parameters are specified in [config.yml](https://github.com/open-forest-observatory/automate-metashape/blob/main/config/config-base.yml) files which need to be located at `/ofo-share/argo-input/configs`. Every dataset to be processed needs to have it's own standalone config.yml file. These config files can be named however you want. 
+
+Within each metashape config.yml file, you need to specify 'photo_path' which is the location of the drone imagery dataset to be processed. This path refers to the location of the images inside a docker container. For example, if your drone images were uploaded to `/ofo-share/argo-input/datasets/dataset_1`, then the 'photo_path' should be written as `/data/argo-input/datasets/dataset_1`
+
+The 'output_path', 'project_path', and 'run_name' are handled in the argo workflow. Please do not specify them in the metashape config.yml.
+
 <br/>
 
-#### c. Specify Metashape Parameters
+#### c. Config List
 
-Metashape processing parameters are specified in config.yml files which need to be located at `/ofo-share/argo-input/configs`. Every dataset to be processed needs to have it's own standalone config.yml file. These config files can be named however you want. 
+Additionally we use a text file, for example `config_list.txt`, to tell the Argo workflow which config files should be processed in the current run. This text file should list each of the names of the config.yml files you want to process. One config file name per line. Please remove the file extension .yml
 
-Additionally we use a text file, for example `config_list.txt`, to tell the Argo workflow which config files should be processed in the current run. This text file should list each of the names of the config.yml files you want to process. 
+For example:
 
 ```
 benchmarking-swetnam-house
@@ -88,7 +97,7 @@ benchmarking-greasewood
 benchmarking-emerald-subset
 ```  
 
-You can create your own config yml as long as it is kept in this directory. The exact file (e.g., config2.yml or projectname_config.yml) will be specified as a parameter in the argo run command later in this workflow. 
+You can create your own config_list.txt file and name it whatever you want as long as it is kept in this directory `/ofo-share/argo-input`. 
 
 <br/>
 <br/>
