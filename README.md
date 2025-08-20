@@ -38,27 +38,27 @@ Here is a schematic of the `/ofo-share` directory.
 ```bash
 /ofo-share/
 ├── argo-input/
-│   ├──datasets/
+│   ├── datasets/
 │   │   ├──dataset_1/
 │   │   │   ├── image_01.jpg
 │   │   │   └── image_02.jpg
-│   │   ├──dataset_2/
+│   │   └──dataset_2/
 │   │       ├── image_01.jpg
 │   │       └── image_02.jpg
 │   ├── configs/
 │   │   ├──config_1.yml
 │   │   └──config_2.yml
-│   ├── config_list.txt
+│   └── config_list.txt
 └── argo-output/
     └── <RUN_FOLDER>/
-        ├── benchmarking-greasewood/
+        ├── dataset_1/
         │   ├── output/
         │   │   ├── orthomosaic.tif
         │   │   ├── dsm.tif
         │   │   └── point-cloud.laz
         │   └── project/
         │       └── metashape_project.psx
-        └── benchmarking-swetnam-house/
+        └── dataset_2/
             ├── output/
             │   ├── orthomosaic.tif
             │   ├── dsm.tif
