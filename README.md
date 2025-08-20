@@ -73,20 +73,22 @@ To add new drone imagery datasets to be processed using Argo, transfer files fro
 `scp -r <local/directory/drone_image_dataset/> exouser@<vm.ip.address>:/ofo-share/argo-input/datasets`
 
 
-
-
-<br/>
-
-#### b. Specify which datasets to process in Argo
-The file `/ofo-share/argo-input/datasets.txt` contains of list of the named datasets to process in argo. 
-
-
 <br/>
 <br/>
 
 #### c. Specify Metashape Parameters
 
-All metashape parameters are specified in a config.yml file which is located at `/ofo-share/argo-input`. You can create your own config yml as long as it is kept in this directory. The exact file (e.g., config2.yml or projectname_config.yml) will be specified as a parameter in the argo run command later in this workflow. 
+Metashape processing parameters are specified in config.yml files which need to be located at `/ofo-share/argo-input/configs`. Every dataset to be processed needs to have it's own standalone config.yml file. These config files can be named however you want. 
+
+Additionally we use a text file, for example `config_list.txt`, to tell the Argo workflow which config files should be processed in the current run. This text file should list each of the names of the config.yml files you want to process. 
+
+```
+benchmarking-swetnam-house
+benchmarking-greasewood
+benchmarking-emerald-subset
+```  
+
+You can create your own config yml as long as it is kept in this directory. The exact file (e.g., config2.yml or projectname_config.yml) will be specified as a parameter in the argo run command later in this workflow. 
 
 <br/>
 <br/>
