@@ -40,19 +40,15 @@ Here is a schematic of the `/ofo-share` directory.
 ├── argo-input/
 │   ├──datasets/
 │   │   ├──dataset_1/
-│           ├── image_01.jpg
-│           └── image_02.jpg
+│   │   │   ├── image_01.jpg
+│   │   │   └── image_02.jpg
 │   │   ├──dataset_2/
-│           ├── image_01.jpg
-│           └── image_02.jpg
-│   ├── config.yml
-│   ├── datasets.txt
-│   ├── benchmarking-greasewood/
-│   │   ├── image_01.jpg
-│   │   └── image_02.jpg
-│   └── benchmarking-swetnam-house/
-│       ├── image_01.jpg
-│       └── image_02.jpg
+│   │       ├── image_01.jpg
+│   │       └── image_02.jpg
+│   ├── configs/
+│   │   ├──config_1.yml
+│   │   └──config_2.yml
+│   ├── config_list.txt
 └── argo-output/
     └── <RUN_FOLDER>/
         ├── benchmarking-greasewood/
