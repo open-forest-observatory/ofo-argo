@@ -89,14 +89,14 @@ The 'output_path', 'project_path', and 'run_name' are handled in the argo workfl
 
 #### c. Config List
 
-Additionally we use a text file, for example `config_list.txt`, to tell the Argo workflow which config files should be processed in the current run. This text file should list each of the names of the config.yml files you want to process. One config file name per line. Please remove the file extension .yml
+Additionally we use a text file, for example `config_list.txt`, to tell the Argo workflow which config files should be processed in the current run. This text file should list each of the names of the config.yml files you want to process. One config file name per line. 
 
 For example:
 
 ```
-config_dataset_1
-config_dataset_2
-config_dataset_2
+config_dataset_1.yml
+config_dataset_2.yml
+config_dataset_2.yml
 ```  
 
 You can create your own config_list.txt file and name it whatever you want as long as it is kept in this directory `/ofo-share/argo-input`. 
