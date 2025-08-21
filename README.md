@@ -398,7 +398,7 @@ argo submit -n argo workflow.yaml --watch \
  
 ```
 
-CONFIG_LIST is a text file that lists each of the metashape parameter config files to be processed which should be located in `/ofo-share/argo-output`
+CONFIG_LIST is a text file that lists each of the metashape parameter config files to be processed which should be located in `/ofo-share/argo-input`
 
 AGISOFT_FLS is the ip address of the metashape license server
 
