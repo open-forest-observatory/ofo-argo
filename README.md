@@ -68,7 +68,9 @@ Here is a schematic of the `/ofo-share` directory.
 ```
 
 #### a. Add drone imagery to OFO shared volume
-To add new drone imagery datasets to be processed using Argo, transfer files from your local machine to the `/ofo-share` volume. Put the drone imagery projects to be processed in there own directory in `/ofo-share/argo-input/datasets`. 
+To add new drone imagery datasets to be processed using Argo, transfer files from your local machine (or the cloud) to the `/ofo-share` volume. Put the drone imagery projects to be processed in their own directory in `/ofo-share/argo-input/datasets`. 
+
+One data transfer method is a CLI tool called SCP
 
 `scp -r <local/directory/drone_image_dataset/> exouser@<vm.ip.address>:/ofo-share/argo-input/datasets`
 
@@ -77,7 +79,7 @@ To add new drone imagery datasets to be processed using Argo, transfer files fro
 
 #### b. Specify Metashape Parameters
 
-Metashape processing parameters are specified in [config.yml](https://github.com/open-forest-observatory/automate-metashape/blob/main/config/config-base.yml) files which need to be located at `/ofo-share/argo-input/configs`. Every dataset to be processed needs to have it's own standalone config.yml file. These config files can be named however you want (e.g., `config_dataset_1.yml`)
+Metashape processing parameters are specified in [configuration *.yml](https://github.com/open-forest-observatory/automate-metashape/blob/main/config/config-base.yml) files which need to be located at `/ofo-share/argo-input/configs`. Every dataset to be processed needs to have its own standalone configuration file. These config files can be named however you want (e.g., `config_dataset_1.yml`)
 
 Within each metashape config.yml file, you need to specify 'photo_path' which is the location of the drone imagery dataset to be processed. This path refers to the location of the images inside a docker container. For example, if your drone images were uploaded to `/ofo-share/argo-input/datasets/dataset_1`, then the 'photo_path' should be written as `/data/argo-input/datasets/dataset_1`
 
