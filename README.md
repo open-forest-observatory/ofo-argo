@@ -2,6 +2,8 @@
 
 This repository contains [Argo Workflows](https://argoproj.github.io/workflows) used by the **Open Forest Observatory (OFO)**. It is being developed to run the [automate-metashape](https://github.com/open-forest-observatory/automate-metashape) pipeline simultaneously across multiple virtual machines on [Jetstream2 Cloud](https://jetstream-cloud.org/). This type of scaling enables OFO to process many photogrammetry projects simultaneously with a single run command. Argo is meant to work on [Kubernetes](https://kubernetes.io/docs/concepts/overview/) which orchestrates containers (ie, automate-metashape in docker), scales the processing to multiple VMs, and balances the load between the VMs. 
 
+The current setup includes a _controller_ (called master in Js2) VM instance and multiple _worker_ instances (they process metashape projects). The worker instances are configured to process one metashape project at a time. If there are more metashape projects than worker instances, the projects will be queued until a worker is free. GPU worker instances will greatly increase the speed of processing.  
+
 
 <br/>
 
@@ -30,30 +32,33 @@ This repository contains [Argo Workflows](https://argoproj.github.io/workflows) 
 
 ### 1. Inputs
 
-Inputs to the metashape argo workflow include **1.** drone imagery datasets consisting of jpegs, **2.** a list (datasets.txt) of the dataset names to be processed, and **3.** a metashape config.yml. All of these inputs need to be on the `ofo-share` volume. This volume will be automatically mounted to any VM built from `ofo-dev` image using [Exosphere interface](https://jetstream2.exosphere.app/exosphere/). The volume is mounted at `/ofo-share` of the VM.
+Inputs to the metashape argo workflow include **1.** drone imagery datasets consisting of jpegs, **2.** a list of the names of metashape configuration files (config_list.txt), and **3.** the metashape config.ymls. All of these inputs need to be on the `ofo-share` volume. This volume will be automatically mounted to any VM built from `ofo-dev` image using [Exosphere interface](https://jetstream2.exosphere.app/exosphere/). The volume is mounted at `/ofo-share` of the VM.
 
 Here is a schematic of the `/ofo-share` directory. 
 ```bash
 /ofo-share/
 ├── argo-input/
-│   ├── config.yml
-│   ├── datasets.txt
-│   ├── benchmarking-greasewood/
-│   │   ├── image_01.jpg
-│   │   └── image_02.jpg
-│   └── benchmarking-swetnam-house/
-│       ├── image_01.jpg
-│       └── image_02.jpg
+│   ├── datasets/
+│   │   ├──dataset_1/
+│   │   │   ├── image_01.jpg
+│   │   │   └── image_02.jpg
+│   │   └──dataset_2/
+│   │       ├── image_01.jpg
+│   │       └── image_02.jpg
+│   ├── configs/
+│   │   ├──config_dataset_1.yml
+│   │   └──config_dataset_2.yml
+│   └── config_list.txt
 └── argo-output/
     └── <RUN_FOLDER>/
-        ├── benchmarking-greasewood/
+        ├── dataset_1/
         │   ├── output/
         │   │   ├── orthomosaic.tif
         │   │   ├── dsm.tif
         │   │   └── point-cloud.laz
         │   └── project/
         │       └── metashape_project.psx
-        └── benchmarking-swetnam-house/
+        └── dataset_2/
             ├── output/
             │   ├── orthomosaic.tif
             │   ├── dsm.tif
@@ -63,25 +68,38 @@ Here is a schematic of the `/ofo-share` directory.
 ```
 
 #### a. Add drone imagery to OFO shared volume
-To add new drone imagery datasets to be processed using Argo, transfer files from your local machine to the `/ofo-share` volume.
+To add new drone imagery datasets to be processed using Argo, transfer files from your local machine (or the cloud) to the `/ofo-share` volume. Put the drone imagery projects to be processed in their own directory in `/ofo-share/argo-input/datasets`. 
 
-`scp -r <local/directory/drone_image_dataset> exouser@<vm.ip.address>:/ofo-share/argo-input`
+One data transfer method is a CLI tool called SCP
 
-Put the drone imagery projects to be processed in it's own directory in `/ofo-share/argo-input`. For example, there are 4 testing datasets already in the directory called `benchmarking-emerald-subset`, `benchmarking-emerald-full`, `benchmarking-swetnam-house`, `benchmarking-greasewood`
-
-
-<br/>
-
-#### b. Specify which datasets to process in Argo
-The file `/ofo-share/argo-input/datasets.txt` contains of list of the named datasets to process in argo. 
+`scp -r <local/directory/drone_image_dataset/> exouser@<vm.ip.address>:/ofo-share/argo-input/datasets`
 
 
 <br/>
+
+#### b. Specify Metashape Parameters
+
+Metashape processing parameters are specified in [configuration *.yml](https://github.com/open-forest-observatory/automate-metashape/blob/main/config/config-base.yml) files which need to be located at `/ofo-share/argo-input/configs`. Every dataset to be processed needs to have its own standalone configuration file. These config files can be named however you want (e.g., `config_dataset_1.yml`)
+
+Within each metashape config.yml file, you need to specify 'photo_path' which is the location of the drone imagery dataset to be processed. This path refers to the location of the images inside a docker container. For example, if your drone images were uploaded to `/ofo-share/argo-input/datasets/dataset_1`, then the 'photo_path' should be written as `/data/argo-input/datasets/dataset_1`
+
+The 'output_path', 'project_path', and 'run_name' are handled in the argo workflow. Please do not specify them in the metashape config.yml.
+
 <br/>
 
-#### c. Specify Metashape Parameters
+#### c. Config List
 
-All metashape parameters are specified in a config.yml file which is located at `/ofo-share/argo-input`. You can create your own config yml as long as it is kept in this directory. The exact file (e.g., config2.yml or projectname_config.yml) will be specified as a parameter in the argo run command later in this workflow. 
+Additionally we use a text file, for example `config_list.txt`, to tell the Argo workflow which config files should be processed in the current run. This text file should list each of the names of the config.yml files you want to process. One config file name per line. 
+
+For example:
+
+```
+config_dataset_1.yml
+config_dataset_2.yml
+config_dataset_2.yml
+```  
+
+You can create your own config_list.txt file and name it whatever you want as long as it is kept in this directory `/ofo-share/argo-input`. 
 
 <br/>
 <br/>
@@ -370,10 +388,9 @@ This variable will only last during the terminal session and will have to be re-
 
 ```
 argo submit -n argo workflow.yaml --watch \
--p CONFIG_FILE=config2.yml \
+-p CONFIG_LIST=config_list.txt \
 -p AGISOFT_FLS=$AGISOFT_FLS \
 -p RUN_FOLDER=gillan_june27 \
--p DATASET_LIST=datasets.txt \
 -p DB_PASSWORD=<password> \
 -p DB_HOST=<vm_ip_address> \
 -p DB_NAME=<db_name> \
@@ -381,13 +398,11 @@ argo submit -n argo workflow.yaml --watch \
  
 ```
 
-CONFIG_FILE is the configuration yml which specifies the metashape parameters which should be located in `/ofo-share/argo-output`
+CONFIG_LIST is a text file that lists each of the metashape parameter config files to be processed which should be located in `/ofo-share/argo-input`
 
 AGISOFT_FLS is the ip address of the metashape license server
 
 RUN_FOLDER is what you want to name the parent directory of your output
-
-DATSET_LIST is the txt file where you specified the names of the datasets you want to process located at `/ofo-share/argo-output`
 
 The rest of the 'DB' parameters are for logging argo status in a postGIS database. These are not public credentials. Authorized users can find them [here](https://docs.google.com/document/d/155AP0P3jkVa-yT53a-QLp7vBAfjRa78gdST1Dfb4fls/edit?tab=t.0).
 
@@ -480,24 +495,27 @@ The metashape outputs will be written to `/ofo-share/argo-outputs/<RUN_FOLDER>`.
 ```bash
 /ofo-share/
 ├── argo-input/
-│   ├── config.yml
-│   ├── datasets.txt
-│   ├── benchmarking-greasewood/
-│   │   ├── image_01.jpg
-│   │   └── image_02.jpg
-│   └── benchmarking-swetnam-house/
-│       ├── image_01.jpg
-│       └── image_02.jpg
+│   ├── datasets/
+│   │   ├──dataset_1/
+│   │   │   ├── image_01.jpg
+│   │   │   └── image_02.jpg
+│   │   └──dataset_2/
+│   │       ├── image_01.jpg
+│   │       └── image_02.jpg
+│   ├── configs/
+│   │   ├──config_dataset_1.yml
+│   │   └──config_dataset_2.yml
+│   └── config_list.txt
 └── argo-output/
     └── <RUN_FOLDER>/
-        ├── benchmarking-greasewood/
+        ├── dataset_1/
         │   ├── output/
         │   │   ├── orthomosaic.tif
         │   │   ├── dsm.tif
         │   │   └── point-cloud.laz
         │   └── project/
         │       └── metashape_project.psx
-        └── benchmarking-swetnam-house/
+        └── dataset_2/
             ├── output/
             │   ├── orthomosaic.tif
             │   ├── dsm.tif
@@ -505,6 +523,7 @@ The metashape outputs will be written to `/ofo-share/argo-outputs/<RUN_FOLDER>`.
             └── project/
                 └── metashape_project.psx
 ```
+
 
 
 
@@ -533,32 +552,7 @@ The DB is running in a docker container (`postgis/postgis`). The DB storage is a
 
 <br/>
 
-View all running and stopped containers
-
-`docker ps -a`
-
-<br/>
-
-Stop a running container
-
-`docker stop <container_id>`
-
-<br/>
-
-Remove container
-
-`docker rm <container_id>`
-
-<br/>
-
-
-Run the docker container DB
-
-```
-sudo docker run --name ofo-postgis   -e POSTGRES_PASSWORD=ujJ1tsY9OizN0IpOgl1mY1cQGvgja3SI   -p 5432:5432   -v /media/volume/ofo-postgis/data:/var/lib/postgresql/data  -d postgis/postgis
-```
-<br/>
-<br/>
+#### Steps to View the Logged Results
 
 Enter the Docker container running the PostGIS server `sudo docker exec -ti ofo-postgis bash`
 
@@ -594,6 +588,7 @@ Currently, the PostGIS server stores the following keys in the `automate_metasha
 <br/>
 
 View all data records for a specific table `select * from automate_metashape ORDER BY id DESC;`
+
 <img width="1000" height="183" alt="sql_query" src="https://github.com/user-attachments/assets/cba4532a-21de-4c35-8b2d-635eec326ef7" />
 
 <br/>
@@ -603,6 +598,39 @@ Exit out of psql command-line `\q`
 <br/>
 
 Exit out of container `exit`
+
+
+<br/>
+<br/>
+
+#### Other useful commands
+
+View all running and stopped containers
+
+`docker ps -a`
+
+<br/>
+
+Stop a running container
+
+`docker stop <container_id>`
+
+<br/>
+
+Remove container
+
+`docker rm <container_id>`
+
+<br/>
+
+
+Run the docker container DB
+
+```
+sudo docker run --name ofo-postgis   -e POSTGRES_PASSWORD=ujJ1tsY9OizN0IpOgl1mY1cQGvgja3SI   -p 5432:5432   -v /media/volume/ofo-postgis/data:/var/lib/postgresql/data  -d postgis/postgis
+```
+
+
 
 <br/>
 <br/>

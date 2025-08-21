@@ -7,15 +7,13 @@ spec:
   entrypoint: main
 
   # A list of input parameters available to the workflow at runtime. 
-  # These parameters can be referenced throughout the workflow templates using {{workflow.parameters.<name>}}.
+  # These parameters can be referenced throughout the workflow templates using {{workflow.parameters.<name>}}
   arguments:
     parameters:
-      - name: CONFIG_FILE
-        default: "config.yml"
+      - name: CONFIG_LIST
+        default: "config_list.txt"
       - name: RUN_FOLDER
         default: "default-run"
-      - name: DATASET_LIST
-        default: "datasets.txt"
       - name: AGISOFT_FLS
         default: ""
       - name: DB_HOST
@@ -29,16 +27,16 @@ spec:
 
   # Defining where to read raw drone imagery data and write out imagery products to `/ofo-share`
   volumes:
-  - name: data
-    persistentVolumeClaim:
-      claimName: ofo-share-nfs-pvc
-  - name: results
-    persistentVolumeClaim:
-      claimName: argo-output-nfs-pvc
+    - name: data
+      persistentVolumeClaim:
+        claimName: ofo-share-nfs-pvc
+    - name: results
+      persistentVolumeClaim:
+        claimName: argo-output-nfs-pvc
 
   templates:
     # the 'main' template defines the order of high-level steps to be completed in the workflow. 
-    # the 'process-datasets' step has a looping directive (withParam) which goes through each dataset name and processes it. 
+    # the 'process-datasets' step has a looping directive (withParam) which goes through each dataset name and processes it.
     - name: main
       steps:
         - - name: determine-datasets
@@ -57,25 +55,31 @@ spec:
                   value: "{{item}}"
             withParam: "{{steps.determine-datasets.outputs.result}}"
 
-    ## here we define what the main steps actually do 
-    
-    # Use containerized python to parse through the list of datasets as specified from runtime parameter 'DATASET_LIST'
+## Here we define what the main steps actually do 
+
+   # Use containerized python to parse through the list of datasets as specified from runtime parameter 'CONFIG_LIST'
     # outputs a json of dataset names that is passed to the next steps
     - name: determine-datasets
       script:
         image: python:3.9
         volumeMounts:
-        - name: data
-          mountPath: /input
-          subPath: "argo-input/{{workflow.parameters.DATASET_LIST}}"
+          - name: data
+            mountPath: /input
+            subPath: "argo-input/{{workflow.parameters.CONFIG_LIST}}"
         command: ["python3"]
         source: |
-          import json
-          import sys
-          file_path = "/input"
-          with open(file_path, "r") as f:
-            json.dump([line.strip() for line in f], sys.stdout)
+          import json, sys, os
+          with open("/input", "r") as f:
+              datasets = []
+              for line in f:
+                  name = line.strip()
+                  if name:
+                      base = os.path.splitext(name)[0]  # removes .yml, .yaml, etc.
+                      datasets.append(base)
 
+              # Output as JSON list
+              json.dump(datasets, sys.stdout)
+              
     # launches a docker container which contains our custom py script to log the dataset names into a postgis database
     # takes the json list of dataset names (from the 'determine datasets' step)
     - name: log-datasets-to-db
@@ -100,12 +104,12 @@ spec:
             value: "{{workflow.parameters.DB_USER}}"
           - name: DB_PASSWORD
             value: "{{workflow.parameters.DB_PASSWORD}}"
-    
-    # High-level order of steps in the workflow. Each step will be defined later.      
+            
+    # High-level order of steps in the 'process-dataset-workflow' step. Each step will be defined later.
     - name: process-dataset-workflow
       inputs:
         parameters:
-          - name: dataset-name  
+          - name: dataset-name
       steps:
         - - name: log-start
             template: log-dataset-start
@@ -117,12 +121,10 @@ spec:
             template: run-automate-metashape
             arguments:
               parameters:
-                - name: dataset-names
-                  value: "{{inputs.parameters.dataset-name}}" # Pass dataset name to Metashape container
-                - name: config-file
-                  value: "{{workflow.parameters.CONFIG_FILE}}" # Pass the global config file to control processing options
+                - name: dataset-name
+                  value: "{{inputs.parameters.dataset-name}}"
             continueOn:
-              failed: true  # EVEN IF this step fails, keep the workflow running (needed to log failure in DB later)
+              failed: true
         - - name: determine-success
             template: evaluate-success
             arguments:
@@ -136,9 +138,9 @@ spec:
                 - name: dataset-name
                   value: "{{inputs.parameters.dataset-name}}"
                 - name: success
-                  value: "{{steps.determine-success.outputs.result}}"      
-
-    ## Here we define what each step does
+                  value: "{{steps.determine-success.outputs.result}}"
+                  
+    ## Here we define what each step does in 'process-dataset-workflow' step
     
     # use our custom containerized db_logger.py to log 'processing' in the postgis DB
     - name: log-dataset-start
@@ -163,7 +165,7 @@ spec:
             value: "{{workflow.parameters.DB_USER}}"
           - name: DB_PASSWORD
             value: "{{workflow.parameters.DB_PASSWORD}}"
-    
+            
     # use our custom containerized db_logger.py to log 'completed' or 'failed' in the postgis DB
     - name: log-dataset-completion
       inputs:
@@ -190,7 +192,7 @@ spec:
             value: "{{workflow.parameters.DB_USER}}"
           - name: DB_PASSWORD
             value: "{{workflow.parameters.DB_PASSWORD}}"
-    
+            
     # Script to determine success of failure of step
     - name: evaluate-success
       inputs:
@@ -203,18 +205,16 @@ spec:
           import sys
           status = "{{inputs.parameters.step-status}}"
           sys.stdout.write("true" if status == "Succeeded" else "false")
-
-    # Defining how to process each dataset name      
+          
+    # Defining how to process each dataset name
     - name: run-automate-metashape
       inputs:
         parameters:
-          - name: dataset-names
-          - name: config-file
+          - name: dataset-name
       # the following 'metadata' and 'affinity' language is about ensuring one metashape project on one VM
       metadata:
         labels:
-          workload-type: metashape-job  # arbitrary, but used for pod spreading
-      
+          workload-type: metashape-job
       affinity:
         podAntiAffinity:
           requiredDuringSchedulingIgnoredDuringExecution:
@@ -225,27 +225,24 @@ spec:
                     values:
                       - metashape-job
               topologyKey: "kubernetes.io/hostname"
-
       # Use docker automate-metashape to do photogrammetry
       container:
         image: ghcr.io/open-forest-observatory/automate-metashape
         volumeMounts:
-        - name: data
-          mountPath: /data
-        - name: results
-          mountPath: /results
+          - name: data
+            mountPath: /data
+          - name: results
+            mountPath: /results
         command: ["python3", "/app/python/metashape_workflow.py"]
-        args: 
+        args:
           - "--config_file"
-          - "/data/argo-input/{{inputs.parameters.config-file}}"
-          - "--photo-path"
-          - "/data/argo-input/{{inputs.parameters.dataset-names}}"
+          - "/data/argo-input/configs/{{inputs.parameters.dataset-name}}.yml"
           - "--project-path"
-          - "/results/{{workflow.parameters.RUN_FOLDER}}/{{inputs.parameters.dataset-names}}/project"
+          - "/results/{{workflow.parameters.RUN_FOLDER}}/{{inputs.parameters.dataset-name}}/project"
           - "--output-path"
-          - "/results/{{workflow.parameters.RUN_FOLDER}}/{{inputs.parameters.dataset-names}}/output"
+          - "/results/{{workflow.parameters.RUN_FOLDER}}/{{inputs.parameters.dataset-name}}/output"
           - "--run-name"
-          - "{{inputs.parameters.dataset-names}}"
+          - "{{inputs.parameters.dataset-name}}"
         env:
           - name: AGISOFT_FLS
             value: "{{workflow.parameters.AGISOFT_FLS}}"
