@@ -70,7 +70,14 @@ spec:
         source: |
           import json, sys
           with open("/input", "r") as f:
-              datasets = [line.strip() for line in f if line.strip()]
+              datasets = []
+              for line in f:
+                  name = line.strip()
+                  if name:
+                      base = os.path.splitext(name)[0]  # removes .yml, .yaml, etc.
+                      datasets.append(base)
+
+              # Output as JSON list
               json.dump(datasets, sys.stdout)
               
     # launches a docker container which contains our custom py script to log the dataset names into a postgis database
