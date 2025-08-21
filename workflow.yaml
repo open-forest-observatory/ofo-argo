@@ -68,7 +68,7 @@ spec:
             subPath: "argo-input/{{workflow.parameters.CONFIG_LIST}}"
         command: ["python3"]
         source: |
-          import json, sys
+          import json, sys, os
           with open("/input", "r") as f:
               datasets = []
               for line in f:
