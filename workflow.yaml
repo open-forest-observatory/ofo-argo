@@ -146,7 +146,7 @@ spec:
             arguments:
               parameters:
                 - name: step-status
-                  value: "{{steps.run-processing.status}}"
+                  value: "{{tasks.run-processing.status}}"
           - name: log-completion
             template: log-dataset-completion
             arguments:
@@ -154,7 +154,7 @@ spec:
                 - name: dataset-name
                   value: "{{inputs.parameters.dataset-name}}"
                 - name: success
-                  value: "{{steps.determine-success.outputs.result}}"
+                  value: "{{tasks.determine-success.outputs.result}}"
                   
     ## Here we define what each step does in 'process-dataset-workflow' step
     
