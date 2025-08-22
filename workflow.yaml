@@ -24,6 +24,13 @@ spec:
         default: ""
       - name: DB_PASSWORD
         default: ""
+      # S3 / rclone upload parameters
+      - name: S3_BUCKET
+        default: ""
+      - name: S3_ENDPOINT
+        default: ""
+      - name: S3_PROVIDER
+        default: ""      # e.g., AWS, Minio, Ceph
 
   # Defining where to read raw drone imagery data and write out imagery products to `/ofo-share`
   volumes:
@@ -110,14 +117,15 @@ spec:
       inputs:
         parameters:
           - name: dataset-name
-      steps:
-        - - name: log-start
+      dag:
+        tasks:
+          - name: log-start
             template: log-dataset-start
             arguments:
               parameters:
                 - name: dataset-name
                   value: "{{inputs.parameters.dataset-name}}"
-        - - name: run-processing
+          - name: run-processing
             template: run-automate-metashape
             arguments:
               parameters:
@@ -125,13 +133,21 @@ spec:
                   value: "{{inputs.parameters.dataset-name}}"
             continueOn:
               failed: true
-        - - name: determine-success
+          # As soon as processing finishes, kick off upload in parallel on any available node
+          - name: rclone-upload
+            dependencies: [run-processing]
+            template: rclone-upload-to-s3
+            arguments:
+              parameters:
+                - name: dataset-name
+                  value: "{{inputs.parameters.dataset-name}}"
+          - name: determine-success
             template: evaluate-success
             arguments:
               parameters:
                 - name: step-status
                   value: "{{steps.run-processing.status}}"
-        - - name: log-completion
+          - name: log-completion
             template: log-dataset-completion
             arguments:
               parameters:
@@ -246,5 +262,53 @@ spec:
         env:
           - name: AGISOFT_FLS
             value: "{{workflow.parameters.AGISOFT_FLS}}"
+            
+  # --------- RCLONE UPLOAD (Docker image) ---------
+    - name: rclone-upload-to-s3
+      inputs:
+        parameters:
+          - name: dataset-name
+      container:
+        image: rclone/rclone:latest
+        volumeMounts:
+          - name: results
+            mountPath: /results
+        command: ["/bin/sh", "-lc"]
+        args:
+          - |
+            set -euo pipefail
+            SRC="/results/{{workflow.parameters.RUN_FOLDER}}/{{inputs.parameters.dataset-name}}"
+            DST="s3:{{workflow.parameters.S3_BUCKET}}/{{workflow.parameters.RUN_FOLDER}}/{{inputs.parameters.dataset-name}}"
 
-         
+            echo "[rclone] Uploading $SRC -> $DST"
+            rclone copy "$SRC" "$DST" \
+              --s3-provider "{{workflow.parameters.S3_PROVIDER}}" \
+              --s3-endpoint "{{workflow.parameters.S3_ENDPOINT}}" \
+              --s3-access-key-id "$RCLONE_S3_ACCESS_KEY_ID" \
+              --s3-secret-access-key "$RCLONE_S3_SECRET_ACCESS_KEY" \
+              --transfers 16 --checkers 16 --retries 5 --retries-sleep=15s \
+              --s3-upload-cutoff 100Mi --s3-chunk-size 100Mi --s3-upload-concurrency 8 \
+              --stats 15s --stats-log-level NOTICE
+
+            echo "[rclone] Upload complete."
+
+        # Light footprint so it can co-locate with Metashape if the node has room.
+        resources:
+          requests:
+            cpu: "100m"
+            memory: "256Mi"
+          limits:
+            cpu: "1"
+            memory: "1Gi"
+        env:
+          - name: RCLONE_S3_ACCESS_KEY_ID
+            valueFrom:
+              secretKeyRef:
+                name: s3-credentials
+                key: access_key
+          - name: RCLONE_S3_SECRET_ACCESS_KEY
+            valueFrom:
+              secretKeyRef:
+                name: s3-credentials
+                key: secret_key
+      
