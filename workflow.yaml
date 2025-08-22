@@ -125,6 +125,7 @@ spec:
               parameters:
                 - name: dataset-name
                   value: "{{inputs.parameters.dataset-name}}"
+                  
           - name: run-processing
             template: run-automate-metashape
             arguments:
@@ -133,6 +134,7 @@ spec:
                   value: "{{inputs.parameters.dataset-name}}"
             continueOn:
               failed: true
+              
           # As soon as processing finishes, kick off upload in parallel on any available node
           - name: rclone-upload
             dependencies: [run-processing]
@@ -141,20 +143,28 @@ spec:
               parameters:
                 - name: dataset-name
                   value: "{{inputs.parameters.dataset-name}}"
-          - name: determine-success
-            template: evaluate-success
-            arguments:
-              parameters:
-                - name: step-status
-                  value: "{{tasks.run-processing.outputs.exitCode}}"  #CHANGE HERE!!
-          - name: log-completion
+                  
+          - name: log-completion-success
+            dependencies: [run-processing]
             template: log-dataset-completion
             arguments:
               parameters:
                 - name: dataset-name
                   value: "{{inputs.parameters.dataset-name}}"
                 - name: success
-                  value: "{{tasks.determine-success.outputs.result}}"
+                  value: "true"
+            when: "{{tasks.run-processing.status}} == Succeeded"
+
+          - name: log-completion-failure
+            dependencies: [run-processing]
+            template: log-dataset-completion
+            arguments:
+              parameters:
+                - name: dataset-name
+                  value: "{{inputs.parameters.dataset-name}}"
+                - name: success
+                  value: "false"
+            when: "{{tasks.run-processing.status}} != Succeeded"
                   
     ## Here we define what each step does in 'process-dataset-workflow' step
     
@@ -208,19 +218,7 @@ spec:
             value: "{{workflow.parameters.DB_USER}}"
           - name: DB_PASSWORD
             value: "{{workflow.parameters.DB_PASSWORD}}"
-            
-    # Script to determine success of failure of step
-    - name: evaluate-success
-      inputs:
-        parameters:
-          - name: step-status
-      script:
-        image: python:3.9
-        command: ["python3"]
-        source: |
-          import sys
-          status = "{{inputs.parameters.step-status}}"
-          sys.stdout.write("true" if status == "Succeeded" else "false")
+        
           
     # Defining how to process each dataset name
     - name: run-automate-metashape
