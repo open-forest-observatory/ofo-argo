@@ -276,7 +276,7 @@ spec:
           - |
             set -euo pipefail
             SRC="/results/{{workflow.parameters.RUN_FOLDER}}/{{inputs.parameters.dataset-name}}"
-            DST="s3:{{workflow.parameters.S3_BUCKET}}/{{workflow.parameters.RUN_FOLDER}}/{{inputs.parameters.dataset-name}}"
+            DST=":s3:{{workflow.parameters.S3_BUCKET}}/{{workflow.parameters.RUN_FOLDER}}/{{inputs.parameters.dataset-name}}"
 
             echo "[rclone] Uploading $SRC -> $DST"
             rclone copy "$SRC" "$DST" \
