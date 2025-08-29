@@ -394,7 +394,7 @@ Please create a kubernetes secret to store the S3 Access ID and Secret Key
 kubectl create secret generic s3-credentials \ --from-literal=access_key=<YOUR_ACCESS_KEY_ID> \ --from-literal=secret_key=<YOUR_SECRET_ACCESS_KEY> \ -n argo 
 ```
 
-### 2. Run!!
+### 3. Run!!
 
 ```
 argo submit -n argo workflow.yaml --watch \
@@ -424,7 +424,7 @@ The 'S3' parameters are related to uploading outputs to Jetstream2 S3 bucket
 
 <br/>
 
-### 3. Monitor Argo Workflow
+### 4. Monitor Argo Workflow
 The Argo UI is great for troubleshooting and checking additional logs. You can access it either through the Cacao WebDesktop or ssh from your local terminal.
 
 #### WebDesktop Method
@@ -505,7 +505,7 @@ A successfull argo run
 <br/>
 
 
-### 4. Metashape Outputs
+### 5. Metashape Outputs
 The metashape outputs will be written to `/ofo-share/argo-outputs/<RUN_FOLDER>`. Each dataset will have its own subdirectory in the <RUN_FOLDER>. Output imagery products (DEMs, orthomosaics, point clouds, report) will be written to `/ofo-share/argo-outputs/<RUN_FOLDER>/<dataset_name>/output`. Metashape projects .psx will be written to `/ofo-share/argo-outputs/<RUN_FOLDER>/<dataset_name>/project`.
 
 ```bash
@@ -548,7 +548,7 @@ The metashape outputs will be written to `/ofo-share/argo-outputs/<RUN_FOLDER>`.
 <br/>
 <br/>
 
-### 5. Argo Workflow Logging in postGIS database 
+### 6. Argo Workflow Logging in postGIS database 
 
 Argo run status is logged into a postGIS DB. This is done through an additional docker container (hosted on github container registry `ghcr.io/open-forest-observatory/ofo-argo-utils:latest`) that is included in the argo workflow. The files to make the docker image are in the folder `ofo-argo-utils`. 
 
