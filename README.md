@@ -384,6 +384,16 @@ This variable will only last during the terminal session and will have to be re-
 
 <br/>
 
+### 2. Declare credentials for upload to S3 bucket
+
+OFO has a S3 bucket with Jetstream2. The final step of the workflow will upload the <RUN_FOLDER> to the S3 bucket. 
+
+Please create a kubernetes secret to store the S3 Access ID and Secret Key
+
+```
+kubectl create secret generic s3-credentials \ --from-literal=access_key=<YOUR_ACCESS_KEY_ID> \ --from-literal=secret_key=<YOUR_SECRET_ACCESS_KEY> \ -n argo 
+```
+
 ### 2. Run!!
 
 ```
@@ -394,7 +404,11 @@ argo submit -n argo workflow.yaml --watch \
 -p DB_PASSWORD=<password> \
 -p DB_HOST=<vm_ip_address> \
 -p DB_NAME=<db_name> \
--p DB_USER=<user_name>
+-p DB_USER=<user_name> \
+-p S3_BUCKET=ofo-public \
+-p S3_PROVIDER=Other \
+-p S3_ENDPOINT=https://js2.jetstream-cloud.org:8001
+
  
 ```
 
@@ -405,6 +419,8 @@ AGISOFT_FLS is the ip address of the metashape license server
 RUN_FOLDER is what you want to name the parent directory of your output
 
 The rest of the 'DB' parameters are for logging argo status in a postGIS database. These are not public credentials. Authorized users can find them [here](https://docs.google.com/document/d/155AP0P3jkVa-yT53a-QLp7vBAfjRa78gdST1Dfb4fls/edit?tab=t.0).
+
+The 'S3' parameters are related to uploading outputs to Jetstream2 S3 bucket 
 
 <br/>
 
