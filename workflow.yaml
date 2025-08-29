@@ -288,7 +288,25 @@ spec:
               --s3-upload-cutoff 200Mi --s3-chunk-size 100Mi --s3-upload-concurrency 4 \
               --stats 15s --stats-log-level NOTICE
 
-            echo "[rclone] Upload complete."
+            echo "[rclone] Upload complete. Starting verification..."
+
+            # Verify the upload by checking file name and size
+            rclone check "$SRC" "$DST" \
+              --s3-provider "{{workflow.parameters.S3_PROVIDER}}" \
+              --s3-endpoint "{{workflow.parameters.S3_ENDPOINT}}" \
+              --s3-access-key-id "$RCLONE_S3_ACCESS_KEY_ID" \
+              --s3-secret-access-key "$RCLONE_S3_SECRET_ACCESS_KEY" \
+              --checkfile /tmp/rclone-check.log
+
+            if [ $? -eq 0 ]; then
+              echo "[rclone] Verification successful - all files match!"
+              echo "UPLOAD_VERIFIED=true" > /results/upload_status_{{inputs.parameters.dataset-name}}.txt
+            else
+              echo "[rclone] Verification failed - some files don't match!"
+              cat /tmp/rclone-check.log
+              echo "UPLOAD_VERIFIED=false" > /results/upload_status_{{inputs.parameters.dataset-name}}.txt
+              exit 1
+            fi
 
         # Light footprint so it can co-locate with Metashape if the node has room.
         resources:
