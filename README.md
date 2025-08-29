@@ -384,7 +384,17 @@ This variable will only last during the terminal session and will have to be re-
 
 <br/>
 
-### 2. Run!!
+### 2. Declare credentials for upload to S3 bucket
+
+OFO has a S3 bucket with Jetstream2. The final step of the workflow will upload the <RUN_FOLDER> to the S3 bucket. 
+
+Please create a kubernetes secret to store the S3 Access ID and Secret Key
+
+```
+kubectl create secret generic s3-credentials \ --from-literal=access_key=<YOUR_ACCESS_KEY_ID> \ --from-literal=secret_key=<YOUR_SECRET_ACCESS_KEY> \ -n argo 
+```
+
+### 3. Run!!
 
 ```
 argo submit -n argo workflow.yaml --watch \
@@ -394,7 +404,11 @@ argo submit -n argo workflow.yaml --watch \
 -p DB_PASSWORD=<password> \
 -p DB_HOST=<vm_ip_address> \
 -p DB_NAME=<db_name> \
--p DB_USER=<user_name>
+-p DB_USER=<user_name> \
+-p S3_BUCKET=ofo-public \
+-p S3_PROVIDER=Other \
+-p S3_ENDPOINT=https://js2.jetstream-cloud.org:8001
+
  
 ```
 
@@ -406,9 +420,11 @@ RUN_FOLDER is what you want to name the parent directory of your output
 
 The rest of the 'DB' parameters are for logging argo status in a postGIS database. These are not public credentials. Authorized users can find them [here](https://docs.google.com/document/d/155AP0P3jkVa-yT53a-QLp7vBAfjRa78gdST1Dfb4fls/edit?tab=t.0).
 
+The 'S3' parameters are related to uploading outputs to Jetstream2 S3 bucket 
+
 <br/>
 
-### 3. Monitor Argo Workflow
+### 4. Monitor Argo Workflow
 The Argo UI is great for troubleshooting and checking additional logs. You can access it either through the Cacao WebDesktop or ssh from your local terminal.
 
 #### WebDesktop Method
@@ -489,7 +505,7 @@ A successfull argo run
 <br/>
 
 
-### 4. Metashape Outputs
+### 5. Metashape Outputs
 The metashape outputs will be written to `/ofo-share/argo-outputs/<RUN_FOLDER>`. Each dataset will have its own subdirectory in the <RUN_FOLDER>. Output imagery products (DEMs, orthomosaics, point clouds, report) will be written to `/ofo-share/argo-outputs/<RUN_FOLDER>/<dataset_name>/output`. Metashape projects .psx will be written to `/ofo-share/argo-outputs/<RUN_FOLDER>/<dataset_name>/project`.
 
 ```bash
@@ -532,7 +548,7 @@ The metashape outputs will be written to `/ofo-share/argo-outputs/<RUN_FOLDER>`.
 <br/>
 <br/>
 
-### 5. Argo Workflow Logging in postGIS database 
+### 6. Argo Workflow Logging in postGIS database 
 
 Argo run status is logged into a postGIS DB. This is done through an additional docker container (hosted on github container registry `ghcr.io/open-forest-observatory/ofo-argo-utils:latest`) that is included in the argo workflow. The files to make the docker image are in the folder `ofo-argo-utils`. 
 
