@@ -297,18 +297,16 @@ spec:
               --s3-access-key-id "$RCLONE_S3_ACCESS_KEY_ID" \
               --s3-secret-access-key "$RCLONE_S3_SECRET_ACCESS_KEY" \
               --one-way \
-              --differ /tmp/rclone-check.log 
+              --differ /results/s3_failures_{{inputs.parameters.dataset-name}}.log
 
             if [ $? -eq 0 ]; then
               echo "[rclone] Verification successful - all files match!"
-              echo "UPLOAD_VERIFIED=true" > /results/upload_status_{{inputs.parameters.dataset-name}}.txt
             else
               echo "[rclone] Verification failed - some files don't match!"
-              if [ -f /tmp/rclone-check.log ]; then
+              if [ -f /results/s3_failures_{{inputs.parameters.dataset-name}}.log ]; then
                 echo "Files that differ:"
-                cat /tmp/rclone-check.log
+                cat /results/s3_failures_{{inputs.parameters.dataset-name}}.log   #writes to file the files that did not complete
               fi
-              echo "UPLOAD_VERIFIED=false" > /results/upload_status_{{inputs.parameters.dataset-name}}.txt
               exit 1
             fi
 
