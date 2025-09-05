@@ -290,6 +290,26 @@ spec:
 
             echo "[rclone] Upload complete. "
 
+            # Check if upload was successful
+            if [ $? -eq 0 ]; then
+              echo "[rclone] Upload successful for {{inputs.parameters.dataset-name}}"
+          
+              # Clean up local files after successful upload
+              echo "[cleanup] Removing local files after successful upload..."
+              if [ -d "$SRC" ]; then
+                rm -rf "$SRC"
+                echo "[cleanup] Successfully removed: $SRC"
+              else
+                echo "[cleanup] Source directory not found: $SRC"
+              fi
+            else
+              echo "[rclone] Upload failed for {{inputs.parameters.dataset-name}}"
+              echo "[cleanup] Keeping local files due to upload failure"
+              exit 1
+            fi
+
+            echo "[rclone] Upload and cleanup completed for {{inputs.parameters.dataset-name}}"
+   
         # Light footprint so it can co-locate with Metashape if the node has room.
         resources:
           requests:

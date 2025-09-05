@@ -4,6 +4,7 @@ This repository contains [Argo Workflows](https://argoproj.github.io/workflows) 
 
 The current setup includes a _controller_ (called master in Js2) VM instance and multiple _worker_ instances (they process metashape projects). The worker instances are configured to process one metashape project at a time. If there are more metashape projects than worker instances, the projects will be queued until a worker is free. GPU worker instances will greatly increase the speed of processing.  
 
+The current version will output Metashape imagery products to the S3 bucket `ofo-internal`. 
 
 <br/>
 
@@ -386,7 +387,7 @@ This variable will only last during the terminal session and will have to be re-
 
 ### 2. Declare credentials for upload to S3 bucket
 
-OFO has a S3 bucket with Jetstream2. The final step of the workflow will upload the <RUN_FOLDER> to the S3 bucket. 
+OFO has a S3 bucket with Jetstream2. The final step of the workflow will upload the <RUN_FOLDER> to the S3 bucket `ofo-internal`. 
 
 Please create a kubernetes secret to store the S3 Access ID and Secret Key
 
@@ -405,7 +406,7 @@ argo submit -n argo workflow.yaml --watch \
 -p DB_HOST=<vm_ip_address> \
 -p DB_NAME=<db_name> \
 -p DB_USER=<user_name> \
--p S3_BUCKET=ofo-public \
+-p S3_BUCKET=ofo-internal \
 -p S3_PROVIDER=Other \
 -p S3_ENDPOINT=https://js2.jetstream-cloud.org:8001
 
@@ -506,7 +507,7 @@ A successfull argo run
 
 
 ### 5. Metashape Outputs
-The metashape outputs will be written to `/ofo-share/argo-outputs/<RUN_FOLDER>`. Each dataset will have its own subdirectory in the <RUN_FOLDER>. Output imagery products (DEMs, orthomosaics, point clouds, report) will be written to `/ofo-share/argo-outputs/<RUN_FOLDER>/<dataset_name>/output`. Metashape projects .psx will be written to `/ofo-share/argo-outputs/<RUN_FOLDER>/<dataset_name>/project`.
+The metashape outputs will be written to `/ofo-share/argo-outputs/<RUN_FOLDER>`. Each dataset will have its own subdirectory in the <RUN_FOLDER>. Output imagery products (DEMs, orthomosaics, point clouds, report) will be written to `/ofo-share/argo-outputs/<RUN_FOLDER>/<dataset_name>/output`. Metashape projects .psx will be written to `/ofo-share/argo-outputs/<RUN_FOLDER>/<dataset_name>/project`. In the current version, the output <RUN_FOLDER> and everything in it will be uploaded to the S3 bucket `ofo-internal`. The outputs written to `ofo-share` are deleted. 
 
 ```bash
 /ofo-share/
