@@ -4,6 +4,7 @@ This repository contains [Argo Workflows](https://argoproj.github.io/workflows) 
 
 The current setup includes a _controller_ (called master in Js2) VM instance and multiple _worker_ instances (they process metashape projects). The worker instances are configured to process one metashape project at a time. If there are more metashape projects than worker instances, the projects will be queued until a worker is free. GPU worker instances will greatly increase the speed of processing.  
 
+The current version will output Metashape imagery products to the S3 bucket `ofo-internal`. 
 
 <br/>
 
