@@ -492,38 +492,18 @@ A successfull argo run
 
 
 ### 5. Metashape Outputs
-The metashape outputs will be written to `/ofo-share/argo-outputs/<RUN_FOLDER>`. Each dataset will have its own subdirectory in the <RUN_FOLDER>. Output imagery products (DEMs, orthomosaics, point clouds, report) will be written to `/ofo-share/argo-outputs/<RUN_FOLDER>/<dataset_name>/output`. Metashape projects .psx will be written to `/ofo-share/argo-outputs/<RUN_FOLDER>/<dataset_name>/project`. In the current version, the output <RUN_FOLDER> and everything in it will be uploaded to the S3 bucket `ofo-internal`. The outputs written to `ofo-share` are deleted. 
+The metashape outputs will be written to `/ofo-share/argo-outputs/<RUN_FOLDER>` temporarily. As soon as they are written, they are uploaded to the S3 bucket `ofo-internal`. The outputs written to `ofo-share` are deleted. 
 
 ```bash
-/ofo-share/
-├── argo-input/
-│   ├── datasets/
-│   │   ├──dataset_1/
-│   │   │   ├── image_01.jpg
-│   │   │   └── image_02.jpg
-│   │   └──dataset_2/
-│   │       ├── image_01.jpg
-│   │       └── image_02.jpg
-│   ├── configs/
-│   │   ├──config_dataset_1.yml
-│   │   └──config_dataset_2.yml
-│   └── config_list.txt
-└── argo-output/
-    └── <RUN_FOLDER>/
-        ├── dataset_1/
-        │   ├── output/
-        │   │   ├── orthomosaic.tif
-        │   │   ├── dsm.tif
-        │   │   └── point-cloud.laz
-        │   └── project/
-        │       └── metashape_project.psx
-        └── dataset_2/
-            ├── output/
-            │   ├── orthomosaic.tif
-            │   ├── dsm.tif
-            │   └── point-cloud.laz
-            └── project/
-                └── metashape_project.psx
+/S3:ofo-internal/
+├── <RUN_FOLDER>/
+    ├── Dataset_name1_ortho.tif
+    ├── Dataset_name1_pointcloud.laz
+    ├── Dataset_name1_dsm.tif
+    ├── Dataset_name2_ortho.tif
+    ├── Dataset_name2_pointcloud.laz
+    ├── Dataset_name2_dsm.tif
+
 ```
 
 
