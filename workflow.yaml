@@ -252,7 +252,7 @@ spec:
           - "--config_file"
           - "/data/argo-input/configs/{{inputs.parameters.dataset-name}}.yml"
           - "--project-path"
-          #- "/results/{{workflow.parameters.RUN_FOLDER}}/{{inputs.parameters.dataset-name}}/project"
+          - "/results/{{workflow.parameters.RUN_FOLDER}}/{{inputs.parameters.dataset-name}}/project"
           - "--output-path"
           - "/results/{{workflow.parameters.RUN_FOLDER}}"
           - "--run-name"
@@ -275,8 +275,8 @@ spec:
         args:
           - |
             set -euo pipefail
-            SRC="/results/{{workflow.parameters.RUN_FOLDER}}/{{inputs.parameters.dataset-name}}"
-            DST=":s3:{{workflow.parameters.S3_BUCKET}}/{{workflow.parameters.RUN_FOLDER}}/{{inputs.parameters.dataset-name}}"
+            SRC="/results/{{workflow.parameters.RUN_FOLDER}}"
+            DST=":s3:{{workflow.parameters.S3_BUCKET}}/{{workflow.parameters.RUN_FOLDER}}"
 
             echo "[rclone] Uploading $SRC -> $DST"
             rclone copy "$SRC" "$DST" \
