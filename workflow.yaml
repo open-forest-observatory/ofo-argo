@@ -254,7 +254,7 @@ spec:
           - "--project-path"
           - "/results/{{workflow.parameters.RUN_FOLDER}}/{{inputs.parameters.dataset-name}}/project"
           - "--output-path"
-          - "/results/{{workflow.parameters.RUN_FOLDER}}"
+          - "/results/{{workflow.parameters.RUN_FOLDER}}/{{inputs.parameters.dataset-name}}/output"
           - "--run-name"
           - "{{inputs.parameters.dataset-name}}"
         env:
@@ -275,7 +275,7 @@ spec:
         args:
           - |
             set -euo pipefail
-            SRC="/results/{{workflow.parameters.RUN_FOLDER}}"
+            SRC="/results/{{workflow.parameters.RUN_FOLDER}}/{{inputs.parameters.dataset-name}}/output/"
             DST=":s3:{{workflow.parameters.S3_BUCKET}}/{{workflow.parameters.RUN_FOLDER}}"
 
             echo "[rclone] Uploading $SRC -> $DST"
