@@ -275,8 +275,9 @@ spec:
         args:
           - |
             set -euo pipefail
-            SRC="/results/{{workflow.parameters.RUN_FOLDER}}/{{inputs.parameters.dataset-name}}"
-            DST=":s3:{{workflow.parameters.S3_BUCKET}}/{{workflow.parameters.RUN_FOLDER}}/{{inputs.parameters.dataset-name}}"
+            SRC="/results/{{workflow.parameters.RUN_FOLDER}}/{{inputs.parameters.dataset-name}}/output/"
+            SRC_parent="/results/{{workflow.parameters.RUN_FOLDER}}/{{inputs.parameters.dataset-name}}"
+            DST=":s3:{{workflow.parameters.S3_BUCKET}}/{{workflow.parameters.RUN_FOLDER}}"
 
             echo "[rclone] Uploading $SRC -> $DST"
             rclone copy "$SRC" "$DST" \
@@ -296,11 +297,11 @@ spec:
           
               # Clean up local files after successful upload
               echo "[cleanup] Removing local files after successful upload..."
-              if [ -d "$SRC" ]; then
-                rm -rf "$SRC"
-                echo "[cleanup] Successfully removed: $SRC"
+              if [ -d "$SRC_parent" ]; then
+                rm -rf "$SRC_parent"
+                echo "[cleanup] Successfully removed: $SRC_parent"
               else
-                echo "[cleanup] Source directory not found: $SRC"
+                echo "[cleanup] Source directory not found: $SRC_parent"
               fi
             else
               echo "[rclone] Upload failed for {{inputs.parameters.dataset-name}}"
