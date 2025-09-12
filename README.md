@@ -502,7 +502,7 @@ The metashape outputs will be written to `/ofo-share/argo-outputs/<RUN_FOLDER>` 
     ├── Dataset_name1_dsm.tif
     ├── Dataset_name2_ortho.tif
     ├── Dataset_name2_pointcloud.laz
-    ├── Dataset_name2_dsm.tif
+    └── Dataset_name2_dsm.tif
 
 ```
 
