@@ -251,10 +251,10 @@ spec:
         args:
           - "--config_file"
           - "/data/argo-input/configs/{{inputs.parameters.dataset-name}}.yml"
-          - "--project-path"
-          - "/results/{{workflow.parameters.RUN_FOLDER}}/{{inputs.parameters.dataset-name}}/project"
+          #- "--project-path"
+          #- "/results/{{workflow.parameters.RUN_FOLDER}}/{{inputs.parameters.dataset-name}}/project"
           - "--output-path"
-          - "/results/{{workflow.parameters.RUN_FOLDER}}/{{inputs.parameters.dataset-name}}/output"
+          - "/results/{{workflow.parameters.RUN_FOLDER}}"
           - "--run-name"
           - "{{inputs.parameters.dataset-name}}"
         env:
