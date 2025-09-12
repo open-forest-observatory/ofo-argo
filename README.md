@@ -39,33 +39,18 @@ Here is a schematic of the `/ofo-share` directory.
 ```bash
 /ofo-share/
 ├── argo-input/
-│   ├── datasets/
-│   │   ├──dataset_1/
-│   │   │   ├── image_01.jpg
-│   │   │   └── image_02.jpg
-│   │   └──dataset_2/
-│   │       ├── image_01.jpg
-│   │       └── image_02.jpg
-│   ├── configs/
-│   │   ├──config_dataset_1.yml
-│   │   └──config_dataset_2.yml
-│   └── config_list.txt
-└── argo-output/
-    └── <RUN_FOLDER>/
-        ├── dataset_1/
-        │   ├── output/
-        │   │   ├── orthomosaic.tif
-        │   │   ├── dsm.tif
-        │   │   └── point-cloud.laz
-        │   └── project/
-        │       └── metashape_project.psx
-        └── dataset_2/
-            ├── output/
-            │   ├── orthomosaic.tif
-            │   ├── dsm.tif
-            │   └── point-cloud.laz
-            └── project/
-                └── metashape_project.psx
+   ├── datasets/
+   │   ├──dataset_1/
+   │   │   ├── image_01.jpg
+   │   │   └── image_02.jpg
+   │   └──dataset_2/
+   │       ├── image_01.jpg
+   │       └── image_02.jpg
+   ├── configs/
+   │   ├──config_dataset_1.yml
+   │   └──config_dataset_2.yml
+   └── config_list.txt
+
 ```
 
 #### a. Add drone imagery to OFO shared volume
