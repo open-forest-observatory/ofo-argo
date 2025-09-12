@@ -251,7 +251,7 @@ spec:
         args:
           - "--config_file"
           - "/data/argo-input/configs/{{inputs.parameters.dataset-name}}.yml"
-          #- "--project-path"
+          - "--project-path"
           #- "/results/{{workflow.parameters.RUN_FOLDER}}/{{inputs.parameters.dataset-name}}/project"
           - "--output-path"
           - "/results/{{workflow.parameters.RUN_FOLDER}}"
