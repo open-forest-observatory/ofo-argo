@@ -1,20 +1,24 @@
 
 ## Add 'Post-processing' step in Argo workflow
 
-The 'post processing' step is a series of rscripts that take the output from a metashape run and does additional processing on the imagery products.
+I have developed a working prototype stand alone docker image. It is located on 'worker0' on a Cacao Js2 VM. In the directory `~/ofo-argo/rscripts` type `claude`
 
-* download metashape output imagery products from S3 bucket `ofo-internal`, the directory is called `gillan_sept12b`
-   * download entire directory of metashape outputs     
-* download project boundaries polygon (.gpkg)
+The docker image: 
+
+* downloads metashape output imagery products from S3 bucket `ofo-internal`, the directory is called `gillan_sept12b`
+   * downloads entire directory of metashape outputs to the container
+* downloads project boundaries polygon (.gpkg)
   * The real polygons are located at `S3: ofo-public drone/missions_01/000032/metadata-mission/000032_mission-metadata.gpkg`
   * The testing polygon is at `S3:ofo-public jgillan_test/benchmarking-greasewood_mission-metadata.gpkg`
 * clips  the raster products (orthos & DEMs) to the project boundary polygon
 * converts clipped raster products to COGs
 * Creates a canopy height model from DSM & DTM
 * creates thumbnails of all raster products
-* uploads the finished imagery products to S3 `ofo-public`
+* uploads the finished imagery products to S3 `ofo-public` into a directory of my choosing
   * clipped orthomosaic, clipped DSM, clipped DTM, clipped CHM, point cloud, thumbnails for all raster products, cameras.xml, report.pdf, log.txt
- 
+
+### Rscripts that inspired the docker rscripts:
+
 The main rscript is [here](https://github.com/open-forest-observatory/ofo-catalog-data-prep/blob/main/deploy/drone-imagery-ingestion/03_photogrammetry/src/20_postprocess-photogrammetry-products.R)
 
 Additional rscript are [here](https://github.com/open-forest-observatory/ofo-catalog-data-prep/blob/main/deploy/drone-imagery-ingestion/00_set-constants.R) and [here](https://github.com/open-forest-observatory/ofo-catalog-data-prep/blob/main/src/utils.R)
