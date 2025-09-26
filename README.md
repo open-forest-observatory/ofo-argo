@@ -3,9 +3,11 @@
 
 The 'post processing' step is a series of rscripts that take the output from a metashape run and does additional processing on the imagery products.
 
-* download metashape output imagery products from S3 bucket `ofo-internal`
+* download metashape output imagery products from S3 bucket `ofo-internal`, the directory is called `gillan_sept12b`
    * download entire directory of metashape outputs     
-* download project boundaries polygon (.gpkg) from `S3: ofo-public drone/missions_01/000032/metadata-mission/000032_mission-metadata.gpkg`
+* download project boundaries polygon (.gpkg)
+  * The real polygons are located at `S3: ofo-public drone/missions_01/000032/metadata-mission/000032_mission-metadata.gpkg`
+  * The testing polygon is at `S3:ofo-public jgillan_test/benchmarking-greasewood_mission-metadata.gpkg`
 * clips  the raster products (orthos & DEMs) to the project boundary polygon
 * converts clipped raster products to COGs
 * Creates a canopy height model from DSM & DTM
