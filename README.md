@@ -1,3 +1,30 @@
+
+## Add 'Post-processing' step in Argo workflow
+
+The 'post processing' step is a series of rscripts that take the output from a metashape run and does additional processing on the imagery products.
+
+* download metashape output imagery products from S3 bucket `ofo-internal`
+   * download entire directory of metashape outputs     
+* download project boundaries polygon (.gpkg) from `S3: ofo-public drone/missions_01/000032/metadata-mission/000032_mission-metadata.gpkg`
+* clips  the raster products (orthos & DEMs) to the project boundary polygon
+* converts clipped raster products to COGs
+* Creates a canopy height model from DSM & DTM
+* creates thumbnails of all raster products
+* uploads the finished imagery products to S3 `ofo-public`
+  * clipped orthomosaic, clipped DSM, clipped DTM, clipped CHM, point cloud, thumbnails for all raster products, cameras.xml, report.pdf, log.txt
+ 
+The main rscript is [here](https://github.com/open-forest-observatory/ofo-catalog-data-prep/blob/main/deploy/drone-imagery-ingestion/03_photogrammetry/src/20_postprocess-photogrammetry-products.R)
+
+Additional rscript are [here](https://github.com/open-forest-observatory/ofo-catalog-data-prep/blob/main/deploy/drone-imagery-ingestion/00_set-constants.R) and [here](https://github.com/open-forest-observatory/ofo-catalog-data-prep/blob/main/src/utils.R)
+
+
+
+
+
+
+
+
+
 # Open Forest Observatory Argo Workflow
 
 This repository contains [Argo Workflows](https://argoproj.github.io/workflows) used by the **Open Forest Observatory (OFO)**. It is being developed to run the [automate-metashape](https://github.com/open-forest-observatory/automate-metashape) pipeline simultaneously across multiple virtual machines on [Jetstream2 Cloud](https://jetstream-cloud.org/). This type of scaling enables OFO to process many photogrammetry projects simultaneously with a single run command. Argo is meant to work on [Kubernetes](https://kubernetes.io/docs/concepts/overview/) which orchestrates containers (ie, automate-metashape in docker), scales the processing to multiple VMs, and balances the load between the VMs. 
