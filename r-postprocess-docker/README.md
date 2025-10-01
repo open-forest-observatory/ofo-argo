@@ -217,7 +217,7 @@ main <- function() {
 
 ### 4. 20_postprocess-photogrammetry-products.R - Core Processing Engine
 
-**Location**: `r-postprocess-docker/scripts/20_postprocess-photogrammetry-products.R`
+**Location**: `r-postprocess-docker/20_postprocess-photogrammetry-products.R`
 
 This script contains the core photogrammetry processing logic, adapted for containerized execution:
 
@@ -278,25 +278,7 @@ packages <- c("lidR", "purrr")  # Additional packages beyond rocker/geospatial
 - Only installs additional packages needed for point cloud processing (lidR) and functional programming (purrr)
 - Includes verification step to ensure all packages load correctly
 
-### 6. Supporting Tools
 
-#### build-and-test.sh - Build Automation
-
-**Location**: `r-postprocess-docker/build-and-test.sh`
-
-Automated build and testing pipeline:
-
-```bash
-# Prerequisites check
-docker --version && docker info
-
-# Container build
-docker build -t ofo-r-postprocess:latest .
-
-# Functionality tests
-docker run --rm ofo-r-postprocess:latest  # Tests env validation
-docker run --rm --entrypoint /bin/bash ofo-r-postprocess:latest -c "rclone version; Rscript --version"
-```
 
 
 
