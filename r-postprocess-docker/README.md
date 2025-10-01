@@ -78,7 +78,7 @@ The container follows a multi-script architecture where each component has a spe
 ├─────────────────────────────────────────────────────────────┤
 │  Supporting Components:                                     │
 │  ├─ install_packages.R (Dependency management)             │
-│  ├─ build-and-test.sh (Build automation)                   │
+│                     │
 │                  │
 └─────────────────────────────────────────────────────────────┘
 ```
