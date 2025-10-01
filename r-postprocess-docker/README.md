@@ -60,26 +60,26 @@ The container follows a multi-script architecture where each component has a spe
 ┌─────────────────────────────────────────────────────────────┐
 │                    Docker Container                          │
 ├─────────────────────────────────────────────────────────────┤
-│  docker-entrypoint.sh (Shell orchestration layer)          │
+│  docker-entrypoint.sh (Shell orchestration layer)           │
 │  ├─ Environment validation                                  │
-│  ├─ System checks (R, rclone, packages)                    │
+│  ├─ System checks (R, rclone, packages)                     │
 │  └─ Launch entrypoint.R                                     │
 ├─────────────────────────────────────────────────────────────┤
-│  entrypoint.R (Main processing orchestrator)               │
-│  ├─ S3 configuration and data downloads                    │
-│  ├─ Mission auto-detection and matching                    │
-│  ├─ Process each mission via containerized function        │
-│  └─ Upload results and cleanup                             │
+│  entrypoint.R (Main processing orchestrator)                │
+│  ├─ S3 configuration and data downloads                     │
+│  ├─ Mission auto-detection and matching                     │
+│  ├─ Process each mission via containerized function         │
+│  └─ Upload results and cleanup                              │
 ├─────────────────────────────────────────────────────────────┤
-│  20_postprocess-photogrammetry-products.R                  │
-│  ├─ Core photogrammetry processing functions               │
-│  ├─ Raster cropping, CHM generation, thumbnail creation    │
-│  └─ File format conversions (COG, PNG thumbnails)          │
+│  20_postprocess-photogrammetry-products.R                   │
+│  ├─ Core photogrammetry processing functions                │
+│  ├─ Raster cropping, CHM generation, thumbnail creation     │
+│  └─ File format conversions (COG, PNG thumbnails)           │
 ├─────────────────────────────────────────────────────────────┤
 │  Supporting Components:                                     │
-│  ├─ install_packages.R (Dependency management)             │
-│                     │
-│                  │
+│  ├─ install_packages.R (Dependency management)              │
+│                                                             │
+│                                                             │
 └─────────────────────────────────────────────────────────────┘
 ```
 
@@ -106,7 +106,7 @@ RUN curl https://rclone.org/install.sh | bash
 
 # Set working directory and copy scripts
 WORKDIR /app
-COPY scripts/ ./scripts/
+COPY 20_postprocess-photogrammetry-products.R .
 COPY install_packages.R .
 COPY entrypoint.R .
 COPY docker-entrypoint.sh .
