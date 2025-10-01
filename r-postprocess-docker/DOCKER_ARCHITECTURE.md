@@ -2,15 +2,55 @@
 
 ## Overview
 
-The `r-postprocess-docker` container was created to containerize the photogrammetry post-processing pipeline for the Open Forest Observatory (OFO) project. This container automates the download, processing, and upload of drone imagery products, transforming raw photogrammetry outputs into publication-ready deliverables.
+The `photogrammetry-postprocess:0.1` docker image was created to containerize the photogrammetry post-processing pipeline for the Open Forest Observatory (OFO) project. This container automates the download, processing, and upload of drone imagery products, transforming raw photogrammetry outputs into publication-ready deliverables.
 
-The container addresses the need to:
-- Process multiple missions simultaneously with automatic mission detection
-- Handle S3 data transfers efficiently using rclone
+The container does the following:
+- Looks for a directory of metashape outputs in the S3 bucket `ofo-internal`
+- Downloads the directory and data to the local machine
 - Crop rasters to mission boundaries and convert to Cloud Optimized GeoTIFFs (COGs)
 - Generate Canopy Height Models (CHMs) from DSM/DTM differences
 - Create thumbnails for web display
-- Maintain data consistency with proper error handling and cleanup
+- Uploads the finished products to S3 bucket `ofo-public` 
+
+
+## Docker Commands
+
+### Build Command
+```bash
+cd r-postprocess-docker
+docker build -t ghcr.io/open-forest-observatory/photogrammetry-postprocess:0.1 .
+```
+
+**Build Process**:
+1. Downloads rocker/geospatial base image (~2GB)
+2. Installs system dependencies (curl, unzip, wget)
+3. Installs rclone from official script
+4. Copies all scripts and sets permissions
+5. Installs additional R packages
+6. Creates processing directory structure
+
+### Run Command
+```bash
+docker run --rm \
+  -e S3_ENDPOINT="https://js2.jetstream-cloud.org:8001" \
+  -e S3_PROVIDER="Other" \
+  -e S3_ACCESS_KEY="your_access_key" \
+  -e S3_SECRET_KEY="your_secret_key" \
+  -e S3_BUCKET_INPUT_DATA="ofo-internal" \
+  -e INPUT_DATA_DIRECTORY="run_folder" \
+  -e S3_BUCKET_INPUT_BOUNDARY="ofo-public" \
+  -e INPUT_BOUNDARY_DIRECTORY="mission_boundaries" \
+  -e S3_BUCKET_OUTPUT="ofo-public" \
+  -e OUTPUT_DIRECTORY="processed_products" \
+  -e TERRA_MEMFRAC="0.9" \
+  -e OUTPUT_MAX_DIM="800" \
+  ghcr.io/open-forest-observatory/photogrammetry-postprocess:0.1
+```
+
+
+
+
+
 
 ## Architecture Overview
 
@@ -273,94 +313,5 @@ parse("/path/to/entrypoint.R")
 test_data <- data.frame(filename = c("test_mission_ortho.tif", "test_mission_dsm.tif"))
 ```
 
-## Docker Commands
 
-### Build Command
-```bash
-cd r-postprocess-docker
-docker build -t ofo-r-postprocess:latest .
-```
 
-**Build Process**:
-1. Downloads rocker/geospatial base image (~2GB)
-2. Installs system dependencies (curl, unzip, wget)
-3. Installs rclone from official script
-4. Copies all scripts and sets permissions
-5. Installs additional R packages
-6. Creates processing directory structure
-
-### Run Command
-```bash
-docker run --rm \
-  -e S3_ENDPOINT="https://js2.jetstream-cloud.org:8001" \
-  -e S3_PROVIDER="Other" \
-  -e S3_ACCESS_KEY="your_access_key" \
-  -e S3_SECRET_KEY="your_secret_key" \
-  -e S3_BUCKET_INPUT_DATA="ofo-internal" \
-  -e INPUT_DATA_DIRECTORY="run_folder" \
-  -e S3_BUCKET_INPUT_BOUNDARY="ofo-public" \
-  -e INPUT_BOUNDARY_DIRECTORY="mission_boundaries" \
-  -e S3_BUCKET_OUTPUT="ofo-public" \
-  -e OUTPUT_DIRECTORY="processed_products" \
-  -e TERRA_MEMFRAC="0.9" \
-  -e OUTPUT_MAX_DIM="800" \
-  ofo-r-postprocess:latest
-```
-
-## Integration with OFO Argo Workflow
-
-This container integrates into the broader OFO Argo Workflow ecosystem:
-
-### Current Workflow Context:
-1. **Metashape Processing**: `automate-metashape` container processes raw drone imagery
-2. **Output Storage**: Metashape products stored in `/ofo-share/argo-outputs/`
-3. **R Post-Processing**: This container downloads, processes, and uploads final products
-4. **Final Storage**: Processed products uploaded to S3 buckets (`ofo-internal`, `ofo-public`)
-
-### Containerization Benefits:
-- **Environment Isolation**: Consistent R and system dependencies across different execution environments
-- **Scalability**: Can be deployed in Kubernetes pods alongside Metashape processing
-- **Flexibility**: Decouples post-processing from main Argo workflow, allowing independent scaling
-- **Data Locality**: Processes data where it's stored, reducing data transfer overhead
-
-### Future Integration Possibilities:
-- **Argo Workflow Step**: Could replace current post-processing steps in `workflow.yaml`
-- **Parallel Processing**: Multiple instances could process different missions simultaneously
-- **Resource Management**: Container can be allocated specific CPU/memory resources
-- **Monitoring**: Container logs integrate with Kubernetes monitoring systems
-
-## Development Process Summary
-
-The creation of this Docker container involved several key steps:
-
-### 1. Requirements Analysis
-- Identified need to containerize existing R post-processing pipeline
-- Analyzed dependencies: R packages, system tools (rclone), data flow patterns
-- Determined S3 integration requirements for Jetstream2 object storage
-
-### 2. Architecture Design
-- Chose multi-script approach for clear separation of concerns
-- Selected rocker/geospatial as optimal base image for geospatial R workflows
-- Designed auto-detection system for flexible mission processing
-
-### 3. Script Adaptation
-- **Containerized Version**: Adapted `20_postprocess-photogrammetry-products.R` from original script
-- **Parameter Passing**: Changed from file-based configuration to function parameters
-- **Data Flow**: Modified to work with downloaded files rather than network file systems
-
-### 4. S3 Integration
-- **rclone Configuration**: Dynamic configuration generation from environment variables
-- **Download Strategy**: Bulk download followed by local processing for efficiency
-- **Upload Optimization**: Per-mission uploads to handle partial failures gracefully
-
-### 5. Error Handling & Robustness
-- **Environment Validation**: Comprehensive checks for required configuration
-- **Graceful Degradation**: Continues processing other missions if one fails
-- **Resource Management**: Configurable memory limits and cleanup procedures
-
-### 6. Testing & Validation
-- **Automated Testing**: Build and test scripts for continuous validation
-- **Syntax Checking**: Separate validation scripts for code correctness
-- **Integration Testing**: Validation against real S3 data and mission files
-
-This containerized approach represents a significant evolution from the original script-based processing, providing better isolation, reproducibility, and integration capabilities for the OFO processing pipeline.
