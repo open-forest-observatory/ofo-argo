@@ -79,7 +79,7 @@ The container follows a multi-script architecture where each component has a spe
 │  Supporting Components:                                     │
 │  ├─ install_packages.R (Dependency management)             │
 │  ├─ build-and-test.sh (Build automation)                   │
-│  └─ test-syntax.R (Validation utilities)                   │
+│                  │
 └─────────────────────────────────────────────────────────────┘
 ```
 
@@ -298,20 +298,8 @@ docker run --rm ofo-r-postprocess:latest  # Tests env validation
 docker run --rm --entrypoint /bin/bash ofo-r-postprocess:latest -c "rclone version; Rscript --version"
 ```
 
-#### test-syntax.R - Code Validation
 
-**Location**: `r-postprocess-docker/test-syntax.R`
 
-Syntax and basic functionality testing:
-
-```r
-# Syntax validation
-parse("/path/to/scripts/20_postprocess-photogrammetry-products.R")
-parse("/path/to/entrypoint.R")
-
-# Basic functionality tests
-test_data <- data.frame(filename = c("test_mission_ortho.tif", "test_mission_dsm.tif"))
-```
 
 
 
