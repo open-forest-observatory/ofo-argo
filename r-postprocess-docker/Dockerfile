@@ -14,7 +14,7 @@ RUN curl https://rclone.org/install.sh | bash
 WORKDIR /app
 
 # Copy R scripts and installation files
-COPY scripts/ ./scripts/
+COPY 20_postprocess-photogrammetry-products.R .
 COPY install_packages.R .
 COPY entrypoint.R .
 COPY docker-entrypoint.sh .
