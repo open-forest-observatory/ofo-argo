@@ -10,7 +10,7 @@ suppressPackageStartupMessages({
 })
 
 # Source the main processing script
-source("/app/scripts/20_postprocess-photogrammetry-products.R")
+source("/app/20_postprocess-photogrammetry-products.R")
 
 # Helper function to setup rclone configuration
 setup_rclone_config <- function() {
