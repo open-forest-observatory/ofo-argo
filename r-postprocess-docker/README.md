@@ -32,18 +32,16 @@ docker build -t ghcr.io/open-forest-observatory/photogrammetry-postprocess:0.1 .
 ### Run Command
 ```bash
 docker run --rm \
-  -e S3_ENDPOINT="https://js2.jetstream-cloud.org:8001" \
-  -e S3_PROVIDER="Other" \
-  -e S3_ACCESS_KEY="your_access_key" \
-  -e S3_SECRET_KEY="your_secret_key" \
-  -e S3_BUCKET_INPUT_DATA="ofo-internal" \
-  -e INPUT_DATA_DIRECTORY="run_folder" \
-  -e S3_BUCKET_INPUT_BOUNDARY="ofo-public" \
-  -e INPUT_BOUNDARY_DIRECTORY="mission_boundaries" \
-  -e S3_BUCKET_OUTPUT="ofo-public" \
-  -e OUTPUT_DIRECTORY="processed_products" \
-  -e TERRA_MEMFRAC="0.9" \
-  -e OUTPUT_MAX_DIM="800" \
+  -e S3_ENDPOINT=https://js2.jetstream-cloud.org:8001 \
+  -e S3_PROVIDER=Other \
+  -e S3_ACCESS_KEY=<your_access_key> \
+  -e S3_SECRET_KEY=<your_secret_key> \
+  -e S3_BUCKET_INPUT_DATA=ofo-internal \
+  -e INPUT_DATA_DIRECTORY=<run_folder> \
+  -e S3_BUCKET_INPUT_BOUNDARY=ofo-public \
+  -e INPUT_BOUNDARY_DIRECTORY=<mission_boundaries_directory> \
+  -e S3_BUCKET_OUTPUT=ofo-public \
+  -e OUTPUT_DIRECTORY=<processed_products> \
   ghcr.io/open-forest-observatory/photogrammetry-postprocess:0.1
 ```
 
