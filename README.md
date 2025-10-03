@@ -1,36 +1,3 @@
-
-## Add 'Post-processing' step in Argo workflow
-
-I have developed a working prototype stand alone docker image. It is located on 'worker0' on a Cacao Js2 VM. In the directory `~/ofo-argo/rscripts` type `claude`
-
-The docker image: 
-
-* downloads metashape output imagery products from S3 bucket `ofo-internal`, the directory is called `gillan_sept12b`
-   * downloads entire directory of metashape outputs to the container
-* downloads project boundaries polygon (.gpkg)
-  * The real polygons are located at `S3: ofo-public drone/missions_01/000032/metadata-mission/000032_mission-metadata.gpkg`
-  * The testing polygon is at `S3:ofo-public jgillan_test/benchmarking-greasewood_mission-metadata.gpkg`
-* clips  the raster products (orthos & DEMs) to the project boundary polygon
-* converts clipped raster products to COGs
-* Creates a canopy height model from DSM & DTM
-* creates thumbnails of all raster products
-* uploads the finished imagery products to S3 `ofo-public` into a directory of my choosing
-  * clipped orthomosaic, clipped DSM, clipped DTM, clipped CHM, point cloud, thumbnails for all raster products, cameras.xml, report.pdf, log.txt
-
-### Rscripts that inspired the docker rscripts:
-
-The main rscript is [here](https://github.com/open-forest-observatory/ofo-catalog-data-prep/blob/main/deploy/drone-imagery-ingestion/03_photogrammetry/src/20_postprocess-photogrammetry-products.R)
-
-Additional rscript are [here](https://github.com/open-forest-observatory/ofo-catalog-data-prep/blob/main/deploy/drone-imagery-ingestion/00_set-constants.R) and [here](https://github.com/open-forest-observatory/ofo-catalog-data-prep/blob/main/src/utils.R)
-
-
-
-
-
-
-
-
-
 # Open Forest Observatory Argo Workflow
 
 This repository contains [Argo Workflows](https://argoproj.github.io/workflows) used by the **Open Forest Observatory (OFO)**. It is being developed to run the [automate-metashape](https://github.com/open-forest-observatory/automate-metashape) pipeline simultaneously across multiple virtual machines on [Jetstream2 Cloud](https://jetstream-cloud.org/). This type of scaling enables OFO to process many photogrammetry projects simultaneously with a single run command. Argo is meant to work on [Kubernetes](https://kubernetes.io/docs/concepts/overview/) which orchestrates containers (ie, automate-metashape in docker), scales the processing to multiple VMs, and balances the load between the VMs. 
@@ -38,6 +5,8 @@ This repository contains [Argo Workflows](https://argoproj.github.io/workflows) 
 The current setup includes a _controller_ (called master in Js2) VM instance and multiple _worker_ instances (they process metashape projects). The worker instances are configured to process one metashape project at a time. If there are more metashape projects than worker instances, the projects will be queued until a worker is free. GPU worker instances will greatly increase the speed of processing.  
 
 The current version will output Metashape imagery products to the S3 bucket `ofo-internal`. 
+
+An additional 'post-processing' step is under development. A standalone docker image has been created that takes Metashape products in the S3 bucket and does a series of addtional steps including the creation of a canopy height model, converting all tifs to COGs, and the creation of thumbnails for each .tif product. All of the final products and report are uploaded to S3 bucket `ofo-public`. [here](/postprocess_docker)
 
 <br/>
 
