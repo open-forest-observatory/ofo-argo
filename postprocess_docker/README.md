@@ -1,35 +1,20 @@
-# Post-Processing Docker Container
+# Post-Processing Docker Image
+
 
 ## Overview
 
-The `photogrammetry-postprocess:1.0` docker image was created to containerize the photogrammetry post-processing pipeline for the Open Forest Observatory (OFO) project. This container automates the download, processing, and upload of drone imagery products, transforming raw photogrammetry outputs into publication-ready deliverables.
+This Docker image provides automated post-processing of photogrammetry products from drone surveys. It downloads raw photogrammetry outputs (orthomosaics, DSMs, DTMs) and mission boundary polygons from S3 storage, crops rasters to mission boundaries, generates Canopy Height Models (CHMs), creates Cloud Optimized GeoTIFFs (COGs), produces PNG thumbnails, and uploads processed products back to S3 in organized mission-specific directories.
 
-The container does the following:
-- Looks for a directory of metashape outputs in the S3 bucket `ofo-internal`
-- Downloads the directory and data to the local machine
-- Crop rasters to mission boundaries and convert to Cloud Optimized GeoTIFFs (COGs)
-- Generate Canopy Height Models (CHMs) from DSM/DTM differences
-- Create thumbnails for web display
-- Uploads the finished products to S3 bucket `ofo-public` 
+The image is based on GDAL (Geospatial Data Abstraction Library) and includes Python geospatial tools (rasterio, geopandas) and rclone for S3 operations.
 
+## Build Command
 
-## Docker Commands
-
-### Build Command
 ```bash
-cd postprocess-docker
-docker build -t ghcr.io/open-forest-observatory/photogrammetry-postprocess:1.0 .
+docker build -t ghcr.io/open-forest-observatory/python-photogrammetry-postprocess:latest .
 ```
 
-**Build Process**:
-1. Downloads rocker/geospatial base image (~2GB)
-2. Installs system dependencies (curl, unzip, wget)
-3. Installs rclone from official script
-4. Copies all scripts and sets permissions
-5. Installs additional R packages
-6. Creates processing directory structure
+## Run Command
 
-### Run Command
 ```bash
 docker run --rm \
   -e S3_ENDPOINT=https://js2.jetstream-cloud.org:8001 \
@@ -39,239 +24,198 @@ docker run --rm \
   -e S3_BUCKET_INPUT_DATA=ofo-internal \
   -e INPUT_DATA_DIRECTORY=<run_folder> \
   -e S3_BUCKET_INPUT_BOUNDARY=ofo-public \
-  -e INPUT_BOUNDARY_DIRECTORY=<mission_boundaries_directory> \
+  -e INPUT_BOUNDARY_DIRECTORY=<boundaries_directory> \
   -e S3_BUCKET_OUTPUT=ofo-public \
-  -e OUTPUT_DIRECTORY=<processed_products> \
-  ghcr.io/open-forest-observatory/photogrammetry-postprocess:0.1
+  -e OUTPUT_DIRECTORY=<output_directory> \
+  -e OUTPUT_MAX_DIM=800 \
+  -e WORKING_DIR=/tmp/processing \
+  ghcr.io/open-forest-observatory/python-photogrammetry-postprocess:latest
 ```
 
+### Required Environment Variables
 
+- `S3_ENDPOINT`: S3-compatible storage endpoint URL
+- `S3_ACCESS_KEY`: S3 access key for authentication
+- `S3_SECRET_KEY`: S3 secret key for authentication
+- `S3_BUCKET_INPUT_DATA`: S3 bucket containing raw photogrammetry products
+- `INPUT_DATA_DIRECTORY`: Directory path within input bucket (e.g., run folder name)
+- `S3_BUCKET_INPUT_BOUNDARY`: S3 bucket containing mission boundary polygons
+- `INPUT_BOUNDARY_DIRECTORY`: Base directory for boundary files
 
+### Optional Environment Variables
 
+- `S3_BUCKET_OUTPUT`: Output S3 bucket (defaults to `S3_BUCKET_INPUT_DATA`)
+- `OUTPUT_DIRECTORY`: Output directory path (defaults to `processed`)
+- `OUTPUT_MAX_DIM`: Maximum thumbnail dimension in pixels (default: `800`)
+- `WORKING_DIR`: Local working directory for processing (default: `/tmp/processing`)
+- `S3_PROVIDER`: S3 provider type (default: `Other`)
 
+## Script Functions
 
-## Architecture Overview
+### entrypoint.py
 
-The container follows a multi-script architecture where each component has a specific responsibility:
+**Purpose**: Main orchestration script that coordinates the entire post-processing workflow.
+
+**Key Functions**:
+
+- `setup_rclone_config()`: Creates rclone configuration file from environment variables for S3 access
+- `download_photogrammetry_products()`: Discovers mission subdirectories in S3 and downloads all photogrammetry products (orthomosaics, DSMs, DTMs, point clouds) to local storage
+- `download_boundary_polygons(mission_dirs)`: Downloads mission boundary polygon files from nested S3 structure (`<boundary_base>/<mission_name>/metadata-mission/<mission_name>_mission-metadata.gpkg`)
+- `detect_and_match_missions()`: Auto-detects missions using directory structure and matches photogrammetry products with their corresponding boundary polygons
+- `upload_processed_products(mission_prefix)`: Uploads processed full-resolution products and thumbnails to S3 in mission-specific `processed_01` directories
+- `cleanup_working_directory()`: Removes temporary processing files after completion
+- `main()`: Primary execution function that validates environment, orchestrates downloads, processes each mission, uploads results, and reports summary statistics
+
+**Workflow**:
+1. Validates required environment variables
+2. Configures rclone for S3 operations
+3. Downloads all photogrammetry products from mission subdirectories
+4. Downloads boundary polygons for each mission
+5. Auto-detects and matches missions with boundaries
+6. Processes each mission by calling `postprocess_photogrammetry_containerized()`
+7. Uploads processed products for each mission
+8. Cleans up temporary files
+9. Reports success/failure summary
+
+### postprocess.py
+
+**Purpose**: Core raster processing library containing geospatial analysis and transformation functions.
+
+**Key Functions**:
+
+- `create_dir(path)`: Utility to create directories with parent creation
+- `lonlat_to_utm_epsg(lon, lat)`: Calculates UTM zone EPSG code from geographic coordinates (handles northern/southern hemispheres)
+- `transform_to_local_utm(gdf)`: Reprojects GeoDataFrame to its local UTM zone based on centroid location
+- `crop_raster_save_cog(raster_filepath, output_filename, mission_polygon, output_path)`: Crops input raster to mission boundary polygon and saves as Cloud Optimized GeoTIFF with deflate compression and tiling
+- `make_chm(dsm_filepath, dtm_filepath)`: Generates Canopy Height Model by subtracting DTM from DSM, with automatic reprojection to match coordinate systems
+- `create_thumbnail(tif_filepath, output_path, max_dim=800)`: Creates PNG thumbnail from GeoTIFF with configurable maximum dimension, handling grayscale and RGB imagery
+- `postprocess_photogrammetry_containerized(mission_prefix, boundary_file_path, product_file_paths)`: Main processing function that orchestrates cropping, COG creation, CHM generation, thumbnail creation, and file copying for a single mission
+
+**Processing Pipeline (per mission)**:
+1. Validates boundary and product file existence
+2. Reads mission boundary polygon from GeoPackage
+3. Builds product DataFrame with filename parsing (extracts product types like `ortho`, `dsm`, `dtm`)
+4. Crops all raster files (TIF/TIFF) to mission boundary and saves as COGs
+5. Attempts CHM creation from available DSM/DTM combinations (tries `dsm-mesh`/`dtm-ptcloud`, `dsm-ptcloud`/`dtm-ptcloud`, etc.)
+6. Copies non-raster files (e.g., point clouds, metadata) to output directory
+7. Generates PNG thumbnails for all output rasters
+8. Reports statistics on created products
+
+## Docker Image Architecture
+
+### Execution Flow
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                    Docker Container                          │
-├─────────────────────────────────────────────────────────────┤
-│  docker-entrypoint.sh (Shell orchestration layer)           │
-│  ├─ Environment validation                                  │
-│  ├─ System checks (R, rclone, packages)                     │
-│  └─ Launch entrypoint.R                                     │
-├─────────────────────────────────────────────────────────────┤
-│  entrypoint.R (Main processing orchestrator)                │
-│  ├─ S3 configuration and data downloads                     │
-│  ├─ Mission auto-detection and matching                     │
-│  ├─ Process each mission via containerized function         │
-│  └─ Upload results and cleanup                              │
-├─────────────────────────────────────────────────────────────┤
-│  20_postprocess-photogrammetry-products.R                   │
-│  ├─ Core photogrammetry processing functions                │
-│  ├─ Raster cropping, CHM generation, thumbnail creation     │
-│  └─ File format conversions (COG, PNG thumbnails)           │
-├─────────────────────────────────────────────────────────────┤
-│  Supporting Components:                                     │
-│  ├─ install_packages.R (Dependency management)              │
-│                                                             │
-│                                                             │
-└─────────────────────────────────────────────────────────────┘
+docker run → docker-entrypoint.sh → entrypoint.py → postprocess.py
 ```
 
-## Component Details
-
-### 1. Dockerfile - Container Foundation
-
-**Location**: `r-postprocess-docker/Dockerfile`
-
-The Dockerfile establishes the container environment using a multi-stage approach:
-
-```dockerfile
-FROM rocker/geospatial:latest
-
-# Install system dependencies
-RUN apt-get update && apt-get install -y \
-    curl \
-    unzip \
-    wget \
-    && rm -rf /var/lib/apt/lists/*
-
-# Install rclone for S3 operations
-RUN curl https://rclone.org/install.sh | bash
-
-# Set working directory and copy scripts
-WORKDIR /app
-COPY 20_postprocess-photogrammetry-products.R .
-COPY install_packages.R .
-COPY entrypoint.R .
-COPY docker-entrypoint.sh .
-
-# Install R packages and set permissions
-RUN Rscript install_packages.R
-RUN chmod +x docker-entrypoint.sh
-RUN chmod +x entrypoint.R
-
-# Create processing directory structure
-RUN mkdir -p /tmp/processing/{input,boundary,output/full,output/thumbnails,temp}
-
-ENTRYPOINT ["./docker-entrypoint.sh"]
-```
-
-**Key Design Decisions**:
-- **Base Image**: `rocker/geospatial:latest` provides R with geospatial packages (sf, terra, tidyverse) pre-installed
-- **rclone Integration**: Essential for S3 operations with Jetstream2 object storage
-- **Directory Structure**: Pre-creates organized processing directories for efficient data handling
-- **Permission Management**: Ensures all scripts are executable within container context
-
-### 2. docker-entrypoint.sh - System Validation Layer
-
-**Location**: `r-postprocess-docker/docker-entrypoint.sh`
-
-This bash script serves as the container's entry point, providing robust environment validation:
-
-```bash
-#!/bin/bash
-set -e
-
-# Environment variable validation
-required_vars=("S3_ENDPOINT" "S3_ACCESS_KEY" "S3_SECRET_KEY"
-               "S3_BUCKET_INPUT_DATA" "S3_BUCKET_INPUT_BOUNDARY")
-
-# System component testing
-rclone version
-Rscript -e "packages <- c('tidyverse', 'sf', 'terra', 'lidR', 'purrr')..."
-
-# Launch R processing
-exec Rscript /app/entrypoint.R "$@"
-```
+### 1. docker-entrypoint.sh (Shell Initialization Layer)
 
 **Responsibilities**:
-- **Environment Validation**: Ensures all required S3 credentials and bucket names are provided
-- **System Checks**: Verifies rclone and R installations, tests R package availability
-- **Default Values**: Sets sensible defaults for optional parameters (TERRA_MEMFRAC=0.9, OUTPUT_MAX_DIM=800)
-- **Error Handling**: Provides clear error messages for missing dependencies or configuration
+- Environment variable validation (checks for required S3 credentials and paths)
+- System dependency verification (rclone, python3)
+- Python package import testing (rasterio, geopandas, numpy, pandas, matplotlib)
+- Sets default values for optional variables (`WORKING_DIR`, `OUTPUT_MAX_DIM`)
+- Error handling with early exit on validation failures
 
-### 3. entrypoint.R - Processing Orchestrator
+**Output**: Prints configuration summary and system status before handing control to Python
 
-**Location**: `r-postprocess-docker/entrypoint.R`
+### 2. entrypoint.py (Orchestration Layer)
 
-The main R script that orchestrates the entire processing pipeline:
+**Responsibilities**:
+- S3 configuration via rclone
+- Data acquisition (downloads products and boundaries from S3)
+- Mission detection and matching logic
+- Iteration over missions with error handling per mission
+- Upload of processed products to S3
+- Cleanup and summary reporting
 
-#### Key Functions:
+**Key Design Patterns**:
+- Uses subprocess calls to rclone for S3 operations
+- Handles partial failures gracefully (continues processing other missions if one fails)
+- Organizes S3 uploads into mission-specific directories: `<output_base>/<mission_name>/processed_01/{full,thumbnails}/`
 
-**setup_rclone_config()**:
-- Creates rclone configuration file with S3 credentials
-- Configures connection to Jetstream2 object storage endpoint
-- Handles provider-specific settings
+### 3. postprocess.py (Processing Layer)
 
-**download_photogrammetry_products()** & **download_boundary_polygons()**:
-- Downloads all available files from specified S3 buckets/directories
-- Uses parallel transfers for efficiency (8 transfers, 8 checkers)
-- Implements retry logic for network resilience
+**Responsibilities**:
+- Geospatial raster operations (cropping, reprojection, masking)
+- COG creation with optimized compression and tiling
+- CHM generation with automatic CRS alignment
+- Thumbnail rendering with matplotlib
 
-**detect_and_match_missions()**:
-- **Auto-Detection Logic**: Extracts mission prefixes by parsing filenames
-  - Example: `benchmarking_greasewood_ortho.tif` → mission prefix: `benchmarking_greasewood`
-  - Strategy: Split by underscore, remove last part (product type)
-- **Intelligent Matching**: Pairs photogrammetry products with corresponding boundary polygons
-- **Validation**: Ensures each mission has required boundary file before processing
+**Key Technologies**:
+- **rasterio**: Raster I/O, warping, and masking
+- **geopandas/shapely**: Vector polygon operations and CRS transformations
+- **numpy**: Array-based CHM calculations
+- **matplotlib**: PNG thumbnail generation with exact pixel control
 
-**upload_processed_products()**:
-- Uploads processed files back to S3 output location
-- Maintains directory structure (full resolution vs thumbnails)
-- Handles per-mission uploads to avoid large batch failures
+### Directory Structure in Container
 
-#### Processing Workflow:
+```
+/app/
+├── docker-entrypoint.sh    # Bash validation script
+├── entrypoint.py           # Python orchestration script
+├── postprocess.py          # Python processing library
+└── requirements.txt        # Python dependencies
 
-```r
-main <- function() {
-  # 1. Environment setup and validation
-  setup_rclone_config()
-
-  # 2. Data acquisition
-  download_photogrammetry_products()
-  download_boundary_polygons()
-
-  # 3. Mission discovery and matching
-  mission_matches <- detect_and_match_missions()
-
-  # 4. Process each mission individually
-  for (mission in mission_matches) {
-    postprocess_photogrammetry_containerized(
-      mission$prefix,
-      mission$boundary_file,
-      mission$product_files
-    )
-    upload_processed_products(mission$prefix)
-  }
-
-  # 5. Cleanup
-  cleanup_working_directory()
-}
+/tmp/processing/            # Working directory
+├── input/                  # Downloaded photogrammetry products
+│   └── <mission_name>/     # Per-mission subdirectories
+├── boundary/               # Downloaded boundary polygons
+│   └── <mission_name>/     # Per-mission subdirectories
+├── output/
+│   ├── full/              # Full-resolution COGs and CHMs
+│   └── thumbnails/        # PNG preview images
+└── temp/                  # Temporary processing files
 ```
 
-### 4. 20_postprocess-photogrammetry-products.R - Core Processing Engine
+### Data Flow
 
-**Location**: `r-postprocess-docker/20_postprocess-photogrammetry-products.R`
+1. **Download Phase**: rclone copies data from S3 to `/tmp/processing/{input,boundary}/`
+2. **Processing Phase**: Python reads from input directories, processes rasters, writes to `/tmp/processing/output/`
+3. **Upload Phase**: rclone copies from `/tmp/processing/output/` to S3 in mission-specific paths
+4. **Cleanup Phase**: Entire `/tmp/processing/` directory removed
 
-This script contains the core photogrammetry processing logic, adapted for containerized execution:
+### Expected S3 Structure
 
-#### Key Processing Functions:
-
-**postprocess_photogrammetry_containerized()**:
-The main processing function that handles a single mission:
-
-```r
-postprocess_photogrammetry_containerized(mission_prefix, boundary_file_path, product_file_paths)
+**Input Data** (raw photogrammetry):
+```
+s3://<S3_BUCKET_INPUT_DATA>/<INPUT_DATA_DIRECTORY>/
+└── <mission_name>/
+    ├── <mission_name>_ortho.tif
+    ├── <mission_name>_dsm-ptcloud.tif
+    ├── <mission_name>_dtm-ptcloud.tif
+    └── ...
 ```
 
-**Processing Steps**:
-
-1. **Input Validation**: Verifies all input files exist before processing
-2. **File Analysis**: Parses product filenames to determine types (dsm, dtm, ortho, points, etc.)
-3. **Raster Processing**:
-   - **crop_raster_save_cog()**: Crops rasters to mission boundaries and saves as Cloud Optimized GeoTIFFs
-   - **Boundary Matching**: Reprojects mission polygons to match raster CRS
-   - **COG Conversion**: Uses GDAL options for optimal web delivery
-4. **CHM Generation**:
-   - **make_chm()**: Calculates Canopy Height Model from DSM - DTM
-   - **Smart Pairing**: Tries different DSM/DTM combinations (dsm-mesh + dtm-ptcloud, etc.)
-   - **CRS Alignment**: Ensures DTM is reprojected to match DSM before calculation
-5. **Thumbnail Creation**:
-   - Scales images to configurable maximum dimension (default 800px)
-   - Creates PNG thumbnails for web display
-   - Handles single-band and RGB imagery appropriately
-6. **File Management**: Copies non-raster files (point clouds, reports, camera files) to output
-
-#### Utility Functions:
-
-**transform_to_local_utm()** & **lonlat_to_utm_epsg()**:
-- Reprojects geometries to appropriate UTM zone for accurate processing
-- Handles cross-UTM zone validation
-
-**create_dir()** & **drop_units_if_present()**:
-- Directory management and unit handling utilities
-
-### 5. install_packages.R - Dependency Management
-
-**Location**: `r-postprocess-docker/install_packages.R`
-
-Handles R package installation during container build:
-
-```r
-install_if_missing <- function(pkg) {
-  if (!require(pkg, character.only = TRUE, quietly = TRUE)) {
-    install.packages(pkg, repos = "https://cran.rstudio.com/", dependencies = TRUE)
-  }
-}
-
-packages <- c("lidR", "purrr")  # Additional packages beyond rocker/geospatial
+**Boundary Data**:
+```
+s3://<S3_BUCKET_INPUT_BOUNDARY>/<INPUT_BOUNDARY_DIRECTORY>/
+└── <mission_name>/
+    └── metadata-mission/
+        └── <mission_name>_mission-metadata.gpkg
 ```
 
-**Strategy**:
-- Leverages rocker/geospatial base image for core packages (tidyverse, sf, terra)
-- Only installs additional packages needed for point cloud processing (lidR) and functional programming (purrr)
-- Includes verification step to ensure all packages load correctly
+**Output Data** (processed products):
+```
+s3://<S3_BUCKET_OUTPUT>/<OUTPUT_DIRECTORY>/
+└── <mission_name>/
+    └── processed_01/
+        ├── full/
+        │   ├── <mission_name>_ortho.tif        # COG
+        │   ├── <mission_name>_dsm-ptcloud.tif  # COG
+        │   ├── <mission_name>_dtm-ptcloud.tif  # COG
+        │   ├── <mission_name>_chm.tif          # Generated CHM
+        │   └── ...
+        └── thumbnails/
+            ├── <mission_name>_ortho.png
+            ├── <mission_name>_dsm-ptcloud.png
+            ├── <mission_name>_dtm-ptcloud.png
+            ├── <mission_name>_chm.png
+            └── ...
+```
+
+## Exit Codes
+
+- `0`: All missions processed successfully
+- `1`: One or more missions failed (partial success) or validation error
