@@ -6,7 +6,7 @@ The current setup includes a _controller_ (called master in Js2) VM instance and
 
 The current version will output Metashape imagery products to the S3 bucket `ofo-internal`. 
 
-An additional 'post-processing' step is under development. A standalone docker image has been created that takes Metashape products in the S3 bucket and does a series of addtional steps including the creation of a canopy height model, converting all tifs to COGs, and the creation of thumbnails for each .tif product. All of the final products and report are uploaded to S3 bucket `ofo-public`. [here](/postprocess_docker)
+An additional ['post-processing'](/postprocess_docker) step is under development. A standalone docker image has been created that takes Metashape products in the S3 bucket and does a series of addtional steps including the creation of a canopy height model, converting all tifs to COGs, and the creation of thumbnails for each .tif product. All of the final products and report are uploaded to S3 bucket `ofo-public`. This docker image has NOT been incorporated into the argo workflow yet. 
 
 <br/>
 
