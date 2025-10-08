@@ -16,14 +16,14 @@ spec:
         default: "default-run"
       - name: AGISOFT_FLS
         default: ""
-      - name: DB_HOST
-        default: ""
-      - name: DB_NAME
-        default: ""
-      - name: DB_USER
-        default: ""
-      - name: DB_PASSWORD
-        default: ""
+      #- name: DB_HOST
+        #default: ""
+      #- name: DB_NAME
+        #default: ""
+      #- name: DB_USER
+        #default: ""
+      #- name: DB_PASSWORD
+        #default: ""
       # S3 / rclone upload parameters
       - name: S3_BUCKET
         default: ""
@@ -48,12 +48,12 @@ spec:
       steps:
         - - name: determine-datasets
             template: determine-datasets
-        - - name: log-datasets-to-db
-            template: log-datasets-to-db
-            arguments:
-              parameters:
-                - name: datasets
-                  value: "{{steps.determine-datasets.outputs.result}}"
+        #- - name: log-datasets-to-db
+            #template: log-datasets-to-db
+            #arguments:
+              #parameters:
+                #- name: datasets
+                  #value: "{{steps.determine-datasets.outputs.result}}"
         - - name: process-datasets
             template: process-dataset-workflow
             arguments:
@@ -89,28 +89,28 @@ spec:
               
     # launches a docker container which contains our custom py script to log the dataset names into a postgis database
     # takes the json list of dataset names (from the 'determine datasets' step)
-    - name: log-datasets-to-db
-      inputs:
-        parameters:
-          - name: datasets
-      container:
-        image: ghcr.io/open-forest-observatory/ofo-argo-utils:latest
-        command: ["python", "/app/db_logger.py"]
-        args:
-          - "log-initial"
-          - "--workflow-id"
-          - "{{workflow.name}}"
-          - "--datasets-json"
-          - "{{inputs.parameters.datasets}}"
-        env:
-          - name: DB_HOST
-            value: "{{workflow.parameters.DB_HOST}}"
-          - name: DB_NAME
-            value: "{{workflow.parameters.DB_NAME}}"
-          - name: DB_USER
-            value: "{{workflow.parameters.DB_USER}}"
-          - name: DB_PASSWORD
-            value: "{{workflow.parameters.DB_PASSWORD}}"
+    #- name: log-datasets-to-db
+      #inputs:
+        #parameters:
+          #- name: datasets
+      #container:
+        #image: ghcr.io/open-forest-observatory/ofo-argo-utils:latest
+        #command: ["python", "/app/db_logger.py"]
+        #args:
+          #- "log-initial"
+          #- "--workflow-id"
+          #- "{{workflow.name}}"
+          #- "--datasets-json"
+          #- "{{inputs.parameters.datasets}}"
+        #env:
+          #- name: DB_HOST
+            #value: "{{workflow.parameters.DB_HOST}}"
+          #- name: DB_NAME
+            #value: "{{workflow.parameters.DB_NAME}}"
+          #- name: DB_USER
+            #value: "{{workflow.parameters.DB_USER}}"
+          #- name: DB_PASSWORD
+            #value: "{{workflow.parameters.DB_PASSWORD}}"
             
     # High-level order of steps in the 'process-dataset-workflow' step. Each step will be defined later.
     - name: process-dataset-workflow
@@ -119,12 +119,12 @@ spec:
           - name: dataset-name
       dag:
         tasks:
-          - name: log-start
-            template: log-dataset-start
-            arguments:
-              parameters:
-                - name: dataset-name
-                  value: "{{inputs.parameters.dataset-name}}"
+          #- name: log-start
+            #template: log-dataset-start
+            #arguments:
+              #parameters:
+                #- name: dataset-name
+                  #value: "{{inputs.parameters.dataset-name}}"
                   
           - name: run-processing
             template: run-automate-metashape
@@ -144,80 +144,80 @@ spec:
                 - name: dataset-name
                   value: "{{inputs.parameters.dataset-name}}"
                   
-          - name: log-completion-success
-            dependencies: [run-processing]
-            template: log-dataset-completion
-            arguments:
-              parameters:
-                - name: dataset-name
-                  value: "{{inputs.parameters.dataset-name}}"
-                - name: success
-                  value: "true"
-            when: "{{tasks.run-processing.status}} == Succeeded"
+          #- name: log-completion-success
+            #dependencies: [run-processing]
+            #template: log-dataset-completion
+            #arguments:
+              #parameters:
+                #- name: dataset-name
+                  #value: "{{inputs.parameters.dataset-name}}"
+                #- name: success
+                  #value: "true"
+            #when: "{{tasks.run-processing.status}} == Succeeded"
 
-          - name: log-completion-failure
-            dependencies: [run-processing]
-            template: log-dataset-completion
-            arguments:
-              parameters:
-                - name: dataset-name
-                  value: "{{inputs.parameters.dataset-name}}"
-                - name: success
-                  value: "false"
-            when: "{{tasks.run-processing.status}} != Succeeded"
+          #- name: log-completion-failure
+            #dependencies: [run-processing]
+            #template: log-dataset-completion
+            #arguments:
+              #parameters:
+                #- name: dataset-name
+                  #value: "{{inputs.parameters.dataset-name}}"
+                #- name: success
+                  #value: "false"
+            #when: "{{tasks.run-processing.status}} != Succeeded"
                   
     ## Here we define what each step does in 'process-dataset-workflow' step
     
     # use our custom containerized db_logger.py to log 'processing' in the postgis DB
-    - name: log-dataset-start
-      inputs:
-        parameters:
-          - name: dataset-name
-      container:
-        image: ghcr.io/open-forest-observatory/ofo-argo-utils:latest
-        command: ["python", "/app/db_logger.py"]
-        args:
-          - "log-start"
-          - "--workflow-id"
-          - "{{workflow.name}}"
-          - "--dataset"
-          - "{{inputs.parameters.dataset-name}}"
-        env:
-          - name: DB_HOST
-            value: "{{workflow.parameters.DB_HOST}}"
-          - name: DB_NAME
-            value: "{{workflow.parameters.DB_NAME}}"
-          - name: DB_USER
-            value: "{{workflow.parameters.DB_USER}}"
-          - name: DB_PASSWORD
-            value: "{{workflow.parameters.DB_PASSWORD}}"
+    #- name: log-dataset-start
+      #inputs:
+        #parameters:
+          #- name: dataset-name
+      #container:
+        #image: ghcr.io/open-forest-observatory/ofo-argo-utils:latest
+        #command: ["python", "/app/db_logger.py"]
+        #args:
+          #- "log-start"
+          #- "--workflow-id"
+          #- "{{workflow.name}}"
+          #- "--dataset"
+          #- "{{inputs.parameters.dataset-name}}"
+        #env:
+          #- name: DB_HOST
+            #value: "{{workflow.parameters.DB_HOST}}"
+          #- name: DB_NAME
+            #value: "{{workflow.parameters.DB_NAME}}"
+          #- name: DB_USER
+            #value: "{{workflow.parameters.DB_USER}}"
+          #- name: DB_PASSWORD
+            #value: "{{workflow.parameters.DB_PASSWORD}}"
             
     # use our custom containerized db_logger.py to log 'completed' or 'failed' in the postgis DB
-    - name: log-dataset-completion
-      inputs:
-        parameters:
-          - name: dataset-name
-          - name: success
-      container:
-        image: ghcr.io/open-forest-observatory/ofo-argo-utils:latest
-        command: ["python", "/app/db_logger.py"]
-        args:
-          - "log-completion"
-          - "--workflow-id"
-          - "{{workflow.name}}"
-          - "--dataset"
-          - "{{inputs.parameters.dataset-name}}"
-          - "--success"
-          - "{{inputs.parameters.success}}"
-        env:
-          - name: DB_HOST
-            value: "{{workflow.parameters.DB_HOST}}"
-          - name: DB_NAME
-            value: "{{workflow.parameters.DB_NAME}}"
-          - name: DB_USER
-            value: "{{workflow.parameters.DB_USER}}"
-          - name: DB_PASSWORD
-            value: "{{workflow.parameters.DB_PASSWORD}}"
+    #- name: log-dataset-completion
+      #inputs:
+        #parameters:
+          #- name: dataset-name
+          #- name: success
+      #container:
+        #image: ghcr.io/open-forest-observatory/ofo-argo-utils:latest
+        #command: ["python", "/app/db_logger.py"]
+        #args:
+          #- "log-completion"
+          #- "--workflow-id"
+          #- "{{workflow.name}}"
+          #- "--dataset"
+          #- "{{inputs.parameters.dataset-name}}"
+          #- "--success"
+          #- "{{inputs.parameters.success}}"
+        #env:
+          #- name: DB_HOST
+            #value: "{{workflow.parameters.DB_HOST}}"
+          #- name: DB_NAME
+            #value: "{{workflow.parameters.DB_NAME}}"
+          #- name: DB_USER
+            #value: "{{workflow.parameters.DB_USER}}"
+          #- name: DB_PASSWORD
+            #value: "{{workflow.parameters.DB_PASSWORD}}"
         
           
     # Defining how to process each dataset name
