@@ -31,6 +31,15 @@ spec:
         default: ""
       - name: S3_PROVIDER
         default: ""      # e.g., AWS, Minio, Ceph
+      # Post-processing parameters
+      - name: S3_BUCKET_OUTPUT
+        default: "ofo-public"
+      - name: OUTPUT_DIRECTORY
+        default: ""
+      - name: BOUNDARY_DIRECTORY
+        default: ""
+      - name: OUTPUT_MAX_DIM
+        default: "800"
 
   # Defining where to read raw drone imagery data and write out imagery products to `/ofo-share`
   volumes:
@@ -61,6 +70,8 @@ spec:
                 - name: dataset-name
                   value: "{{item}}"
             withParam: "{{steps.determine-datasets.outputs.result}}"
+        - - name: postprocess-all-datasets
+            template: run-postprocessing
 
 ## Here we define what the main steps actually do 
 
@@ -330,4 +341,47 @@ spec:
               secretKeyRef:
                 name: s3-credentials
                 key: secret_key
-      
+
+  # --------- POST-PROCESSING (Python Docker image) ---------
+    - name: run-postprocessing
+      container:
+        image: ghcr.io/open-forest-observatory/python-photogrammetry-postprocess:1.0
+        env:
+          - name: S3_ENDPOINT
+            value: "{{workflow.parameters.S3_ENDPOINT}}"
+          - name: S3_PROVIDER
+            value: "{{workflow.parameters.S3_PROVIDER}}"
+          - name: S3_ACCESS_KEY
+            valueFrom:
+              secretKeyRef:
+                name: s3-credentials
+                key: access_key
+          - name: S3_SECRET_KEY
+            valueFrom:
+              secretKeyRef:
+                name: s3-credentials
+                key: secret_key
+          - name: S3_BUCKET_INPUT_DATA
+            value: "{{workflow.parameters.S3_BUCKET}}"
+          - name: INPUT_DATA_DIRECTORY
+            value: "{{workflow.parameters.RUN_FOLDER}}"
+          - name: S3_BUCKET_INPUT_BOUNDARY
+            value: "{{workflow.parameters.S3_BUCKET_OUTPUT}}"
+          - name: INPUT_BOUNDARY_DIRECTORY
+            value: "{{workflow.parameters.BOUNDARY_DIRECTORY}}"
+          - name: S3_BUCKET_OUTPUT
+            value: "{{workflow.parameters.S3_BUCKET_OUTPUT}}"
+          - name: OUTPUT_DIRECTORY
+            value: "{{workflow.parameters.OUTPUT_DIRECTORY}}"
+          - name: OUTPUT_MAX_DIM
+            value: "{{workflow.parameters.OUTPUT_MAX_DIM}}"
+          - name: WORKING_DIR
+            value: "/tmp/processing"
+        resources:
+          requests:
+            cpu: "1"
+            memory: "4Gi"
+          limits:
+            cpu: "4"
+            memory: "16Gi"
+
