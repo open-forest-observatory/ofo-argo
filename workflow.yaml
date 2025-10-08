@@ -38,8 +38,8 @@ spec:
         default: ""
       - name: BOUNDARY_DIRECTORY
         default: ""
-      - name: OUTPUT_MAX_DIM
-        default: "800"
+      #- name: OUTPUT_MAX_DIM
+        #default: "800"
 
   # Defining where to read raw drone imagery data and write out imagery products to `/ofo-share`
   volumes:
@@ -373,8 +373,8 @@ spec:
             value: "{{workflow.parameters.S3_BUCKET_OUTPUT}}"
           - name: OUTPUT_DIRECTORY
             value: "{{workflow.parameters.OUTPUT_DIRECTORY}}"
-          - name: OUTPUT_MAX_DIM
-            value: "{{workflow.parameters.OUTPUT_MAX_DIM}}"
+          #- name: OUTPUT_MAX_DIM
+            #value: "{{workflow.parameters.OUTPUT_MAX_DIM}}"
           - name: WORKING_DIR
             value: "/tmp/processing"
         resources:
