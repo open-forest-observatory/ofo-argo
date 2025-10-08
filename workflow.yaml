@@ -345,7 +345,7 @@ spec:
   # --------- POST-PROCESSING (Python Docker image) ---------
     - name: run-postprocessing
       container:
-        image: ghcr.io/open-forest-observatory/python-photogrammetry-postprocess:1.0
+        image: ghcr.io/open-forest-observatory/photogrammetry-postprocess:1.0
         env:
           - name: S3_ENDPOINT
             value: "{{workflow.parameters.S3_ENDPOINT}}"
