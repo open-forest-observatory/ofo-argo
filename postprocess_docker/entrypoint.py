@@ -43,37 +43,44 @@ endpoint = {s3_endpoint}
 
 
 def download_photogrammetry_products():
-    """Download all photogrammetry products from S3 mission subdirectories."""
+    """Download photogrammetry products from S3 mission subdirectories."""
     input_bucket = os.environ.get('S3_BUCKET_INPUT_DATA')
     input_dir = os.environ.get('INPUT_DATA_DIRECTORY')
+    dataset_name = os.environ.get('DATASET_NAME')  # Optional: filter to single dataset
     local_input_dir = "/tmp/processing/input"
 
     remote_base_path = f"s3remote:{input_bucket}/{input_dir}"
 
-    print(f"Discovering mission subdirectories in: {remote_base_path}")
+    # Single-dataset mode: process only the specified dataset
+    if dataset_name:
+        print(f"Single-dataset mode: Processing only '{dataset_name}'")
+        mission_dirs = [dataset_name]
+    else:
+        # Multi-dataset mode: discover all subdirectories
+        print(f"Discovering mission subdirectories in: {remote_base_path}")
 
-    # List subdirectories (mission folders) using rclone lsd
-    lsd_cmd = ['rclone', 'lsd', remote_base_path]
+        # List subdirectories (mission folders) using rclone lsd
+        lsd_cmd = ['rclone', 'lsd', remote_base_path]
 
-    try:
-        result = subprocess.run(lsd_cmd, check=True, capture_output=True, text=True)
-        # Parse output: each line format is like "          -1 2024-10-03 12:00:00        -1 mission-name"
-        mission_dirs = []
-        for line in result.stdout.strip().split('\n'):
-            if line.strip():
-                parts = line.split()
-                if parts:
-                    mission_name = parts[-1]  # Last part is directory name
-                    mission_dirs.append(mission_name)
+        try:
+            result = subprocess.run(lsd_cmd, check=True, capture_output=True, text=True)
+            # Parse output: each line format is like "          -1 2024-10-03 12:00:00        -1 mission-name"
+            mission_dirs = []
+            for line in result.stdout.strip().split('\n'):
+                if line.strip():
+                    parts = line.split()
+                    if parts:
+                        mission_name = parts[-1]  # Last part is directory name
+                        mission_dirs.append(mission_name)
 
-        print(f"Found {len(mission_dirs)} mission directories: {', '.join(mission_dirs)}")
-    except subprocess.CalledProcessError as e:
-        print(f"Failed to list mission directories: {e}")
-        sys.exit(1)
+            print(f"Found {len(mission_dirs)} mission directories: {', '.join(mission_dirs)}")
+        except subprocess.CalledProcessError as e:
+            print(f"Failed to list mission directories: {e}")
+            sys.exit(1)
 
-    if not mission_dirs:
-        print("Error: No mission directories found")
-        sys.exit(1)
+        if not mission_dirs:
+            print("Error: No mission directories found")
+            sys.exit(1)
 
     # Download each mission's products
     total_files = 0
@@ -298,6 +305,13 @@ def main():
     os.environ['TMPDIR'] = working_dir
     Path(working_dir).mkdir(parents=True, exist_ok=True)
 
+    # Log processing mode
+    dataset_name = os.environ.get('DATASET_NAME')
+    if dataset_name:
+        print(f"Running in SINGLE-DATASET mode for: {dataset_name}")
+    else:
+        print("Running in MULTI-DATASET mode (will process all datasets)")
+
     print(f"Output max dimension: {os.environ.get('OUTPUT_MAX_DIM', '800')}")
 
     # Configure rclone
@@ -366,3 +380,4 @@ def main():
 
 if __name__ == '__main__':
     main()
+
