@@ -10,9 +10,55 @@ import sys
 import subprocess
 from pathlib import Path
 import shutil
+import re
 
 # Import processing functions
 from postprocess import postprocess_photogrammetry_containerized
+
+
+def extract_base_mission_name(dataset_name):
+    """
+    Extract base mission name from dataset name by removing numeric prefix.
+
+    Handles patterns like:
+    - '01_benchmarking-greasewood' -> 'benchmarking-greasewood'
+    - '02_benchmarking-greasewood' -> 'benchmarking-greasewood'
+    - 'benchmarking-greasewood' -> 'benchmarking-greasewood' (no prefix)
+
+    Args:
+        dataset_name: Dataset/mission name (may include numeric prefix)
+
+    Returns:
+        Base mission name with numeric prefix removed
+    """
+    # Match pattern: optional digits followed by underscore, then capture the rest
+    match = re.match(r'^(?:\d+_)?(.+)$', dataset_name)
+    if match:
+        return match.group(1)
+    return dataset_name
+
+
+def extract_prefix_number(dataset_name):
+    """
+    Extract numeric prefix from dataset name to determine processed_NN directory number.
+
+    Handles patterns like:
+    - '01_benchmarking-greasewood' -> 1
+    - '02_benchmarking-greasewood' -> 2
+    - '15_benchmarking-greasewood' -> 15
+    - 'benchmarking-greasewood' -> 1 (default when no prefix)
+
+    Args:
+        dataset_name: Dataset/mission name (may include numeric prefix)
+
+    Returns:
+        Integer representing the prefix number (defaults to 1 if no prefix)
+    """
+    # Match pattern: digits at start followed by underscore
+    match = re.match(r'^(\d+)_', dataset_name)
+    if match:
+        return int(match.group(1))
+    return 1  # Default to 1 if no numeric prefix
 
 
 def setup_rclone_config():
@@ -119,7 +165,7 @@ def download_boundary_polygons(mission_dirs):
     """Download boundary polygons from nested S3 structure for each mission.
 
     Args:
-        mission_dirs: List of mission directory names
+        mission_dirs: List of mission directory names (may include numeric prefixes)
     """
     boundary_bucket = os.environ.get('S3_BUCKET_INPUT_BOUNDARY')
     boundary_base_dir = os.environ.get('INPUT_BOUNDARY_DIRECTORY')
@@ -129,13 +175,16 @@ def download_boundary_polygons(mission_dirs):
 
     downloaded_count = 0
     for mission_name in mission_dirs:
-        # Construct path: <boundary_base>/<mission_name>/metadata-mission/<mission_name>_mission-metadata.gpkg
-        remote_boundary_file = f"s3remote:{boundary_bucket}/{boundary_base_dir}/{mission_name}/metadata-mission/{mission_name}_mission-metadata.gpkg"
+        # Extract base mission name (strip numeric prefix) for boundary lookup
+        base_mission_name = extract_base_mission_name(mission_name)
+
+        # Construct path using base name: <boundary_base>/<base_name>/metadata-mission/<base_name>_mission-metadata.gpkg
+        remote_boundary_file = f"s3remote:{boundary_bucket}/{boundary_base_dir}/{base_mission_name}/metadata-mission/{base_mission_name}_mission-metadata.gpkg"
         local_mission_boundary_dir = os.path.join(local_boundary_dir, mission_name)
         os.makedirs(local_mission_boundary_dir, exist_ok=True)
-        local_boundary_file = os.path.join(local_mission_boundary_dir, f"{mission_name}_mission-metadata.gpkg")
+        local_boundary_file = os.path.join(local_mission_boundary_dir, f"{base_mission_name}_mission-metadata.gpkg")
 
-        print(f"Downloading boundary for {mission_name}")
+        print(f"Downloading boundary for {mission_name} (using base name: {base_mission_name})")
 
         copy_cmd = [
             'rclone', 'copyto',
@@ -164,6 +213,8 @@ def download_boundary_polygons(mission_dirs):
 def detect_and_match_missions():
     """
     Auto-detect missions using directory names and match products to boundaries.
+    Handles numeric prefixes (e.g., 01_mission-name, 02_mission-name) by mapping
+    to the same base boundary file.
 
     Returns:
         List of dicts with keys: 'prefix', 'boundary_file', 'product_files'
@@ -200,8 +251,9 @@ def detect_and_match_missions():
                 if os.path.isfile(os.path.join(mission_input_dir, f))
             ]
 
-        # Find boundary file
-        boundary_file = os.path.join(mission_boundary_dir, f"{mission_name}_mission-metadata.gpkg")
+        # Find boundary file using base mission name (strips numeric prefix)
+        base_mission_name = extract_base_mission_name(mission_name)
+        boundary_file = os.path.join(mission_boundary_dir, f"{base_mission_name}_mission-metadata.gpkg")
 
         if os.path.exists(boundary_file) and product_files:
             mission_matches.append({
@@ -211,7 +263,7 @@ def detect_and_match_missions():
             })
             print(f"Matched mission '{mission_name}' with {len(product_files)} products")
         elif not os.path.exists(boundary_file):
-            print(f"Warning: No boundary file found for mission: {mission_name}")
+            print(f"Warning: No boundary file found for mission: {mission_name} (expected: {base_mission_name}_mission-metadata.gpkg)")
         elif not product_files:
             print(f"Warning: No product files found for mission: {mission_name}")
 
@@ -221,18 +273,30 @@ def detect_and_match_missions():
 def upload_processed_products(mission_prefix):
     """
     Upload processed products for a specific mission to S3 in mission-specific directories.
+    Uses numeric prefix from dataset name to determine processed_NN directory number.
+
+    Examples:
+        - '01_benchmarking-greasewood' -> benchmarking-greasewood/processed_01/
+        - '02_benchmarking-greasewood' -> benchmarking-greasewood/processed_02/
+        - 'benchmarking-greasewood' -> benchmarking-greasewood/processed_01/
 
     Args:
-        mission_prefix: Mission identifier prefix
+        mission_prefix: Mission identifier prefix (may include numeric prefix like 01_name)
     """
     output_bucket = os.environ.get('S3_BUCKET_OUTPUT')
     output_base_dir = os.environ.get('OUTPUT_DIRECTORY')
 
-    # Upload both full resolution and thumbnails to mission-specific processed_01 directories
+    # Extract base mission name and numeric prefix
+    base_mission_name = extract_base_mission_name(mission_prefix)
+    processed_num = extract_prefix_number(mission_prefix)
+
+    print(f"Uploading to {base_mission_name}/processed_{processed_num:02d}/")
+
+    # Upload both full resolution and thumbnails to mission-specific processed_NN directories
     for subdir in ['full', 'thumbnails']:
         local_path = f"/tmp/processing/output/{subdir}"
-        # Remote path: <output_base>/<mission_name>/processed_01/<subdir>/
-        remote_path = f"s3remote:{output_bucket}/{output_base_dir}/{mission_prefix}/processed_01/{subdir}"
+        # Remote path: <output_base>/<base_mission_name>/processed_NN/<subdir>/
+        remote_path = f"s3remote:{output_bucket}/{output_base_dir}/{base_mission_name}/processed_{processed_num:02d}/{subdir}"
 
         # Only upload files that match this mission prefix
         if not os.path.exists(local_path):
