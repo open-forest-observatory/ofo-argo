@@ -70,8 +70,6 @@ spec:
                 - name: dataset-name
                   value: "{{item}}"
             withParam: "{{steps.determine-datasets.outputs.result}}"
-        - - name: postprocess-all-datasets
-            template: run-postprocessing
 
 ## Here we define what the main steps actually do 
 
@@ -154,6 +152,15 @@ spec:
               parameters:
                 - name: dataset-name
                   value: "{{inputs.parameters.dataset-name}}"
+
+          - name: postprocess-dataset
+            dependencies: [rclone-upload]
+            template: run-postprocessing
+            arguments:
+              parameters:
+                - name: dataset-name
+                  value: "{{inputs.parameters.dataset-name}}"
+            when: "{{tasks.rclone-upload.status}} == Succeeded"
                   
           #- name: log-completion-success
             #dependencies: [run-processing]
@@ -344,8 +351,11 @@ spec:
 
   # --------- POST-PROCESSING (Python Docker image) ---------
     - name: run-postprocessing
+      inputs:
+        parameters:
+          - name: dataset-name
       container:
-        image: ghcr.io/open-forest-observatory/photogrammetry-postprocess:1.0
+        image: ghcr.io/open-forest-observatory/photogrammetry-postprocess:1.1
         env:
           - name: S3_ENDPOINT
             value: "{{workflow.parameters.S3_ENDPOINT}}"
@@ -365,6 +375,8 @@ spec:
             value: "{{workflow.parameters.S3_BUCKET}}"
           - name: INPUT_DATA_DIRECTORY
             value: "{{workflow.parameters.RUN_FOLDER}}"
+          - name: DATASET_NAME
+            value: "{{inputs.parameters.dataset-name}}"
           - name: S3_BUCKET_INPUT_BOUNDARY
             value: "{{workflow.parameters.S3_BUCKET_OUTPUT}}"
           - name: INPUT_BOUNDARY_DIRECTORY
@@ -384,4 +396,3 @@ spec:
           limits:
             cpu: "4"
             memory: "16Gi"
-
