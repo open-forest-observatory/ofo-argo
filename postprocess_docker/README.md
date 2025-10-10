@@ -15,7 +15,7 @@ For the standalone docker image to work, there needs to exist a directory in the
 
 ```
 /S3:ofo-internal/
-├── jgillan_oct10/
+├── <INPUT_DATA_DIRECTORY>/
     ├── 01_dataset1/
         ├── 01_dataset1_dsm-ptcloud.tif
         ├── 01_dataset1_dtm-ptcloud.tif
