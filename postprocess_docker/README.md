@@ -54,8 +54,11 @@ docker run --rm \
 
 *OUTPUT_DIRECTORY* is the parent directory where the postprocessed products will be stored
 
-*DATASET_NAME* this is an optional parameter if you want to postprocess a single config and dataset. If omitted, all datasets in the *INPUT_DATA_DIRECTORY* will be postprocessed. 
+*DATASET_NAME* OPTIONAL parameter if you want to postprocess a single config and dataset. If omitted, all datasets in the *INPUT_DATA_DIRECTORY* will be postprocessed. 
 
+*OUTPUT_MAX_DIM* OPTIONAL parameter to specify the max dimensions of thumbnails. Defaults to 800 pixels.
+
+*WORKING_DIR* OPTIONAL parameter specifying the directory within the container where the imagery products are downloaded to and processed. I see no reason to change from `/tmp/processing`
 
 
 
