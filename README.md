@@ -4,7 +4,7 @@ This repository contains [Argo Workflows](https://argoproj.github.io/workflows) 
 
 The current setup includes a _master_  VM instance and multiple _worker_ instances (they process metashape projects). The worker instances are configured to process one metashape project at a time. If there are more metashape projects than worker instances, the projects will be queued until a worker is free. GPU worker instances will greatly increase the speed of processing.  
 
-The current workflow: 1. pulls raw drone imagery from `/ofo-share` onto the kubernetes VM cluster, 2. processes the imagery with Metashape, 3. outputs the imagery products to the cluster and uploads them to `S3:ofo-internal`, 4. Downloads the imagery products back to the cluster and performs [postprocessing](/postprocess_docker) (chms, clipping, COGs, thumbnails), 5. uploads the final products to `S3:ofo-public`. 
+The current workflow: 1. pulls raw drone imagery from `/ofo-share` onto the kubernetes VM cluster, 2. processes the imagery with Metashape, 3. outputs the imagery products to `/ofo-share` and uploads them to `S3:ofo-internal`, 4. Deletes all outputs on `/ofo-share`, 5. Downloads the imagery products from S3 back to the cluster and performs [postprocessing](/postprocess_docker) (chms, clipping, COGs, thumbnails), 6. uploads the final products to `S3:ofo-public`. 
 
 
 <br/>
