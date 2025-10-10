@@ -96,6 +96,26 @@ docker run --rm \
 <br/>
 <br/>
 
+## Outputs
+
+```
+S3:ofo-public/OUTPUT_DIRECTORY/dataset1/processed_01/
+├── full/
+│   ├── 01_mission_ortho-dtm-ptcloud.tif
+│   ├── 01_mission_dsm-ptcloud.tif
+│   ├── 01_mission_dtm-ptcloud.tif
+│   ├── 01_mission_chm.tif
+│   └── 01_mission_points-copc.laz
+└── thumbnails/
+    ├── 01_mission_ortho-dtm-ptcloud.png
+    ├── 01_mission_dsm-ptcloud.png
+    ├── 01_mission_dtm-ptcloud.png
+    └── 01_mission_chm.png
+```
+<br/>
+<br/>
+<br/>
+<br/>
 
 ## Build Command
 
@@ -103,10 +123,12 @@ docker run --rm \
 docker build -t ghcr.io/open-forest-observatory/photogrammetry-postprocess:latest .
 ```
 
+<br/>
+<br/>
+<br/>
 
 
-
-# Post-Processing Docker Container Workflow
+## Post-Processing Docker Container Workflow
 
 This document describes the sequential execution flow of the photogrammetry post-processing Docker container from startup to completion.
 
@@ -123,6 +145,125 @@ When the container starts, it follows this three-phase execution sequence:
 3. **Phase 3**: Geospatial processing functions (`postprocess.py`)
 
 ---
+<br/>
+<br/>
+
+
+## Complete Sequential Flow Diagram
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│ Container Start                                             │
+└────────────────┬────────────────────────────────────────────┘
+                 │
+                 ▼
+┌─────────────────────────────────────────────────────────────┐
+│ PHASE 1: docker-entrypoint.sh                               │
+├─────────────────────────────────────────────────────────────┤
+│ 1. Print environment variables                              │
+│ 2. Validate required env vars (exit if missing)             │
+│ 3. Set default values for optional vars                     │
+│ 4. Test rclone installation (exit if missing)               │
+│ 5. Test Python installation (exit if missing)               │
+│ 6. Test Python package imports (exit if failed)             │
+│ 7. exec python3 /app/entrypoint.py                          │
+└────────────────┬────────────────────────────────────────────┘
+                 │
+                 ▼
+┌─────────────────────────────────────────────────────────────┐
+│ PHASE 2: entrypoint.py (main function)                      │
+├─────────────────────────────────────────────────────────────┤
+│ 1. Validate environment variables (exit if missing)         │
+│ 2. Create working directory structure                       │
+│ 3. setup_rclone_config()                                    │
+│    └─> Write ~/.config/rclone/rclone.conf                   │
+│                                                             │
+│ 4. download_photogrammetry_products()                       │
+│    ├─> Discover missions with rclone lsd                    │
+│    ├─> Download each mission to /tmp/processing/input/      │
+│    └─> Return mission_dirs list                             │
+│                                                             │
+│ 5. download_boundary_polygons(mission_dirs)                 │
+│    ├─> Extract base mission names                           │
+│    ├─> Download .gpkg files to /tmp/processing/boundary/    │
+│    └─> Return download count                                │
+│                                                             │
+│ 6. detect_and_match_missions()                              │
+│    ├─> Match products to boundaries                         │
+│    └─> Return list of mission match dicts                   │
+│                                                             │
+│ 7. FOR EACH mission in mission_matches:                     │
+│    ├─> postprocess_photogrammetry_containerized()  ────┐    │
+│    │   (calls Phase 3)                                  │   │
+│    ├─> upload_processed_products()                      │   │
+│    │   └─> rclone copyto to S3                          │   │
+│    └─> Increment success_count                          │   │
+│                                                         │   │
+│ 8. cleanup_working_directory()                          │   │
+│    └─> rm -rf /tmp/processing/                          │   │
+│                                                         │   │
+│ 9. Print summary                                        │   │
+│ 10. Exit with appropriate code (0 or 1)                 │   │
+└─────────────────────────────────────────────────────────┼─ ─┘
+                                                           │
+                                                           ▼
+┌─────────────────────────────────────────────────────────────┐
+│ PHASE 3: postprocess.py                                     │
+│ (postprocess_photogrammetry_containerized function)         │
+├─────────────────────────────────────────────────────────────┤
+│ 1. Validate boundary and product files exist                │
+│    (raise FileNotFoundError if missing)                     │
+│                                                             │
+│ 2. Create output directories                                │
+│    ├─> /tmp/processing/output/full/                         │
+│    └─> /tmp/processing/output/thumbnails/                   │
+│                                                             │
+│ 3. Read mission boundary polygon (GeoDataFrame)             │
+│                                                             │
+│ 4. Build product DataFrame                                  │
+│    ├─> Parse filenames to extract types                     │
+│    └─> Generate output filenames                            │
+│                                                             │
+│ 5. FOR EACH raster (.tif/.tiff):                            │
+│    └─> crop_raster_save_cog()                               │
+│        ├─> Reproject polygon to raster CRS                  │
+│        ├─> Crop raster to polygon boundary                  │
+│        └─> Write as COG to output/full/                     │
+│                                                             │
+│ 6. Generate CHM (if DSM and DTM available):                 │
+│    └─> make_chm()                                           │
+│        ├─> Read DSM and DTM                                 │
+│        ├─> Reproject DTM to match DSM                       │
+│        ├─> Calculate CHM = DSM - DTM                        │
+│        └─> Write CHM as COG to output/full/                 │
+│                                                             │
+│ 7. FOR EACH non-raster file:                                │
+│    └─> Copy to output/full/                                 │
+│                                                             │
+│ 8. FOR EACH TIF in output/full/:                            │
+│    └─> create_thumbnail()                                   │
+│        ├─> Calculate scale factor                           │
+│        ├─> Read raster at reduced resolution                │
+│        ├─> Render with matplotlib                           │
+│        └─> Save PNG to output/thumbnails/                   │
+│                                                             | 
+│ 9. Print statistics (file counts)                           │
+│ 10. Return True                                             │
+└────────────────┬────────────────────────────────────────────┘
+                 │
+                 ▼
+         Return to Phase 2
+    (upload and continue loop)
+```
+
+---
+
+
+
+
+<br/>
+<br/>
+<br/>
 
 ## Phase 1: docker-entrypoint.sh (Shell Validation Layer)
 
@@ -192,6 +333,10 @@ exec python3 /app/entrypoint.py "$@"
 The `exec` command replaces the shell process with Python, making Python the main container process (PID 1).
 
 ---
+
+<br/>
+<br/>
+<br/>
 
 ## Phase 2: entrypoint.py (Orchestration Layer)
 
@@ -347,6 +492,10 @@ Prints summary statistics (entrypoint.py:428-442):
 
 ---
 
+<br/>
+<br/>
+<br/>
+
 ## Phase 3: postprocess.py (Processing Layer)
 
 **File**: `postprocess.py` (Lines 1-423)
@@ -488,191 +637,11 @@ Created <N> full-resolution products and <M> thumbnails
 
 ---
 
-## Complete Sequential Flow Diagram
 
-```
-┌─────────────────────────────────────────────────────────────┐
-│ Container Start                                             │
-└────────────────┬────────────────────────────────────────────┘
-                 │
-                 ▼
-┌─────────────────────────────────────────────────────────────┐
-│ PHASE 1: docker-entrypoint.sh                               │
-├─────────────────────────────────────────────────────────────┤
-│ 1. Print environment variables                              │
-│ 2. Validate required env vars (exit if missing)             │
-│ 3. Set default values for optional vars                     │
-│ 4. Test rclone installation (exit if missing)               │
-│ 5. Test Python installation (exit if missing)               │
-│ 6. Test Python package imports (exit if failed)             │
-│ 7. exec python3 /app/entrypoint.py                          │
-└────────────────┬────────────────────────────────────────────┘
-                 │
-                 ▼
-┌─────────────────────────────────────────────────────────────┐
-│ PHASE 2: entrypoint.py (main function)                      │
-├─────────────────────────────────────────────────────────────┤
-│ 1. Validate environment variables (exit if missing)         │
-│ 2. Create working directory structure                       │
-│ 3. setup_rclone_config()                                    │
-│    └─> Write ~/.config/rclone/rclone.conf                   │
-│                                                              │
-│ 4. download_photogrammetry_products()                       │
-│    ├─> Discover missions with rclone lsd                    │
-│    ├─> Download each mission to /tmp/processing/input/      │
-│    └─> Return mission_dirs list                             │
-│                                                              │
-│ 5. download_boundary_polygons(mission_dirs)                 │
-│    ├─> Extract base mission names                           │
-│    ├─> Download .gpkg files to /tmp/processing/boundary/    │
-│    └─> Return download count                                │
-│                                                              │
-│ 6. detect_and_match_missions()                              │
-│    ├─> Match products to boundaries                         │
-│    └─> Return list of mission match dicts                   │
-│                                                              │
-│ 7. FOR EACH mission in mission_matches:                     │
-│    ├─> postprocess_photogrammetry_containerized()  ────┐    │
-│    │   (calls Phase 3)                                  │    │
-│    ├─> upload_processed_products()                      │    │
-│    │   └─> rclone copyto to S3                          │    │
-│    └─> Increment success_count                          │    │
-│                                                          │    │
-│ 8. cleanup_working_directory()                          │    │
-│    └─> rm -rf /tmp/processing/                          │    │
-│                                                          │    │
-│ 9. Print summary                                        │    │
-│ 10. Exit with appropriate code (0 or 1)                 │    │
-└──────────────────────────────────────────────────────────┼───┘
-                                                           │
-                                                           ▼
-┌─────────────────────────────────────────────────────────────┐
-│ PHASE 3: postprocess.py                                     │
-│ (postprocess_photogrammetry_containerized function)         │
-├─────────────────────────────────────────────────────────────┤
-│ 1. Validate boundary and product files exist                │
-│    (raise FileNotFoundError if missing)                     │
-│                                                              │
-│ 2. Create output directories                                │
-│    ├─> /tmp/processing/output/full/                         │
-│    └─> /tmp/processing/output/thumbnails/                   │
-│                                                              │
-│ 3. Read mission boundary polygon (GeoDataFrame)             │
-│                                                              │
-│ 4. Build product DataFrame                                  │
-│    ├─> Parse filenames to extract types                     │
-│    └─> Generate output filenames                            │
-│                                                              │
-│ 5. FOR EACH raster (.tif/.tiff):                            │
-│    └─> crop_raster_save_cog()                               │
-│        ├─> Reproject polygon to raster CRS                  │
-│        ├─> Crop raster to polygon boundary                  │
-│        └─> Write as COG to output/full/                     │
-│                                                              │
-│ 6. Generate CHM (if DSM and DTM available):                 │
-│    └─> make_chm()                                           │
-│        ├─> Read DSM and DTM                                 │
-│        ├─> Reproject DTM to match DSM                       │
-│        ├─> Calculate CHM = DSM - DTM                        │
-│        └─> Write CHM as COG to output/full/                 │
-│                                                              │
-│ 7. FOR EACH non-raster file:                                │
-│    └─> Copy to output/full/                                 │
-│                                                              │
-│ 8. FOR EACH TIF in output/full/:                            │
-│    └─> create_thumbnail()                                   │
-│        ├─> Calculate scale factor                           │
-│        ├─> Read raster at reduced resolution                │
-│        ├─> Render with matplotlib                           │
-│        └─> Save PNG to output/thumbnails/                   │
-│                                                              │
-│ 9. Print statistics (file counts)                           │
-│ 10. Return True                                             │
-└────────────────┬────────────────────────────────────────────┘
-                 │
-                 ▼
-         Return to Phase 2
-    (upload and continue loop)
-```
-
----
-
-## Data Transformations at Each Stage
-
-### Input Data (S3 → Container)
-
-**Before Phase 2.4**:
-```
-S3:ofo-internal/run_folder/01_mission/
-├── 01_mission_ortho-dtm-ptcloud.tif    (uncropped, not COG)
-├── 01_mission_dsm-ptcloud.tif          (uncropped, not COG)
-├── 01_mission_dtm-ptcloud.tif          (uncropped, not COG)
-└── 01_mission_points-copc.laz
-```
-
-**After Phase 2.4**:
-```
-/tmp/processing/input/01_mission/
-├── 01_mission_ortho-dtm-ptcloud.tif
-├── 01_mission_dsm-ptcloud.tif
-├── 01_mission_dtm-ptcloud.tif
-└── 01_mission_points-copc.laz
-```
-
-### Boundary Data (S3 → Container)
-
-**After Phase 2.5**:
-```
-/tmp/processing/boundary/01_mission/
-└── mission_mission-metadata.gpkg       (base name, no prefix)
-```
-
-### Processed Data (Container Working Directory)
-
-**After Phase 3.8**:
-```
-/tmp/processing/output/
-├── full/
-│   ├── 01_mission_ortho-dtm-ptcloud.tif    (cropped COG)
-│   ├── 01_mission_dsm-ptcloud.tif          (cropped COG)
-│   ├── 01_mission_dtm-ptcloud.tif          (cropped COG)
-│   ├── 01_mission_chm.tif                  (generated, cropped COG)
-│   └── 01_mission_points-copc.laz          (copied)
-└── thumbnails/
-    ├── 01_mission_ortho-dtm-ptcloud.png    (800px max)
-    ├── 01_mission_dsm-ptcloud.png
-    ├── 01_mission_dtm-ptcloud.png
-    └── 01_mission_chm.png
-```
-
-### Final Output (Container → S3)
-
-**After Phase 2.8**:
-```
-S3:ofo-public/output_dir/mission/processed_01/
-├── full/
-│   ├── 01_mission_ortho-dtm-ptcloud.tif
-│   ├── 01_mission_dsm-ptcloud.tif
-│   ├── 01_mission_dtm-ptcloud.tif
-│   ├── 01_mission_chm.tif
-│   └── 01_mission_points-copc.laz
-└── thumbnails/
-    ├── 01_mission_ortho-dtm-ptcloud.png
-    ├── 01_mission_dsm-ptcloud.png
-    ├── 01_mission_dtm-ptcloud.png
-    └── 01_mission_chm.png
-```
-
-### Key Transformations
-
-1. **Cropping**: Rasters are spatially clipped from full extent to mission boundary polygon
-2. **COG Conversion**: Standard GeoTIFFs become Cloud Optimized GeoTIFFs with internal tiling and compression
-3. **CHM Generation**: New raster product created by subtracting DTM from DSM
-4. **Thumbnail Creation**: High-resolution rasters downsampled to 800px PNG images
-5. **Directory Organization**: Flat input structure organized into `full/` and `thumbnails/` subdirectories
-6. **S3 Path Restructuring**: Products moved from `<run_folder>/<dataset>/` to `<output_dir>/<base_mission>/processed_NN/`
-
----
+<br/>
+<br/>
+<br/>
+<br/>
 
 ## Error Handling and Failure Modes
 
@@ -767,90 +736,4 @@ S3:ofo-public/output_dir/mission/processed_01/
 **Peak usage**: 2-3x total input data size
 **Working directory**: All inputs + outputs stored simultaneously until cleanup
 **Cleanup**: Full cleanup after all missions processed
-
----
-
-## Environment Variable Reference
-
-### Required Variables (Validated in Phase 1 and 2)
-
-| Variable | Purpose | Example |
-|----------|---------|---------|
-| `S3_ENDPOINT` | S3 storage endpoint URL | `https://js2.jetstream-cloud.org:8001` |
-| `S3_ACCESS_KEY` | S3 authentication access key | `AKIAIOSFODNN7EXAMPLE` |
-| `S3_SECRET_KEY` | S3 authentication secret key | `wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY` |
-| `S3_BUCKET_INPUT_DATA` | Bucket containing photogrammetry products | `ofo-internal` |
-| `S3_BUCKET_INPUT_BOUNDARY` | Bucket containing boundary polygons | `ofo-public` |
-
-### Optional Variables (Have Defaults)
-
-| Variable | Purpose | Default | Example |
-|----------|---------|---------|---------|
-| `DATASET_NAME` | Single-dataset mode (skip discovery) | (not set - multi-dataset mode) | `01_benchmarking-greasewood` |
-| `INPUT_DATA_DIRECTORY` | Path within input bucket | (required by workflow) | `gillan_june27` |
-| `INPUT_BOUNDARY_DIRECTORY` | Path within boundary bucket | (required by workflow) | `jgillan_test` |
-| `S3_BUCKET_OUTPUT` | Output bucket | Same as `S3_BUCKET_INPUT_DATA` | `ofo-public` |
-| `OUTPUT_DIRECTORY` | Output path within bucket | `processed` | `jgillan_test` |
-| `OUTPUT_MAX_DIM` | Maximum thumbnail dimension (pixels) | `800` | `1200` |
-| `WORKING_DIR` | Container working directory | `/tmp/processing` | `/tmp/processing` |
-| `S3_PROVIDER` | S3 provider type for rclone | `Other` | `Other` |
-
----
-
-## Debugging Tips
-
-### Check Phase 1 Validation
-
-View container logs to see if validation passes:
-```bash
-docker logs <container_id>
-```
-
-Look for output like:
-```
-=== Python Post-Processing Container Starting ===
-=== Environment validation complete ===
-=== Testing rclone installation ===
-=== Testing Python installation ===
-All required Python packages available
-=== Starting Python post-processing script ===
-```
-
-### Check Mission Discovery
-
-Enable verbose output to see discovered missions:
-```python
-# In download_photogrammetry_products()
-print(f"Found {len(mission_dirs)} mission directories: {', '.join(mission_dirs)}")
-```
-
-### Check Boundary Matching
-
-Look for warnings about missing boundaries:
-```
-Warning: No boundary file found for mission: 01_mission (expected: mission_mission-metadata.gpkg)
-```
-
-### Check Processing Errors
-
-Individual raster failures are logged but don't stop execution:
-```
-Warning: Failed to process 01_mission_ortho.tif: <error message>
-```
-
-### Check Upload Success
-
-Verify uploads completed:
-```
-Upload completed for mission: 01_mission
-```
-
-### Inspect Working Directory
-
-Mount a volume to preserve working directory for inspection:
-```bash
-docker run -v /host/debug:/tmp/processing ...
-```
-
-This prevents cleanup and allows post-mortem analysis.
 
