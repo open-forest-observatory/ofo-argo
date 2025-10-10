@@ -14,11 +14,32 @@ The docker image is located at `ghcr.io/open-forest-observatory/photogrammetry-p
 For the standalone docker image to work, there needs to exist a directory in the `S3:ofo-internal` bucket that contains the metashape output imagery products (dsm, dtm, pointcloud, ortho). The directory structure must look like this:
 
 ```
-/app/
-├── docker-entrypoint.sh    # Bash validation script
-├── entrypoint.py           # Python orchestration script
-├── postprocess.py          # Python processing library
-└── requirements.txt        # Python dependencies
+/S3:ofo-internal/
+├── jgillan_oct10/
+    ├── 01_dataset1/
+        ├── 01_dataset1_dsm-ptcloud.tif
+        ├── 01_dataset1_dtm-ptcloud.tif
+        ├── 01_dataset1_ortho-dtm-ptcloud.tif
+        ├── 01_dataset1_points-copc.laz
+        └── 01_dataset1_report.pdf
+    ├── 02_dataset1/
+        ├── 02_dataset1_dsm-ptcloud.tif
+        ├── 02_dataset1_dtm-ptcloud.tif
+        ├── 02_dataset1_ortho-dtm-ptcloud.tif
+        ├── 02_dataset1_points-copc.laz
+        └── 02_dataset1_report.pdf
+    ├── 01_dataset2/
+        ├── 01_dataset2_dsm-ptcloud.tif
+        ├── 01_dataset2_dtm-ptcloud.tif
+        ├── 01_dataset2_ortho-dtm-ptcloud.tif
+        ├── 01_dataset2_points-copc.laz
+        └── 01_dataset2_report.pdf
+    ├── 02_dataset2/
+        ├── 02_dataset2_dsm-ptcloud.tif
+        ├── 02_dataset2_dtm-ptcloud.tif
+        ├── 02_dataset2_ortho-dtm-ptcloud.tif
+        ├── 02_dataset2_points-copc.laz
+        └── 02_dataset2_report.pdf
 ```
 
 
