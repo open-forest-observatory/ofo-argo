@@ -7,8 +7,6 @@ The current setup includes a _master_  VM instance and multiple _worker_ instanc
 The current workflow: 1. pulls raw drone imagery from `/ofo-share` onto the kubernetes VM cluster, 2. processes the imagery with Metashape, 3. outputs the imagery products to the cluster and uploads them to `S3:ofo-internal`, 4. Downloads the imagery products back to the cluster and performs [postprocessing](/postprocess_docker) (chms, clipping, COGs, thumbnails), 5. uploads the final products to `S3:ofo-public`. 
 
 
-An additional ['post-processing'](/postprocess_docker) step is under development. A standalone docker image has been created that takes Metashape products in the S3 bucket and does a series of addtional steps including the creation of a canopy height model, converting all tifs to COGs, and the creation of thumbnails for each .tif product. All of the final products and report are uploaded to S3 bucket `ofo-public`. This docker image has NOT been incorporated into the argo workflow yet. 
-
 <br/>
 
 #### Files & Directories In this Repository
@@ -19,8 +17,9 @@ An additional ['post-processing'](/postprocess_docker) step is under development
 | argo-output-pvc.yaml | PVC bound to output volume | 
 | ofo-share-pv.yaml | Defines read-only NFS PV for /ofo-share (input data) |
 | ofo-share-pvc.yaml | PVC bound to shared data volume |
-| workflow.yaml | Argo Workflow to automate Metashape runs per dataset |
+| workflow.yaml | Argo configuration for entire automated workflow |
 | /ofo-argo-utils | files to build a docker image for database logging of argo workflow metadata |
+| /postprocess_docker | files to build the docker image that does postprocessing of metashape products|
 | /.github/workflows | a github action workflow to automatically build a new DB logging docker image if any changes have been made to repo. **CURRENTLY DISABLED in GITHUB ACTIONS** |     
 
 <br/>
