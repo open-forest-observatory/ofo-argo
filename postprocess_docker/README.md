@@ -193,7 +193,7 @@ When the container starts, it follows this three-phase execution sequence:
 │    └─> Return list of mission match dicts                   │
 │                                                             │
 │ 7. FOR EACH mission in mission_matches:                     │
-│    ├─> postprocess_photogrammetry_containerized()  ────┐    │
+│    ├─> postprocess_photogrammetry_containerized()  ─-───┐   │
 │    │   (calls Phase 3)                                  │   │
 │    ├─> upload_processed_products()                      │   │
 │    │   └─> rclone copyto to S3                          │   │
@@ -205,8 +205,8 @@ When the container starts, it follows this three-phase execution sequence:
 │ 9. Print summary                                        │   │
 │ 10. Exit with appropriate code (0 or 1)                 │   │
 └─────────────────────────────────────────────────────────┼─ ─┘
-                                                           │
-                                                           ▼
+                                                          │
+                                                          ▼
 ┌─────────────────────────────────────────────────────────────┐
 │ PHASE 3: postprocess.py                                     │
 │ (postprocess_photogrammetry_containerized function)         │
