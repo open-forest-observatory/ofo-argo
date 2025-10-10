@@ -511,7 +511,7 @@ The final outputs will be written to 'S3:ofo-public' in the following directory 
 
 ```bash
 /S3:ofo-public/
-├── <OUTPUT_DIRECTORY/
+├── <OUTPUT_DIRECTORY>/
     ├── dataset1/
          ├── images/
          ├── metadata-images/
@@ -560,6 +560,8 @@ The final outputs will be written to 'S3:ofo-public' in the following directory 
 <br/>
 
 ### 6. Argo Workflow Logging in postGIS database 
+
+__THE DB LOGGING IS CURRENTLY DISABLED AND IS BEING MIGRATED TO A HOSTED SOLUTION THROUGH SUPABASE__
 
 Argo run status is logged into a postGIS DB. This is done through an additional docker container (hosted on github container registry `ghcr.io/open-forest-observatory/ofo-argo-utils:latest`) that is included in the argo workflow. The files to make the docker image are in the folder `ofo-argo-utils`. 
 
@@ -663,7 +665,7 @@ sudo docker run --name ofo-postgis   -e POSTGRES_PASSWORD=ujJ1tsY9OizN0IpOgl1mY1
 <br/>
 <br/>
 
-#### Github action to rebuild logging docker image
+#### Github action to rebuild DB logging docker image
 
 There is github action workflow that rebuilds the logging docker image if any changes have been made at all in the repo. This workflow is in the directory `.github/workflows`. **The workflow is currently disabled in the 'Actions' section of the repository.**
 
