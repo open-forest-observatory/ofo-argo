@@ -7,6 +7,10 @@ This Docker image provides automated post-processing of photogrammetry products 
 
 The image is based on GDAL (Geospatial Data Abstraction Library) and includes Python geospatial tools (rasterio, geopandas) and rclone for S3 operations.
 
+The docker image is located at `ghcr.io/open-forest-observatory/photogrammetry-postprocess:1.2` and is attached as a package to this repo.
+
+
+
 ## Build Command
 
 ```bash
@@ -29,7 +33,7 @@ docker run --rm \
   -e OUTPUT_DIRECTORY=<output_directory> \
   -e OUTPUT_MAX_DIM=800 \
   -e WORKING_DIR=/tmp/processing \
-  ghcr.io/open-forest-observatory/python-photogrammetry-postprocess:latest
+  ghcr.io/open-forest-observatory/photogrammetry-postprocess:latest
 ```
 
 ### Required Environment Variables
