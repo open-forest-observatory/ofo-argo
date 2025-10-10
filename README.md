@@ -67,7 +67,8 @@ One data transfer method is a CLI tool called SCP
 
 #### b. Specify Metashape Parameters
 
-Metashape processing parameters are specified in [configuration *.yml](https://github.com/open-forest-observatory/automate-metashape/blob/main/config/config-base.yml) files which need to be located at `/ofo-share/argo-input/configs`. Every dataset to be processed needs to have its own standalone configuration file. These config files can be named however you want (e.g., `config_dataset_1.yml`)
+Metashape processing parameters are specified in [configuration *.yml](https://github.com/open-forest-observatory/automate-metashape/blob/main/config/config-base.yml) files which need to be located at `/ofo-share/argo-input/configs`. Every dataset to be processed needs to have its own standalone configuration file. These config files should be named to match the naming convention <config_datasetname.yml>. For example '01_benchmarking-greasewood.yml or '02_benchmarking-greasewood.yml'. 
+
 
 Within each metashape config.yml file, you need to specify 'photo_path' which is the location of the drone imagery dataset to be processed. This path refers to the location of the images inside a docker container. For example, if your drone images were uploaded to `/ofo-share/argo-input/datasets/dataset_1`, then the 'photo_path' should be written as `/data/argo-input/datasets/dataset_1`
 
@@ -82,9 +83,10 @@ Additionally we use a text file, for example `config_list.txt`, to tell the Argo
 For example:
 
 ```
-config_dataset_1.yml
-config_dataset_2.yml
-config_dataset_2.yml
+01_benchmarking-greasewood.yml
+02_benchmarking-greasewood.yml
+01_benchmarking-emerald-subset.yml
+02_benchmarking-emerald-subset.yml
 ```  
 
 You can create your own config_list.txt file and name it whatever you want as long as it is kept in this directory `/ofo-share/argo-input`. 
