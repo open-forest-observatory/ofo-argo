@@ -23,14 +23,15 @@ docker run --rm \
   -e S3_ACCESS_KEY=<your_access_key> \
   -e S3_SECRET_KEY=<your_secret_key> \
   -e S3_BUCKET_INPUT_DATA=ofo-internal \
-  -e INPUT_DATA_DIRECTORY=<run_folder> \
+  -e INPUT_DATA_DIRECTORY=gillan_oct10 \
   -e S3_BUCKET_INPUT_BOUNDARY=ofo-public \
-  -e INPUT_BOUNDARY_DIRECTORY=<boundaries_directory> \
+  -e INPUT_BOUNDARY_DIRECTORY=jgillan_test \
   -e S3_BUCKET_OUTPUT=ofo-public \
-  -e OUTPUT_DIRECTORY=<output_directory> \
+  -e OUTPUT_DIRECTORY=jgillan_test \
+  -e DATASET_NAME=01_benchmarking-greasewood \
   -e OUTPUT_MAX_DIM=800 \
   -e WORKING_DIR=/tmp/processing \
-  ghcr.io/open-forest-observatory/photogrammetry-postprocess:latest
+  ghcr.io/open-forest-observatory/photogrammetry-postprocess:1.2
 ```
 
 
