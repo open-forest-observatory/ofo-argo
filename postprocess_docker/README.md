@@ -11,7 +11,15 @@ The docker image is located at `ghcr.io/open-forest-observatory/photogrammetry-p
 
 ## Requirements
 
-For the standalone docker image to work, there needs to exist a directory in the `S3:ofo-internal` bucket that contains the metashape output imagery products (dsm, dtm, pointcloud, ortho). 
+For the standalone docker image to work, there needs to exist a directory in the `S3:ofo-internal` bucket that contains the metashape output imagery products (dsm, dtm, pointcloud, ortho). The directory structure must look like this:
+
+```
+/app/
+├── docker-entrypoint.sh    # Bash validation script
+├── entrypoint.py           # Python orchestration script
+├── postprocess.py          # Python processing library
+└── requirements.txt        # Python dependencies
+```
 
 
 ## Run Command
@@ -73,23 +81,6 @@ docker build -t ghcr.io/open-forest-observatory/photogrammetry-postprocess:lates
 
 
 
-### Required Environment Variables
-
-- `S3_ENDPOINT`: S3-compatible storage endpoint URL
-- `S3_ACCESS_KEY`: S3 access key for authentication
-- `S3_SECRET_KEY`: S3 secret key for authentication
-- `S3_BUCKET_INPUT_DATA`: S3 bucket containing raw photogrammetry products
-- `INPUT_DATA_DIRECTORY`: Directory path within input bucket (e.g., run folder name)
-- `S3_BUCKET_INPUT_BOUNDARY`: S3 bucket containing mission boundary polygons
-- `INPUT_BOUNDARY_DIRECTORY`: Base directory for boundary files
-
-### Optional Environment Variables
-
-- `S3_BUCKET_OUTPUT`: Output S3 bucket (defaults to `S3_BUCKET_INPUT_DATA`)
-- `OUTPUT_DIRECTORY`: Output directory path (defaults to `processed`)
-- `OUTPUT_MAX_DIM`: Maximum thumbnail dimension in pixels (default: `800`)
-- `WORKING_DIR`: Local working directory for processing (default: `/tmp/processing`)
-- `S3_PROVIDER`: S3 provider type (default: `Other`)
 
 ## Script Functions
 
