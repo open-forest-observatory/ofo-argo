@@ -512,13 +512,42 @@ The final outputs will be written to 'S3:ofo-public' in the following directory 
 ```bash
 /S3:ofo-public/
 ├── <OUTPUT_DIRECTORY/
-    |
-    ├── Dataset_name1_ortho.tif
-    ├── Dataset_name1_pointcloud.laz
-    ├── Dataset_name1_dsm.tif
-    ├── Dataset_name2_ortho.tif
-    ├── Dataset_name2_pointcloud.laz
-    └── Dataset_name2_dsm.tif
+    ├── dataset1/
+         ├── images/
+         ├── metadata-images/
+         ├── metadata-mission/
+            └── dataset1_mission-metadata.gpkg
+         ├──processed_01/
+            ├── full/
+               ├── 01_dataset1_cameras.xml
+               ├── 01_dataset1_chm.tif
+               ├── 01_dataset1_dsm-ptcloud.tif
+               ├── 01_dataset1_dtm-ptcloud.tif
+               ├── 01_dataset1_log.txt
+               ├── 01_dataset1_ortho-dtm-ptcloud.tif
+               ├── 01_dataset1_points-copc.laz
+               └── 01_dataset1_report.pdf
+            ├── thumbnails/
+               ├── 01_dataset1_chm.png
+               ├── 01_dataset1_dsm-ptcloud.png
+               ├── 01_dataset1_dtm-ptcloud.png
+               └── 01_dataset1-ortho-dtm-ptcloud.png
+         ├──processed_02/
+            ├── full/
+               ├── 02_dataset1_cameras.xml
+               ├── 02_dataset1_chm.tif
+               ├── 02_dataset1_dsm-ptcloud.tif
+               ├── 02_dataset1_dtm-ptcloud.tif
+               ├── 02_dataset1_log.txt
+               ├── 02_dataset1_ortho-dtm-ptcloud.tif
+               ├── 02_dataset1_points-copc.laz
+               └── 02_dataset1_report.pdf
+            ├── thumbnails/
+               ├── 02_dataset1_chm.png
+               ├── 02_dataset1_dsm-ptcloud.png
+               ├── 02_dataset1_dtm-ptcloud.png
+               └── 02_dataset1-ortho-dtm-ptcloud.png
+    ├── dataset2/
 
 ```
 
