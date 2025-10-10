@@ -34,6 +34,33 @@ docker run --rm \
   ghcr.io/open-forest-observatory/photogrammetry-postprocess:1.2
 ```
 
+*S3_ENDPOINT* is the url of the Jetstream2s S3 storage
+
+*S3_PROVIDER* keep as 'Other'
+
+*S3_ACCESS_KEY* is the access key for OFOs S3 buckets
+
+*S3_SECRET_KEY* is the secret key for OFOs S3 buckets
+
+*S3_BUCKET_INPUT_DATA* is the S3 bucket where existing Metashape products reside. Currently on 'ofo-internal'
+
+*INPUT_DATA_DIRECTORY* is the parent directory where existing Metashape products reside.
+
+*S3_BUCKET_INPUT_BOUNDARY* is the bucket where the mission boundary polygons reside. These are used to clip imagery products.
+
+*INPUT_BOUNDARY_DIRECTORY* is the parent directory where the mission boundary polygons reside.
+
+*S3_BUCKET_OUTPUT* is the bucket where the postprocessed products will be stored. 'ofo-public'
+
+*OUTPUT_DIRECTORY* is the parent directory where the postprocessed products will be stored
+
+*DATASET_NAME* this is an optional parameter if you want to postprocess a single config and dataset. If omitted, all datasets in the *INPUT_DATA_DIRECTORY* will be postprocessed. 
+
+
+
+
+
+
 
 ## Build Command
 
