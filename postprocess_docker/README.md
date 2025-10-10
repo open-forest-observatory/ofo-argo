@@ -9,13 +9,10 @@ The image is based on GDAL (Geospatial Data Abstraction Library) and includes Py
 
 The docker image is located at `ghcr.io/open-forest-observatory/photogrammetry-postprocess:1.2` and is attached as a package to this repo.
 
+## Requirements
 
+For the standalone docker image to work, there needs to exist a directory in the `S3:ofo-internal` bucket that contains the metashape output imagery products (dsm, dtm, pointcloud, ortho). 
 
-## Build Command
-
-```bash
-docker build -t ghcr.io/open-forest-observatory/python-photogrammetry-postprocess:latest .
-```
 
 ## Run Command
 
@@ -35,6 +32,15 @@ docker run --rm \
   -e WORKING_DIR=/tmp/processing \
   ghcr.io/open-forest-observatory/photogrammetry-postprocess:latest
 ```
+
+
+## Build Command
+
+```bash
+docker build -t ghcr.io/open-forest-observatory/photogrammetry-postprocess:latest .
+```
+
+
 
 ### Required Environment Variables
 
