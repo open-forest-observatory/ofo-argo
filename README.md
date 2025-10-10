@@ -376,7 +376,7 @@ This variable will only last during the terminal session and will have to be re-
 
 ### 2. Declare credentials for upload to S3 bucket
 
-OFO has a S3 bucket with Jetstream2. The final step of the workflow will upload the <RUN_FOLDER> to the S3 bucket `ofo-internal`. 
+This Argo workflow uploads and downloads to Jetstream2's S3 compatible buckets. 
 
 Please create a kubernetes secret to store the S3 Access ID and Secret Key
 
@@ -391,26 +391,35 @@ argo submit -n argo workflow.yaml --watch \
 -p CONFIG_LIST=config_list.txt \
 -p AGISOFT_FLS=$AGISOFT_FLS \
 -p RUN_FOLDER=gillan_june27 \
--p DB_PASSWORD=<password> \
--p DB_HOST=<vm_ip_address> \
--p DB_NAME=<db_name> \
--p DB_USER=<user_name> \
 -p S3_BUCKET=ofo-internal \
 -p S3_PROVIDER=Other \
 -p S3_ENDPOINT=https://js2.jetstream-cloud.org:8001
+-p S3_BUCKET_OUTPUT=ofo-public \
+-p OUTPUT_DIRECTORY=jgillan_test \
+-p BOUNDARY_DIRECTORY=jgillan_test 
+
 
  
 ```
 
-CONFIG_LIST is a text file that lists each of the metashape parameter config files to be processed which should be located in `/ofo-share/argo-input`
+*CONFIG_LIST* is a text file that lists each of the metashape parameter config files to be processed which should be located in `/ofo-share/argo-input`
 
-AGISOFT_FLS is the ip address of the metashape license server
+*AGISOFT_FLS* is the ip address of the metashape license server. You declared this as an environmental variable in the previous step
 
-RUN_FOLDER is what you want to name the parent directory of your output
+*RUN_FOLDER* is what you want to name the parent directory of the Metashape outputs
 
-The rest of the 'DB' parameters are for logging argo status in a postGIS database. These are not public credentials. Authorized users can find them [here](https://docs.google.com/document/d/155AP0P3jkVa-yT53a-QLp7vBAfjRa78gdST1Dfb4fls/edit?tab=t.0).
+*S3_BUCKET* is the bucket where Metashape products are uploaded to. Keep as 'ofo-internal'. 
 
-The 'S3' parameters are related to uploading outputs to Jetstream2 S3 bucket 
+*S3_PROVIDER* keep as 'Other'
+
+*S3_ENDPOINT* is the url of the Jetstream2s S3 storage
+
+*S3_BUCKET_OUTPUT* is the final resting place after postprocessing has been done on imagery products. Keep as 'ofo-public'
+
+*OUTPUT_DIRECTORY* is the name of the parent folder where postprocessed products will be uploaded
+
+*BOUNDARY_DIRECTORY* is the parent directory where the mission boundary polygons reside. These are used to clip imagery products.
+
 
 <br/>
 
