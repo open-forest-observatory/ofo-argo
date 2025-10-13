@@ -11,7 +11,6 @@ metadata:
 stringData:
   userID: "${MANILA_ACCESS_RULE_NAME}"
   userKey: "${MANILA_ACCESS_KEY}" # The name shown in the 'Access to:' field of the share in OpenStack/Exosphere
-# Eventually we could use Sealed Secrets so that we can put encrypted secrets here and make it safe to commit to Git, then we just provide the cluster the decryption key.
 
 ---
 
