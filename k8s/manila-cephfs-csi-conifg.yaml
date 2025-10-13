@@ -14,6 +14,8 @@ stringData:
 # Eventually we could use Sealed Secrets so that we can put encrypted secrets here and make it safe to commit to Git, then we just provide the cluster the decryption key.
 
 ---
+
+# ConfigMap (required for the PV CSI driver, it needs to access monitor info via a K8s ConfigMap)
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -23,7 +25,6 @@ data:
   config.json: |-
     [{"clusterID":"12345","monitors":[${MANILA_MONITORS_JSON}]}]
   # $MANILA_MONITORS_JSON should be something like: "149.165.158.38:6789","149.165.158.22:6789","149.165.158.54:6789","149.165.158.70:6789","149.165.158.86:6789"
-
 
 ---
 
