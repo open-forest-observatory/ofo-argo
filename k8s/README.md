@@ -1,0 +1,1 @@
+This folder contains files used in configuring the Kubernetes cluster to that will run Argo.
