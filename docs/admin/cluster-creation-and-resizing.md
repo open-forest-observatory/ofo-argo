@@ -1,184 +1,340 @@
-## Admin guide: Creating a K8s cluster with Magnum
+# Cluster creation and resizing
 
-This guide is for the ADMIN person (currently Derek). We only need one cluster so this guide is not necessary for the whole team. There is a separate guide on cluster management that is for the whole team. 
+This guide is for the cluster administrator (currently Derek). Since we only need one cluster and
+Derek is taking care of creating it, this guide is not necessary for the whole team. There is a
+separate guide on cluster management that is for the whole team.
 
-Key resource used in creating this guide: [https://gitlab.com/jetstream-cloud/jetstream2/eot/tutorials/magnum-tutorial/-/wikis/beginners\_guide\_to\_magnum\_on\_JS2](https://gitlab.com/jetstream-cloud/jetstream2/eot/tutorials/magnum-tutorial/-/wikis/beginners_guide_to_magnum_on_JS2)
+**Key resource** referenced in creating this guide: [Beginner's Guide to Magnum on
+Jetstream2](https://gitlab.com/jetstream-cloud/jetstream2/eot/tutorials/magnum-tutorial/-/wikis/beginners_guide_to_magnum_on_JS2)
 
 ## One-time local machine software setup
 
 These instructions will set up your local (Linux, Mac, or WSL) machine to control the cluster through the command line.
 
-Make sure you have a recent python interpreter and the python venv utility, and create a python virtual environment for OpenStack management:
+### Install Python and create virtual environment
 
-`sudo apt update`   
-`sudo apt install -y python3-full python3-venv`  
-`python3 -m venv ~/venv/openstack`
+Make sure you have a recent Python interpreter and the venv utility, then create a virtual environment for OpenStack management:
 
-Activate that environment, and within it, install the relevant OpenStack command line tools.
+```bash
+sudo apt update
+sudo apt install -y python3-full python3-venv
+python3 -m venv ~/venv/openstack
+```
 
-`# Activate env`  
-`source ~/venv/openstack/bin/activate`
+### Install OpenStack command line tools
 
-`# OpenStack utils`  
-`pip install -U python-openstackclient python-magnumclient python-designateclient` 
+```bash
+# Activate environment
+source ~/venv/openstack/bin/activate
 
-Install the Kubernetes control utility kubectl (kubectl steps from [here](https://kubernetes.io/docs/tasks/tools/install-kubectl-linux/)):
+# Install OpenStack utilities
+pip install -U python-openstackclient python-magnumclient python-designateclient
+```
 
-`# Kubectl`  
-`sudo apt install -y apt-transport-https ca-certificates curl gnupg`   
-`curl -fsSL https://pkgs.k8s.io/core:/stable:/v1.33/deb/Release.key | sudo gpg --dearmor -o /etc/apt/keyrings/kubernetes-apt-keyring.gpg`  
-`sudo chmod 644 /etc/apt/keyrings/kubernetes-apt-keyring.gpg`  
-`echo 'deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.k8s.io/core:/stable:/v1.33/deb/ /' | sudo tee /etc/apt/sources.list.d/kubernetes.list`  
-`sudo chmod 644 /etc/apt/sources.list.d/kubernetes.list`  
-`sudo apt update`  
-`sudo apt install -y kubectl`
+### Install kubectl
 
-Create an application credential. In Horizon, go to Identity, Application Credentials. Click Create. Do not change the roles, do not set a secret (one will be generated), but do set an expiration date and do check “unrestricted”. It needs to be unrestricted because this credential needs to allow for the creation of more app creds (for the cluster), as that is what Magnum does. Download the openrc file and put it in the OFO [Valutwarden](http://vault.focal-lab.org) organization where OFO members can access it.
+Install the Kubernetes control utility `kubectl` (from the [official Kubernetes documentation](https://kubernetes.io/docs/tasks/tools/install-kubectl-linux/)):
 
-Copy the application credential onto your *local computer* (do not put it on a JS2 machine), ideally into `~/.ofocluster/app-cred-ofocluster-openrc.sh`.
+```bash
+# Install prerequisites
+sudo apt install -y apt-transport-https ca-certificates curl gnupg
 
-Source the application credential (which sets relevant env vars for the OpenStack command line tools to use).
+# Add Kubernetes apt repository
+curl -fsSL https://pkgs.k8s.io/core:/stable:/v1.33/deb/Release.key | sudo gpg --dearmor -o /etc/apt/keyrings/kubernetes-apt-keyring.gpg
+sudo chmod 644 /etc/apt/keyrings/kubernetes-apt-keyring.gpg
+echo 'deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.k8s.io/core:/stable:/v1.33/deb/ /' | sudo tee /etc/apt/sources.list.d/kubernetes.list
+sudo chmod 644 /etc/apt/sources.list.d/kubernetes.list
 
-`source ~/.ofocluster/app-cred-ofocluster-openrc.sh`
+# Install kubectl
+sudo apt update
+sudo apt install -y kubectl
+```
 
-Create a (dummy) OpenStack keypair. If you wanted, you could save the private key that is created (displayed when you run this) locally in order to SSH into the cluster nodes later. But they won’t even have public IP addresses so this is more just to satisfy Magnum because it requires it for cluster creation.
+### Create application credential
 
-`openstack keypair create my-openstack-keypair-name` 
+In [Horizon](https://js2.jetstream-cloud.org), go to **Identity > Application Credentials**. Click **Create**:
 
-OR, you could specify an existing key you normally use.
+- Do not change the roles
+- Do not set a secret (one will be generated)
+- **Do** set an expiration date
+- **Do** check "unrestricted" (required because Magnum creates additional app credentials for the cluster)
 
-`openstack keypair create my-openstack-keypair-name --public-key ~/.ssh/id_rsa.pub`
+Download the openrc file and store it in the OFO [Vaultwarden](http://vault.focal-lab.org) organization where OFO members can access it.
 
-Enable shell completion for OpenStack and Kubectl
+Copy the application credential onto your **local computer** (do not put it on a JS2 machine),
+ideally into `~/.ofocluster/app-cred-ofocluster-openrc.sh` (which is where we will assume it is in
+these docs).
 
-*`# Create a directory for completion scripts`*  
-`mkdir -p ~/.bash_completion.d`
+Source the application credential (which sets relevant environment variables for the OpenStack command line tools):
 
-*`# Generate completion scripts`*  
-`openstack complete > ~/.ofocluster/openstack-completion.bash`  
-`kubectl completion bash > ~/.ofocluster/kubectl-completion.bash`
+```bash
+source ~/.ofocluster/app-cred-ofocluster-openrc.sh
+```
 
-*`# Add to ~/.bashrc`*  
-`echo 'source ~/.ofocluster/openstack-completion.bash' >> ~/.bashrc`  
-`echo 'source ~/.ofocluster/kubectl-completion.bash' >> ~/.bashrc`
+### Create OpenStack keypair
+
+Create a keypair for cluster node access. If you want, you can save the private key that is displayed when you run this command in order to SSH into the cluster nodes later. However, they won't have public IP addresses, so this is mainly to satisfy Magnum's requirements.
+
+```bash
+# Create a new keypair (displays private key - save if needed)
+openstack keypair create my-openstack-keypair-name
+```
+
+**Alternatively**, specify an existing public key you normally use, in this example `~/.ssh/id_rsa.pub`:
+
+```bash
+# Use existing public key
+openstack keypair create my-openstack-keypair-name --public-key ~/.ssh/id_rsa.pub
+```
+
+### Enable shell completion
+
+```bash
+# Create directory for completion scripts
+mkdir -p ~/.bash_completion.d
+
+# Generate completion scripts
+openstack complete > ~/.ofocluster/openstack-completion.bash
+kubectl completion bash > ~/.ofocluster/kubectl-completion.bash
+
+# Add to ~/.bashrc
+echo 'source ~/.ofocluster/openstack-completion.bash' >> ~/.bashrc
+echo 'source ~/.ofocluster/kubectl-completion.bash' >> ~/.bashrc
+```
 
 ## Cluster creation
 
-Assuming you’re in a fresh shell session where you have not done this yet, enter your js2 venv and source the application credential (which sets relevant env vars for the OpenStack command line tools to use).
+Assuming you're in a fresh shell session, enter your JS2 venv and source the application credential:
 
-`source ~/venv/openstack/bin/activate`  
-`source ~/.ofocluster/app-cred-ofocluster-openrc.sh`
+```bash
+source ~/venv/openstack/bin/activate
+source ~/.ofocluster/app-cred-ofocluster-openrc.sh
+```
 
-See available cluster templates
+### View available cluster templates
 
-`openstack coe cluster template list` 
+```bash
+openstack coe cluster template list
+```
 
-Specify the parameters of the deployment as locally scoped env vars and then deploy. Probably choose the most recent K8s version (highest number in the template list). It seems to work fine for the master node to be a m3.small. We’ll deploy a cluster with a single worker node that is also m3.small, because when we want to scale up the cluster, we’ll add nodegroups. This initial spec is just the base setup for when we’re not running anything on it.
+### Deploy the cluster
 
-| TEMPLATE\="kubernetes-1-33-jammy"FLAVOR\="m3.small"MASTER\_FLAVOR\="m3.small"BOOT\_VOLUME\_SIZE\_GB\=80\# Number of instancesN\_MASTER\=1 \# Needs to be oddN\_WORKER\=1\# Min and max number of worker nodes (if using autoscaling)AUTOSCALE\=falseN\_WORKER\_MIN\=1N\_WORKER\_MAX\=5NETWORK\_ID\=$(openstack network show \--format value \-c id auto\_allocated\_network)SUBNET\_ID\=$(openstack subnet show \--format value \-c id auto\_allocated\_subnet\_v4)KEYPAIR\=my-openstack-keypair-name\# Deploy\!openstack coe cluster create \--cluster-template $TEMPLATE \\    \--master-count $N\_MASTER \--node-count $N\_WORKER \\    \--master-flavor $MASTER\_FLAVOR \--flavor $FLAVOR \\    \--merge-labels \\    \--labels auto\_scaling\_enabled\=$AUTOSCALE \\    \--labels min\_node\_count\=$N\_WORKER\_MIN \\    \--labels max\_node\_count\=$N\_WORKER\_MAX \\    \--labels boot\_volume\_size\=$BOOT\_VOLUME\_SIZE\_GB \\    \--keypair $KEYPAIR \\    \--fixed-network "${NETWORK\_ID}" \\    \--fixed-subnet "${SUBNET\_ID}" \\    "ofocluster" |
-| :---- |
+Specify the deployment parameters and create the cluster. Choose the most recent Kubernetes version
+(highest number in the template list). The master node can be `m3.small`. We'll deploy a cluster
+with a single worker node that is also `m3.small`. When we need to scale up, we'll add nodegroups.
+This initial spec is just the base setup for when we're not running Argo workloads on it.
 
-Check status
+```bash
+# Set deployment parameters
+TEMPLATE="kubernetes-1-33-jammy"
+FLAVOR="m3.small"
+MASTER_FLAVOR="m3.small"
+BOOT_VOLUME_SIZE_GB=80
 
-| openstack coe cluster list openstack coe cluster show ofocluster openstack coe nodegroup list ofocluster |
-| :---- |
+# Number of instances
+N_MASTER=1  # Needs to be odd
+N_WORKER=1
 
-Or with formatting that makes it easier to copy the cluster UUID if you need to:
+# Min and max number of worker nodes (if using autoscaling)
+AUTOSCALE=false
+N_WORKER_MIN=1
+N_WORKER_MAX=5
 
-| openstack coe cluster list \--format value \-c uuid \-c name |
-| :---- |
+# Network configuration
+NETWORK_ID=$(openstack network show --format value -c id auto_allocated_network)
+SUBNET_ID=$(openstack subnet show --format value -c id auto_allocated_subnet_v4)
+KEYPAIR=my-openstack-keypair-name
 
-## Set up kubectl to control Kubernetes on the cluster
+# Deploy the cluster
+openstack coe cluster create \
+    --cluster-template $TEMPLATE \
+    --master-count $N_MASTER --node-count $N_WORKER \
+    --master-flavor $MASTER_FLAVOR --flavor $FLAVOR \
+    --merge-labels \
+    --labels auto_scaling_enabled=$AUTOSCALE \
+    --labels min_node_count=$N_WORKER_MIN \
+    --labels max_node_count=$N_WORKER_MAX \
+    --labels boot_volume_size=$BOOT_VOLUME_SIZE_GB \
+    --keypair $KEYPAIR \
+    --fixed-network "${NETWORK_ID}" \
+    --fixed-subnet "${SUBNET_ID}" \
+    "ofocluster"
+```
 
-This is required once the first time you interact with Kubernetes on the cluster. `kubectl` is a tool to control Kubernetes–which is the cluster’s software, not its nodes–from your local command line.
+### Check cluster status (optional)
 
-Once the `openstack coe cluster list` status changes to CREATE\_COMPLETE, get the Kubernetes configuration file kubeconfig (saves it to the KUBECONFIG env var), save the file's absolute path location to a variable and rename to a more descriptive name:
+```bash
+openstack coe cluster list
+openstack coe cluster show ofocluster
+openstack coe nodegroup list ofocluster
+```
 
-| openstack coe cluster config "ofocluster" \--force chmod 600 config mkdir \-p \~/.ofocluster mv \-i config \~/.ofocluster/ofocluster.kubeconfig export KUBECONFIG=\~/.ofocluster/ofocluster.kubeconfig |
-| :---- |
+Or with formatting that makes it easier to copy the cluster UUID:
+
+```bash
+openstack coe cluster list --format value -c uuid -c name
+```
+
+## Set up `kubectl` to control Kubernetes
+
+This is required the first time you interact with Kubernetes on the cluster. `kubectl` is a tool to
+control Kubernetes (the cluster's software, not its computs nodes/VMs) from your local command line.
+
+Once the `openstack coe cluster list` status (command above) changes to `CREATE_COMPLETE`, get the Kubernetes configuration file (`kubeconfig`) and configure your environment:
+
+```bash
+# Get cluster configuration
+openstack coe cluster config "ofocluster" --force
+
+# Set permissions and move to appropriate location
+chmod 600 config
+mkdir -p ~/.ofocluster
+mv -i config ~/.ofocluster/ofocluster.kubeconfig
+
+# Set KUBECONFIG environment variable
+export KUBECONFIG=~/.ofocluster/ofocluster.kubeconfig
+```
 
 ## Kubernetes management
 
-If you are resuming cluster management from this point after a reboot, you will need to re-set the KUBECONFIG env var and source the application credential:
+If you are resuming cluster management after a reboot, you will need to re-set environment variables and source the application credential:
 
-| source \~/venv/openstack/bin/activate export KUBECONFIG\=\~/.ofocluster/ofocluster.kubeconfig `source ~/.ofocluster/app-cred-ofocluster-openrc.sh` |
-| :---- |
+```bash
+source ~/venv/openstack/bin/activate
+export KUBECONFIG=~/.ofocluster/ofocluster.kubeconfig
+source ~/.ofocluster/app-cred-ofocluster-openrc.sh
+```
 
-We should be able to use kubectl commands now. Let's see our recently created cluster nodes:
+### View cluster nodes
 
-| kubectl get nodes |
-| :---- |
+```bash
+kubectl get nodes
+```
 
-We can run commands on a node with:
+### Access shell on cluster nodes
 
-| \# Start a debug session on a specific nodekubectl debug node/\<node-name\> \-it \--image=ubuntu\# Once inside, you have host access via /host\# Check kernel moduleschroot /host modprobe ceph chroot /host lsmod | grep ceph |
-| :---- |
+Run commands on a node with:
 
-Or run a one-off command **to check disk usage**:
+```bash
+# Start a debug session on a specific node
+kubectl debug node/<node-name> -it --image=ubuntu
 
-| kubectl debug node/\<node-name\> \-it \--image=busybox \-- df \-h |
-| :---- |
+# Once inside, you have host access via /host
+# Check kernel modules
+chroot /host modprobe ceph
+chroot /host lsmod | grep ceph
+```
 
-…and look for the /dev/vda1 volume. Then delete the debugging pods:
+### Check disk usage
 
-| kubectl get pods \-o name | grep node\-debugger | xargs kubectl delete |
-| :---- |
+Run a one-off command to check disk usage:
 
-## 
+```bash
+kubectl debug node/<node-name> -it --image=busybox -- df -h
+```
 
-## 
+Look for the `/dev/vda1` volume. Then delete the debugging pods:
+
+```bash
+kubectl get pods -o name | grep node-debugger | xargs kubectl delete
+```
 
 ## Cluster resizing
 
-These are instructions for managing which nodes are in the cluster, not what software is running on them.
+These instructions are for managing which nodes are in the cluster, not what software is running on them.
 
-Resize the cluster by adding or removing nodes (the original worker group, not a later-added nodegroup). We will likely not do this, relying instead on nodegroups for specific runs.
+### Resize the default worker group
 
-| openstack coe cluster resize "ofocluster" 4 |
-| :---- |
+Resize the cluster by adding or removing nodes from the original worker group (not a later-added nodegroup). We will likely not do this, relying instead on nodegroups for specific runs.
 
-To add a new nodegroup, first specify its parameters (e.g. instance flavor) and then use OpenStack to create it.
+```bash
+openstack coe cluster resize "ofocluster" 4
+```
 
-| NODEGROUP\_NAME\=cpu-group  \#gpu-groupFLAVOR\=m3.quad  \#"g3.medium"N\_WORKER\=1AUTOSCALE\=falseN\_WORKER\_MIN\=1N\_WORKER\_MAX\=5DOCKER\_VOLUME\_SIZE\_GB\=80\#BOOT\_VOLUME\_SIZE\_GB\=50openstack coe nodegroup create ofocluster $NODEGROUP\_NAME \\    \--flavor $FLAVOR \\    \--node-count $N\_WORKER \\    \--labels auto\_scaling\_enabled\=$AUTOSCALE \\    \--labels min\_node\_count\=$N\_WORKER\_MIN \\    \--labels max\_node\_count\=$N\_WORKER\_MAX \\    \--labels boot\_volume\_size\=$BOOT\_VOLUME\_SIZE\_GB |
-| :---- |
+### Add a new nodegroup
 
-The next set of instructions allow you to increase or decrease the number of nodes in a nodegroup.  When decreasing the number of nodes, it is best practice to drain the Kubernetes pods from them first.  When reducing the size, we don't know which nodes openstack will delete, so we have to drain the whole node group. That's the same thing we'd want to do if we're deleting a node group.  Use this command to do that.
+To add a new nodegroup, first specify its parameters and then use OpenStack to create it:
 
-NODEGROUP\_NAME\=cpu-group  
-kubectl get nodes \-l capi.stackhpc.com/node-group\=$NODEGROUP\_NAME \-o name | xargs \-I {} kubectl drain {} \--ignore-daemonsets \--delete-emptydir-data
+```bash
+# Set nodegroup parameters
+NODEGROUP_NAME=cpu-group  # or gpu-group
+FLAVOR=m3.quad  # or "g3.medium" for GPU
+N_WORKER=1
+AUTOSCALE=false
+N_WORKER_MIN=1
+N_WORKER_MAX=5
+BOOT_VOLUME_SIZE_GB=80
 
-Resize a nodegroup (change the number of nodes)
+# Create the nodegroup
+openstack coe nodegroup create ofocluster $NODEGROUP_NAME \
+    --flavor $FLAVOR \
+    --node-count $N_WORKER \
+    --labels auto_scaling_enabled=$AUTOSCALE \
+    --labels min_node_count=$N_WORKER_MIN \
+    --labels max_node_count=$N_WORKER_MAX \
+    --labels boot_volume_size=$BOOT_VOLUME_SIZE_GB
+```
 
-| N\_WORKER\=2 NODEGROUP\_NAME=cpu-group openstack coe cluster resize ofocluster \--nodegroup $NODEGROUP\_NAME $N\_WORKER |
-| :---- |
+### Drain nodes before downsizing or deleting
 
-Delete a nodegroup
+When decreasing the number of nodes in a nodegroup, it's best practice to drain the Kubernetes pods from them first. Since we don't know which nodes OpenStack will delete when reducing the size, we have to drain the whole nodegroup. This is also what you'd do when deleting a nodegroup entirely.
 
-| openstack coe nodegroup delete ofocluster $NODEGROUP\_NAME |
-| :---- |
+```bash
+NODEGROUP_NAME=cpu-group
+kubectl get nodes -l capi.stackhpc.com/node-group=$NODEGROUP_NAME -o name | xargs -I {} kubectl drain {} --ignore-daemonsets --delete-emptydir-data
+```
 
-Delete the cluster:
+### Resize a nodegroup
 
-| openstack coe cluster delete "ofocluster"  |
-| :---- |
+Change the number of nodes in an existing nodegroup:
 
-## Graphana dashboard
+```bash
+N_WORKER=2
+NODEGROUP_NAME=cpu-group
+openstack coe cluster resize ofocluster --nodegroup $NODEGROUP_NAME $N_WORKER
+```
 
-\# Port-forward Grafana to your local machine  
-kubectl port-forward \-n monitoring-system svc/kube-prometheus-stack-grafana 3000:80  
-http://localhost:3000
+### Delete a nodegroup
 
-## K8s dashboard
+```bash
+openstack coe nodegroup delete ofocluster $NODEGROUP_NAME
+```
 
-kubectl create serviceaccount dashboard-admin \-n kubernetes-dashboard
+### Delete the cluster
 
-kubectl create clusterrolebinding dashboard-admin \\  
-  \--clusterrole=cluster-admin \\  
-  \--serviceaccount=kubernetes-dashboard:dashboard-admin
+```bash
+openstack coe cluster delete "ofocluster"
+```
 
-kubectl create token dashboard-admin \-n kubernetes-dashboard \--duration=24h
+## Monitoring dashboards
 
-\# Port-forward (if not already running)  
-kubectl port-forward \-n kubernetes-dashboard svc/kubernetes-dashboard 8443:443
+Incomplete notes in development.
 
-https://localhost:8443
+### Grafana dashboard
+
+```bash
+# Port-forward Grafana to your local machine
+kubectl port-forward -n monitoring-system svc/kube-prometheus-stack-grafana 3000:80
+```
+
+Then open http://localhost:3000 in your browser.
+
+### Kubernetes dashboard
+
+```bash
+# Create service account
+kubectl create serviceaccount dashboard-admin -n kubernetes-dashboard
+
+# Create cluster role binding
+kubectl create clusterrolebinding dashboard-admin \
+    --clusterrole=cluster-admin \
+    --serviceaccount=kubernetes-dashboard:dashboard-admin
+
+# Create token (24 hour duration)
+kubectl create token dashboard-admin -n kubernetes-dashboard --duration=24h
+
+# Port-forward (if not already running)
+kubectl port-forward -n kubernetes-dashboard svc/kubernetes-dashboard 8443:443
+```
+
+Then open https://localhost:8443 in your browser and use the token to log in.

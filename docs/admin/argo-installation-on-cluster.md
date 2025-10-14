@@ -1,159 +1,231 @@
-Steps for installing Argo, including installing the CLI on your local machine (all users need this) and the Kubernetes extension on the cluster (only the Admin has to install this once)
+# Argo installation on cluster
 
-This guide assumes you already have a cluster, with a Manila share PV and PVC configured, and that you have kubectl to the cluster configured, following the steps in the cluster creation guide.
+This guide covers the installation of Argo Workflows, including the CLI on your local machine (required for all users) and the Kubernetes extension on the cluster (one-time admin installation).
 
-## Clone the ofo-argo repo locally (or update it if already present)
+## Prerequisites
 
-This repo contains files you’ll need for deploying Argo and testing the deployment.
+This guide assumes you already have:
 
-`cd ~/repos`  
-`git clone https://github.com/open-forest-observatory/ofo-argo`  
-`cd ofo-argo`
+- A Kubernetes cluster created (see [Cluster Creation guide](cluster-creation-and-resizing.md))
+- Manila share PV and PVC configured (see [Manila Share Mounting guide](manila-share-mounting.md))
+- `kubectl` configured to connect to the cluster
 
-OR, pull from existing repo
+## Clone or update the ofo-argo repository
 
-`cd ~/repos/ofo-argo`  
-`git pull`
+This repository contains files needed for deploying and testing Argo.
 
-## One-time installation of the Argo CLI locally
+```bash
+# Clone the repository (first time)
+cd ~/repos
+git clone https://github.com/open-forest-observatory/ofo-argo
+cd ofo-argo
+```
 
-This tool allows you to more easily communicate with Argo on the cluster. It is a wrapper around kubectl.
+Or, if you already have the repository cloned:
 
-`ARGO_WORKFLOWS_VERSION="v3.7.2"`  
-`ARGO_OS="linux"`
+```bash
+# Update existing repository
+cd ~/repos/ofo-argo
+git pull
+```
 
-`wget "https://github.com/argoproj/argo-workflows/releases/download/${ARGO_WORKFLOWS_VERSION}/argo-${ARGO_OS}-amd64.gz"`
+## Install the Argo CLI locally (one-time)
 
-`# Unzip`  
-`gunzip "argo-$ARGO_OS-amd64.gz"`
+The Argo CLI is a wrapper around `kubectl` that simplifies communication with Argo on the cluster.
 
-`# Make binary executable`  
-`chmod +x "argo-$ARGO_OS-amd64"`
+```bash
+ARGO_WORKFLOWS_VERSION="v3.7.2"
+ARGO_OS="linux"
 
-`# Move binary to path`  
-`sudo mv "./argo-$ARGO_OS-amd64" /usr/local/bin/argo`
+# Download the binary
+wget "https://github.com/argoproj/argo-workflows/releases/download/${ARGO_WORKFLOWS_VERSION}/argo-${ARGO_OS}-amd64.gz"
 
-`# Test installation`  
-`argo version`
+# Unzip
+gunzip "argo-${ARGO_OS}-amd64.gz"
+
+# Make binary executable
+chmod +x "argo-${ARGO_OS}-amd64"
+
+# Move binary to path
+sudo mv "./argo-${ARGO_OS}-amd64" /usr/local/bin/argo
+
+# Test installation
+argo version
+```
 
 ## Install Argo workflow manager and server on the cluster
 
-## kubectl create namespace argo
+Create the Argo namespace and install Argo components:
 
-kubectl apply \-n argo \-f [https://github.com/argoproj/argo-workflows/releases/download/](https://github.com/argoproj/argo-workflows/releases/download/v3.6.5/install.yaml)`${ARGO_WORKFLOWS_VERSION}`[/install.yaml](https://github.com/argoproj/argo-workflows/releases/download/v3.6.5/install.yaml)
+```bash
+# Create namespace
+kubectl create namespace argo
 
-(Optional) Check that the pods are running and what nodes they are on.  
-`kubectl get pods -n argo`  
-`kubectl describe pod -n argo <pod-name>`
+# Install Argo workflows
+kubectl apply -n argo -f https://github.com/argoproj/argo-workflows/releases/download/${ARGO_WORKFLOWS_VERSION}/install.yaml
+```
 
-The standard `install.yaml` configures permissions for the workflow controller, but does not configure permissions for the service accounts that workflow pods run as. Without these permissions, the executor will fall back to the legacy insecure pod patch method, which requires broader permissions and is a security risk. This step grants the `default` service account (used by workflow pods unless otherwise specified) the minimal permissions needed to create and update workflowtaskresults. If you use custom service accounts in your workflows, you'll need to create additional RoleBindings for those accounts as well.
+Optionally, check that the pods are running:
 
-`kubectl apply -f argo-setup/role-rolebinding-default-create.yaml`
+```bash
+kubectl get pods -n argo
+kubectl describe pod -n argo <pod-name>
+```
 
-Confirm the necessary permission was granted
+## Configure workflow permissions
 
-`kubectl auth can-i create workflowtaskresults.argoproj.io -n argo --as=system:serviceaccount:argo:default`  
-`# Should return: yes`
+The standard `install.yaml` configures permissions for the workflow controller, but does not configure permissions for the service accounts that workflow pods run as. Without these permissions, the executor will fall back to the legacy insecure pod patch method. This step grants the `default` service account the minimal permissions needed to create and update workflowtaskresults.
 
-`kubectl describe role argo-role -n argo`  
-`kubectl describe role executor -n argo`
+If you use custom service accounts in your workflows, you'll need to create additional RoleBindings for those accounts.
 
-Run a test workflow
+```bash
+# Apply role and role binding
+kubectl apply -f setup/argo/role-rolebinding-default-create.yaml
 
-`argo submit -n argo test-workflows/dag-diamond.yaml --watch`
+# Confirm the necessary permission was granted (should return: yes)
+kubectl auth can-i create workflowtaskresults.argoproj.io -n argo --as=system:serviceaccount:argo:default
 
-## Set up argo server
+# Optional: Describe the roles
+kubectl describe role argo-role -n argo
+kubectl describe role executor -n argo
+```
 
-Ensure argo-server is ClusterIP, which means it is only accessible from within the cluster’s internal network. This is good because we don’t want it served directly to the internet. We will configure a more secure gateway to the internet next.
+## Test the installation
 
-*\# Check current type*  
-*kubectl get svc argo-server \-n argo*
+Run a test workflow to verify everything is working:
 
-*\# If it's LoadBalancer, change it back to ClusterIP*  
-*kubectl patch svc argo-server \-n argo \-p '{"spec":{"type":"ClusterIP"}}'*
+```bash
+argo submit -n argo test-workflows/dag-diamond.yaml --watch
+```
 
-*\# Verify*  
-*kubectl get svc argo-server \-n argo*  
-*\# Should show: TYPE \= ClusterIP*
+## Set up Argo server with HTTPS access
 
-Install cert-manager
+The following steps configure secure external access to the Argo UI.
 
-`# Install cert-manager`  
-`kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/v1.13.0/cert-manager.yaml`
+### Verify Argo server is ClusterIP
 
-`# Wait for cert-manager to be ready (takes ~1 minute)`  
-`kubectl wait --for=condition=available --timeout=300s deployment/cert-manager -n cert-manager`  
-`kubectl wait --for=condition=available --timeout=300s deployment/cert-manager-webhook -n cert-manager`  
-`kubectl wait --for=condition=available --timeout=300s deployment/cert-manager-cainjector -n cert-manager`
+Ensure `argo-server` is set to ClusterIP, which means it's only accessible from within the cluster's internal network. We'll configure a secure gateway to the internet next.
 
-Install nginx Ingress Controller
+```bash
+# Check current type
+kubectl get svc argo-server -n argo
 
-`# Install nginx ingress controller`  
-`kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/controller-v1.8.1/deploy/static/provider/cloud/deploy.yaml`
+# If it's LoadBalancer, change it back to ClusterIP
+kubectl patch svc argo-server -n argo -p '{"spec":{"type":"ClusterIP"}}'
 
-`# Wait for LoadBalancer IP to be assigned (may take 1-3 minutes)`  
-`kubectl get svc -n ingress-nginx ingress-nginx-controller -w`
+# Verify (should show: TYPE = ClusterIP)
+kubectl get svc argo-server -n argo
+```
 
-`# Press Ctrl+C once you see an EXTERNAL-IP appear. Save this IP - you'll need it for DNS.`
+### Install cert-manager
 
-Create DNS A Record  
-Go to your DNS provider (GoDaddy, Cloudflare, Route53, etc.) and create:  
-`Type: A`  
-`Name: argo (or whatever subdomain you want)`  
-`Value: <IP from previous step>`  
-`TTL: 300 (or auto/default)`
+```bash
+# Install cert-manager
+kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/v1.13.0/cert-manager.yaml
 
-“Non-authoritative answer” is OK.
+# Wait for cert-manager to be ready (takes ~1 minute)
+kubectl wait --for=condition=available --timeout=300s deployment/cert-manager -n cert-manager
+kubectl wait --for=condition=available --timeout=300s deployment/cert-manager-webhook -n cert-manager
+kubectl wait --for=condition=available --timeout=300s deployment/cert-manager-cainjector -n cert-manager
+```
 
-Create Let's Encrypt ClusterIssuer
+### Install nginx ingress controller
 
-`kubectl apply -f argo-setup/clusterissuer-letsencrypt.yaml`
+```bash
+# Install nginx ingress controller
+kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/controller-v1.8.1/deploy/static/provider/cloud/deploy.yaml
 
-Create ingress resource for Argo server
+# Wait for LoadBalancer IP to be assigned (may take 1-3 minutes)
+kubectl get svc -n ingress-nginx ingress-nginx-controller -w
 
-`kubectl apply -f  argo-setup/ingress-argo.yaml`
+# Press Ctrl+C once you see an EXTERNAL-IP appear. Save this IP - you'll need it for DNS.
+```
 
-**Wait 5-10 minutes** for DNS to record propagate, then verify:
+### Create DNS A record
 
-`nslookup argo.focal-lab.org`  
-`# Should return the ingress controller IP`
+Go to your DNS provider (GoDaddy, Cloudflare, Route53, etc.) and create:
 
-Request and wait for certificate
+- **Type**: A
+- **Name**: argo (or your preferred subdomain)
+- **Value**: `<IP from previous step>`
+- **TTL**: 300 (or auto/default)
 
-`# Watch certificate being issued (usually 1-3 minutes)`  
-`kubectl get certificate -n argo -w`
+A "non-authoritative answer" from DNS queries is OK.
 
-`# Wait until you see:`  
-`# NAME              READY   SECRET           AGE`  
-`# argo-server-tls   True    argo-server-tls  2m`
+### Create Let's Encrypt cluster issuer
 
-`# Press Ctrl+C when READY shows True`
+```bash
+kubectl apply -f setup/argo/clusterissuer-letsencrypt.yaml
+```
 
-Argo UI should now be accessible at [https://argo.focal-lab.org](https://argo.focal-lab.org). Verification commands:
+### Create ingress resource for Argo server
 
-`# Check all components are ready`  
-`kubectl get pods -n cert-manager`  
-`kubectl get pods -n ingress-nginx`  
-`kubectl get pods -n argo`
+```bash
+kubectl apply -f setup/argo/ingress-argo.yaml
+```
 
-`# Check ingress created`  
-`kubectl get ingress -n argo`
+Wait 5-10 minutes for DNS records to propagate, then verify:
 
-`# Check certificate issued`  
-`kubectl get certificate -n argo`
+```bash
+nslookup argo.focal-lab.org
+# Should return the ingress controller IP
+```
 
-`# Check DNS resolves`  
-`nslookup argo.focal-lab.org`
+### Request and wait for certificate
 
-Create the Argo UI server token. We’ll make one that lasts one year. So it will have to be re-created in a year. We’re creating this for the "default" service account. In the future we may want to create a new service account specifically for users’ argo-server tokens. Possibly a separate one for each user if we want the ability to grant or revoke individual users permissions. It would also allow for granting less than full permissions (subsets being things like workflow submit, watch, list, update, delete). Another benefit of associating the token with a non-default service account (even if it is just one token from one service account that is shared by the team) is that we could then differentiate between actions taken by the server itself (automated) vs human users.
+```bash
+# Watch certificate being issued (usually 1-3 minutes)
+kubectl get certificate -n argo -w
 
-`kubectl create token argo-server -n argo --duration=8760h`
+# Wait until you see READY show True:
+# NAME              READY   SECRET           AGE
+# argo-server-tls   True    argo-server-tls  2m
 
-Copy the token, preface it with “Bearer “, and add/update it in [Vaultwarden](http://vault.focal-lab.org).
+# Press Ctrl+C when READY shows True
+```
 
-In the future, for rotating the token: Delete the server token (actually all of them)
+### Verify Argo UI access
 
-`# Delete all tokens for that service account`  
-   `kubectl delete secret -n argo -l kubernetes.io/service-account.name=argo-server`
+The Argo UI should now be accessible at https://argo.focal-lab.org
 
-Then recreate it with the step above.
+Verification commands:
+
+```bash
+# Check all components are ready
+kubectl get pods -n cert-manager
+kubectl get pods -n ingress-nginx
+kubectl get pods -n argo
+
+# Check ingress created
+kubectl get ingress -n argo
+
+# Check certificate issued
+kubectl get certificate -n argo
+
+# Check DNS resolves
+nslookup argo.focal-lab.org
+```
+
+## Create Argo UI server token
+
+Create a token that lasts one year. This token will need to be re-created annually.
+
+We're creating this for the `default` service account. In the future, we may want to create a dedicated service account for argo-server tokens, or separate accounts for each user to allow individual permission management.
+
+```bash
+# Create token (valid for 1 year)
+kubectl create token argo-server -n argo --duration=8760h
+```
+
+Copy the token, preface it with `Bearer `, and add/update it in [Vaultwarden](http://vault.focal-lab.org).
+
+### Token rotation (future)
+
+To rotate the token in the future:
+
+```bash
+# Delete all tokens for the service account
+kubectl delete secret -n argo -l kubernetes.io/service-account.name=argo-server
+```
+
+Then recreate it with the command above.
