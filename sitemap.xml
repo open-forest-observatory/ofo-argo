@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+    <url>
+         <loc>https://open-forest-observatory.github.io/ofo-argo/</loc>
+         <lastmod>2025-10-14</lastmod>
+    </url>
+    <url>
+         <loc>https://open-forest-observatory.github.io/ofo-argo/admin/argo-installation-on-cluster/</loc>
+         <lastmod>2025-10-14</lastmod>
+    </url>
+    <url>
+         <loc>https://open-forest-observatory.github.io/ofo-argo/admin/cluster-creation-and-resizing/</loc>
+         <lastmod>2025-10-14</lastmod>
+    </url>
+    <url>
+         <loc>https://open-forest-observatory.github.io/ofo-argo/admin/manila-share-mounting/</loc>
+         <lastmod>2025-10-14</lastmod>
+    </url>
+</urlset>
