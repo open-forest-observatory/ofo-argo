@@ -1,0 +1,52 @@
+# Test workflow: single start → two parallel branches → single finish
+# Used to verify DAG execution and parallel task scheduling
+apiVersion: argoproj.io/v1alpha1
+kind: Workflow
+metadata:
+  generateName: dag-test-
+spec:
+  entrypoint: main
+  serviceAccountName: default # Optional line; if omitted, default is inferred
+  templates:
+  - name: main
+    dag:
+      tasks:
+      - name: start
+        template: echo
+        arguments:
+          parameters:
+          - name: message
+            value: "Starting workflow"
+      
+      - name: parallel-a
+        template: echo
+        arguments:
+          parameters:
+          - name: message
+            value: "Parallel branch A"
+        dependencies: [start]
+      
+      - name: parallel-b
+        template: echo
+        arguments:
+          parameters:
+          - name: message
+            value: "Parallel branch B"
+        dependencies: [start]
+      
+      - name: finish
+        template: echo
+        arguments:
+          parameters:
+          - name: message
+            value: "All done!"
+        dependencies: [parallel-a, parallel-b]
+  
+  - name: echo
+    inputs:
+      parameters:
+      - name: message
+    container:
+      image: alpine:latest
+      command: [sh, -c]
+      args: ["echo '{{inputs.parameters.message}}' && sleep 5"]
