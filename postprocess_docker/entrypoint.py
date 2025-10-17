@@ -93,7 +93,8 @@ def download_photogrammetry_products():
     input_bucket = os.environ.get('S3_BUCKET_INPUT_DATA')
     input_dir = os.environ.get('INPUT_DATA_DIRECTORY')
     dataset_name = os.environ.get('DATASET_NAME')  # Optional: filter to single dataset
-    local_input_dir = "/tmp/processing/input"
+    working_dir = os.environ.get('WORKING_DIR', '/tmp/processing')
+    local_input_dir = f"{working_dir}/input"
 
     remote_base_path = f"s3remote:{input_bucket}/{input_dir}"
 
@@ -169,7 +170,8 @@ def download_boundary_polygons(mission_dirs):
     """
     boundary_bucket = os.environ.get('S3_BUCKET_INPUT_BOUNDARY')
     boundary_base_dir = os.environ.get('INPUT_BOUNDARY_DIRECTORY')
-    local_boundary_dir = "/tmp/processing/boundary"
+    working_dir = os.environ.get('WORKING_DIR', '/tmp/processing')
+    local_boundary_dir = f"{working_dir}/boundary"
 
     print(f"Downloading boundary polygons for {len(mission_dirs)} missions")
 
@@ -219,8 +221,9 @@ def detect_and_match_missions():
     Returns:
         List of dicts with keys: 'prefix', 'boundary_file', 'product_files'
     """
-    input_dir = "/tmp/processing/input"
-    boundary_dir = "/tmp/processing/boundary"
+    working_dir = os.environ.get('WORKING_DIR', '/tmp/processing')
+    input_dir = f"{working_dir}/input"
+    boundary_dir = f"{working_dir}/boundary"
 
     # Get list of mission directories
     if not os.path.exists(input_dir):
@@ -293,8 +296,9 @@ def upload_processed_products(mission_prefix):
     print(f"Uploading to {base_mission_name}/processed_{processed_num:02d}/")
 
     # Upload both full resolution and thumbnails to mission-specific processed_NN directories
+    working_dir = os.environ.get('WORKING_DIR', '/tmp/processing')
     for subdir in ['full', 'thumbnails']:
-        local_path = f"/tmp/processing/output/{subdir}"
+        local_path = f"{working_dir}/output/{subdir}"
         # Remote path: <output_base>/<base_mission_name>/processed_NN/<subdir>/
         remote_path = f"s3remote:{output_bucket}/{output_base_dir}/{base_mission_name}/processed_{processed_num:02d}/{subdir}"
 
@@ -335,7 +339,7 @@ def upload_processed_products(mission_prefix):
 def cleanup_working_directory():
     """Remove temporary processing files."""
     print("Cleaning up temporary files...")
-    working_dir = "/tmp/processing"
+    working_dir = os.environ.get('WORKING_DIR', '/tmp/processing')
 
     if os.path.exists(working_dir):
         shutil.rmtree(working_dir)
@@ -365,6 +369,19 @@ def main():
         print(f"Error: Missing required environment variables: {', '.join(missing_vars)}")
         sys.exit(1)
 
+    # Validate WORKING_DIR exists and is writable
+    if not os.path.exists(working_dir):
+        try:
+            os.makedirs(working_dir, exist_ok=True)
+            print(f"Created working directory: {working_dir}")
+        except Exception as e:
+            print(f"ERROR: Cannot create WORKING_DIR '{working_dir}': {e}")
+            sys.exit(1)
+
+    if not os.access(working_dir, os.W_OK):
+        print(f"ERROR: WORKING_DIR '{working_dir}' is not writable")
+        sys.exit(1)
+    
     # Set up working directory
     os.environ['TMPDIR'] = working_dir
     Path(working_dir).mkdir(parents=True, exist_ok=True)
