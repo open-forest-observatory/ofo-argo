@@ -320,7 +320,7 @@ def postprocess_photogrammetry_containerized(mission_prefix, boundary_file_path,
     # Filter for DEM files
     dem_files = photogrammetry_output_files[
         (photogrammetry_output_files['extension'].isin(['tif', 'tiff'])) &
-        (photogrammetry_output_files['type'].isin(['dsm-ptcloud', 'dsm-mesh', 'dsm', 'dtm-ptcloud', 'dtm']))
+        (photogrammetry_output_files['type'].isin(['dsm-ptcloud', 'dsm-mesh', 'dtm-ptcloud']))
     ].copy()
 
     # Add postprocessed file paths
@@ -330,49 +330,63 @@ def postprocess_photogrammetry_containerized(mission_prefix, boundary_file_path,
 
     available_types = dem_files['type'].tolist()
 
-    # Try different DSM/DTM combinations
-    dsm_types = ['dsm-mesh', 'dsm-ptcloud', 'dsm']
-    dtm_types = ['dtm-ptcloud', 'dtm']
+    # Try to create chm-ptcloud
+    if 'dsm-ptcloud' in available_types and 'dtm-ptcloud' in available_types:
+        print("Creating chm-ptcloud from dsm-ptcloud and dtm-ptcloud")
+        dsm_filepath = dem_files[dem_files['type'] == 'dsm-ptcloud']['postprocessed_filepath'].iloc[0]
+        dtm_filepath = dem_files[dem_files['type'] == 'dtm-ptcloud']['postprocessed_filepath'].iloc[0]
 
-    chm_created = False
+        try:
+            chm_data, chm_profile = make_chm(dsm_filepath, dtm_filepath)
 
-    for dsm_type in dsm_types:
-        for dtm_type in dtm_types:
-            if dsm_type in available_types and dtm_type in available_types and not chm_created:
-                print(f"Creating CHM from {dsm_type} and {dtm_type}")
+            # Update profile for COG
+            chm_profile.update({
+                'driver': 'COG',
+                'compress': 'deflate',
+                'tiled': True,
+                'BIGTIFF': 'IF_SAFER'
+            })
 
-                dsm_filepath = dem_files[dem_files['type'] == dsm_type]['postprocessed_filepath'].iloc[0]
-                dtm_filepath = dem_files[dem_files['type'] == dtm_type]['postprocessed_filepath'].iloc[0]
+            # Write CHM
+            chm_filename = f"{mission_prefix}_chm-ptcloud.tif"
+            chm_filepath = os.path.join(postprocessed_path, "full", chm_filename)
 
-                try:
-                    chm_data, chm_profile = make_chm(dsm_filepath, dtm_filepath)
+            with rasterio.open(chm_filepath, 'w', **chm_profile) as dst:
+                dst.write(chm_data, 1)
 
-                    # Update profile for COG
-                    chm_profile.update({
-                        'driver': 'COG',
-                        'compress': 'deflate',
-                        'tiled': True,
-                        'BIGTIFF': 'IF_SAFER'
-                    })
+            print(f"Successfully created CHM: {chm_filename}")
 
-                    # Write CHM
-                    chm_filename = f"{mission_prefix}_chm.tif"
-                    chm_filepath = os.path.join(postprocessed_path, "full", chm_filename)
+        except Exception as e:
+            print(f"Failed to create chm-ptcloud: {e}")
 
-                    with rasterio.open(chm_filepath, 'w', **chm_profile) as dst:
-                        dst.write(chm_data, 1)
+    # Try to create chm-mesh
+    if 'dsm-mesh' in available_types and 'dtm-ptcloud' in available_types:
+        print("Creating chm-mesh from dsm-mesh and dtm-ptcloud")
+        dsm_filepath = dem_files[dem_files['type'] == 'dsm-mesh']['postprocessed_filepath'].iloc[0]
+        dtm_filepath = dem_files[dem_files['type'] == 'dtm-ptcloud']['postprocessed_filepath'].iloc[0]
 
-                    print(f"Successfully created CHM: {chm_filename}")
-                    chm_created = True
+        try:
+            chm_data, chm_profile = make_chm(dsm_filepath, dtm_filepath)
 
-                except Exception as e:
-                    print(f"Failed to create CHM from {dsm_type} and {dtm_type}: {e}")
+            # Update profile for COG
+            chm_profile.update({
+                'driver': 'COG',
+                'compress': 'deflate',
+                'tiled': True,
+                'BIGTIFF': 'IF_SAFER'
+            })
 
-    if not chm_created:
-        dsm_available = any(t in available_types for t in dsm_types)
-        dtm_available = any(t in available_types for t in dtm_types)
-        if dsm_available and dtm_available:
-            print("Warning: Could not create CHM despite having DSM and DTM files")
+            # Write CHM
+            chm_filename = f"{mission_prefix}_chm-mesh.tif"
+            chm_filepath = os.path.join(postprocessed_path, "full", chm_filename)
+
+            with rasterio.open(chm_filepath, 'w', **chm_profile) as dst:
+                dst.write(chm_data, 1)
+
+            print(f"Successfully created CHM: {chm_filename}")
+
+        except Exception as e:
+            print(f"Failed to create chm-mesh: {e}")
 
     ## Copy non-raster files
 
