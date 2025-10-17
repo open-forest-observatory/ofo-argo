@@ -38,6 +38,8 @@ spec:
         default: ""
       - name: BOUNDARY_DIRECTORY
         default: ""
+      - name: WORKING_DIR
+        default: "/tmp/processing"
       #- name: OUTPUT_MAX_DIM
         #default: "800"
 
