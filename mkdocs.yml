@@ -9,4 +9,3 @@ plugins:
   - search
   - awesome-pages
   - mkdocs-nav-weight
-  - section-index # Pulls nav section titles from the index.md file beneath each
