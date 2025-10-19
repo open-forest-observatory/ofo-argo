@@ -1,6 +1,6 @@
 ---
 title: Manila share mounting
-nav_order: 10
+weight: 10
 ---
 
 # Manila share mounting

@@ -2,8 +2,11 @@ site_name: OFO Argo Documentation
 site_url: https://open-forest-observatory.github.io/ofo-argo/
 theme:
   name: material
+  features:
+    - navigation.footer
 plugins:
   - search
+  - nav-weight
   - awesome-pages
   - section-index
   - macros

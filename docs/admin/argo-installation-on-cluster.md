@@ -1,6 +1,6 @@
 ---
 title: Argo installation on cluster
-nav_order: 15
+weight: 15
 ---
 
 # Argo installation on cluster

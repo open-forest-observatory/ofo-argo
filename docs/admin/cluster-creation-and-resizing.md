@@ -1,6 +1,6 @@
 ---
 title: Cluster creation and resizing
-nav_order: 5
+weight: 5
 ---
 
 # Cluster creation and resizing

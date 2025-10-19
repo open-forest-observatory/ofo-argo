@@ -1,6 +1,6 @@
 ---
 title: Cluster access and resizing
-nav_order: 5
+weight: 5
 ---
 
 # Cluster access and resizing
