@@ -9,9 +9,9 @@ workflow submission, see the [Cluster usage](../usage) section.
 <div class="grid cards" markdown>
 {% for item in navigation %}
 {% if item.title == "Administrator Guides" and item.children %}
-{% for page in item.children %}
-{% if page.title != "Administrator Guides" %}
--   **[{{ page.title }}]({{ page.url }})**
+{% for page in item.children | sort(attribute='page.meta.nav_order') %}
+{% if page.is_page %}
+-   **[{{ page.page.title }}]({{ page.url }})**
 {% endif %}
 {% endfor %}
 {% endif %}
