@@ -1,3 +1,7 @@
+---
+nav_order: 15
+---
+
 # Argo installation on cluster
 
 This guide covers the installation of Argo Workflows, including the CLI on your local machine (required for all users) and the Kubernetes extension on the cluster (one-time admin installation).
@@ -6,8 +10,8 @@ This guide covers the installation of Argo Workflows, including the CLI on your 
 
 This guide assumes you already have:
 
-- A Kubernetes cluster created (see [Cluster Creation guide](cluster-creation-and-resizing.md))
-- Manila share PV and PVC configured (see [Manila Share Mounting guide](manila-share-mounting.md))
+- A Kubernetes cluster created (see [Cluster creation and resizing](cluster-creation-and-resizing.md))
+- Manila share PV and PVC configured (see [Manila share mounting](manila-share-mounting.md))
 - `kubectl` configured to connect to the cluster
 
 ## Clone or update the ofo-argo repository

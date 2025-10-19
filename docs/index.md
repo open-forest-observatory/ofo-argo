@@ -21,13 +21,13 @@ This documentation is organized into the following sections:
 
 ### User Guides
 
-- **[Cluster Access and Resizing](usage/cluster-creation-and-resizing.md)**: Access the cluster and manage nodegroups for workflow runs
+- **[Cluster access and resizing](usage/cluster-access-and-resizing.md)**: Access the cluster and manage nodegroups for workflow runs
 
 ### Administrator Guides
 
-- **[Cluster Creation and Resizing](admin/cluster-creation-and-resizing.md)**: Create and manage Kubernetes clusters using OpenStack Magnum
-- **[Manila Share Mounting](admin/manila-share-mounting.md)**: Configure persistent storage for the cluster
-- **[Argo Installation on Cluster](admin/argo-installation-on-cluster.md)**: Install and configure Argo Workflows
+- **[Cluster creation and resizing](admin/cluster-creation-and-resizing.md)**: Create and manage Kubernetes clusters using OpenStack Magnum
+- **[Manila share mounting](admin/manila-share-mounting.md)**: Configure persistent storage for the cluster
+- **[Argo installation on cluster](admin/argo-installation-on-cluster.md)**: Install and configure Argo Workflows
 
 ## Quick Links
 

@@ -1,10 +1,14 @@
+---
+nav_order: 10
+---
+
 # Manila share mounting
 
 This guide covers mounting a Manila CephFS share to your Kubernetes cluster for persistent storage.
 
 ## Prerequisites
 
-- A Kubernetes cluster created with Magnum (see [Cluster Creation guide](cluster-creation-and-resizing.md))
+- A Kubernetes cluster created with Magnum (see [Cluster creation and resizing](cluster-creation-and-resizing.md))
 - `kubectl` configured to connect to the cluster
 - OpenStack application credentials
 - The Manila share already created in OpenStack

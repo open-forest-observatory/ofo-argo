@@ -1,3 +1,7 @@
+---
+nav_order: 5
+---
+
 # Cluster access and resizing
 
 This guide assumes a cluster has already been created, any necessary persistent volumes (e.g. Manila

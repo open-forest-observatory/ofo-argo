@@ -1,3 +1,7 @@
+---
+nav_order: 5
+---
+
 # Cluster creation and resizing
 
 This guide is for the cluster administrator (currently Derek). Since we only need one cluster and
