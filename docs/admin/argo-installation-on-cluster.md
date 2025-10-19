@@ -1,4 +1,5 @@
 ---
+title: Argo installation on cluster
 nav_order: 15
 ---
 

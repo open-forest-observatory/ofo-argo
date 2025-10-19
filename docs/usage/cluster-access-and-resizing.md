@@ -1,4 +1,5 @@
 ---
+title: Cluster access and resizing
 nav_order: 5
 ---
 

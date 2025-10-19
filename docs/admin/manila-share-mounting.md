@@ -1,4 +1,5 @@
 ---
+title: Manila share mounting
 nav_order: 10
 ---
 

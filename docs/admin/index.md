@@ -6,21 +6,13 @@ workflow submission, see the [Cluster usage](../usage) section.
 
 ## Guides
 
-DEBUG INFO:
-```
-{% for item in navigation %}
-{% if item.title == "Administrator Guides" and item.children %}
-{{ item.children }}
-{% endif %}
-{% endfor %}
-```
-
 <div class="grid cards" markdown>
 {% for item in navigation %}
 {% if item.title == "Administrator Guides" and item.children %}
-{% set sorted_pages = item.children | selectattr('is_page') | list %}
-{% for page in sorted_pages %}
--   **[{{ page.file.page.title }}]({{ page.url }})**
+{% for page in item.children %}
+{% if page.is_page %}
+-   **[{{ page.title }}]({{ page.url }})**
+{% endif %}
 {% endfor %}
 {% endif %}
 {% endfor %}

@@ -1,4 +1,5 @@
 ---
+title: Cluster creation and resizing
 nav_order: 5
 ---
 
