@@ -7,6 +7,6 @@ theme:
     - navigation.indexes # Exclude index page from nav list
 plugins:
   - search
+  - section-index # Pulls nav section titles from the index.md file beneath each
   - awesome-pages
   - mkdocs-nav-weight
-  - section-index
