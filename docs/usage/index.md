@@ -9,10 +9,9 @@ admin](../admin) section.
 <div class="grid cards" markdown>
 {% for item in navigation %}
 {% if item.title == "User Guides" and item.children %}
-{% for page in item.children | sort(attribute='meta.nav_order') %}
-{% if page.is_page %}
--   **[{{ page.title }}]({{ page.url }})**
-{% endif %}
+{% set sorted_pages = item.children | selectattr('is_page') | list %}
+{% for page in sorted_pages %}
+-   **[{{ page.file.page.title }}]({{ page.url }})**
 {% endfor %}
 {% endif %}
 {% endfor %}
