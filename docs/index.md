@@ -17,17 +17,8 @@ The system runs on [Kubernetes](https://kubernetes.io/docs/concepts/overview/), 
 
 ## Documentation Structure
 
-This documentation is organized into the following sections:
-
-### User Guides
-
-- **[Cluster access and resizing](usage/cluster-access-and-resizing.md)**: Access the cluster and manage nodegroups for workflow runs
-
-### Administrator Guides
-
-- **[Cluster creation and resizing](admin/cluster-creation-and-resizing.md)**: Create and manage Kubernetes clusters using OpenStack Magnum
-- **[Manila share mounting](admin/manila-share-mounting.md)**: Configure persistent storage for the cluster
-- **[Argo installation on cluster](admin/argo-installation-on-cluster.md)**: Install and configure Argo Workflows
+- **[User guides](usage/index.md)**: Guides for accessing and managing the cluster to run workflows
+- **[Administrator guides](admin/index.md)**: Guides for setting up and configuring the cluster infrastructure
 
 ## Quick Links
 
@@ -35,15 +26,6 @@ This documentation is organized into the following sections:
 - [Automate-Metashape Pipeline](https://github.com/open-forest-observatory/automate-metashape)
 - [Argo Workflows Documentation](https://argoproj.github.io/workflows)
 - [Jetstream2 Cloud](https://jetstream-cloud.org/)
-
-## Getting Started
-
-If you're new to the OFO Argo system:
-
-1. Start with the [Cluster Creation and Resizing](admin/cluster-creation-and-resizing.md) guide to set up a Kubernetes cluster
-2. Follow the [Manila Share Mounting](admin/manila-share-mounting.md) guide to configure persistent storage
-3. Complete the [Argo Installation on Cluster](admin/argo-installation-on-cluster.md) guide to deploy Argo Workflows
-4. You're ready to submit workflows!
 
 ## Support
 
