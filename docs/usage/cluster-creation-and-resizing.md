@@ -3,8 +3,7 @@
 This guide assumes a cluster has already been created, any necessary persistent volumes (e.g. Manila
 share) have already been configured, and Argo has already been installed. It describes how to access and resize the
 cluster as a user. For details on initial cluster deployment and setup, including
-installation of Argo and configuration of persistent volumes, see the Admin <!-- Claude: Link to the
-section here--> section.
+installation of Argo and configuration of persistent volumes, see the [Admin guides](../admin/index.md).
 
 ## OFO cluster management principles
 

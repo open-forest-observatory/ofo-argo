@@ -19,6 +19,10 @@ The system runs on [Kubernetes](https://kubernetes.io/docs/concepts/overview/), 
 
 This documentation is organized into the following sections:
 
+### User Guides
+
+- **[Cluster Access and Resizing](usage/cluster-creation-and-resizing.md)**: Access the cluster and manage nodegroups for workflow runs
+
 ### Administrator Guides
 
 - **[Cluster Creation and Resizing](admin/cluster-creation-and-resizing.md)**: Create and manage Kubernetes clusters using OpenStack Magnum

@@ -178,7 +178,7 @@ openstack coe cluster list --format value -c uuid -c name
 ## Set up `kubectl` to control Kubernetes
 
 This is required the first time you interact with Kubernetes on the cluster. `kubectl` is a tool to
-control Kubernetes (the cluster's software, not its computs nodes/VMs) from your local command line.
+control Kubernetes (the cluster's software, not its compute nodes/VMs) from your local command line.
 
 Once the `openstack coe cluster list` status (command above) changes to `CREATE_COMPLETE`, get the Kubernetes configuration file (`kubeconfig`) and configure your environment:
 

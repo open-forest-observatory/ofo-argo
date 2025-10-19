@@ -29,14 +29,15 @@ sudo apt install -y jq
 sudo snap install helm --classic
 ```
 
-If returning to this after a reboot, and you know you already have the necessary tools, you still need to source the OpenStack environment and application credentials:
+## Install the Ceph CSI driver on the cluster
+
+If you are resuming cluster management after a reboot, you will need to re-set environment variables and source the application credential:
 
 ```bash
 source ~/venv/openstack/bin/activate
+export KUBECONFIG=~/.ofocluster/ofocluster.kubeconfig
 source ~/.ofocluster/app-cred-ofocluster-openrc.sh
 ```
-
-## Install the Ceph CSI driver on the cluster
 
 The Ceph CSI (Container Storage Interface) driver enables Kubernetes to mount CephFS shares.
 
@@ -106,7 +107,7 @@ git pull
 
 ## Apply the share configuration to the cluster
 
-There is a [template Kubernetes config file](../../setup/k8s/manila-cephfs-csi-conifg.yaml) that contains variables such as
+There is a [template Kubernetes config file](../../setup/k8s/manila-cephfs-csi-config.yaml) that contains variables such as
 `${MANILA_ACCESS_RULE_NAME}`. These variables will be substituted with the environment variables we
 prepared in the previous step. The following command substitutes the environment variables into the
 config file and applies it to the cluster. It's done in one step so we don't save this file (which
@@ -119,7 +120,7 @@ Note that the namespaces of the various resources are defined within the yaml, s
 kubectl create namespace argo
 
 # Substitute variables and apply configuration
-envsubst < setup/k8s/manila-cephfs-csi-conifg.yaml | kubectl apply -f -
+envsubst < setup/k8s/manila-cephfs-csi-config.yaml | kubectl apply -f -
 
 # Verify resources were created
 kubectl describe secret -n ceph-csi-cephfs manila-share-secret
