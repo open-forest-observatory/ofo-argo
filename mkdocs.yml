@@ -4,5 +4,5 @@ theme:
   name: material
 plugins:
   - search
-  - section-index
   - awesome-pages
+  - section-index
