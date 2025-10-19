@@ -6,7 +6,6 @@ theme:
     - navigation.footer
 plugins:
   - search
-  - nav-weight
+  - mkdocs-nav-weight
   - awesome-pages
   - section-index
-  - macros
