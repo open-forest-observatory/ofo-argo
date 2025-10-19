@@ -6,3 +6,4 @@ plugins:
   - search
   - awesome-pages
   - section-index
+  - macros
