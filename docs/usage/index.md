@@ -11,7 +11,7 @@ admin](../admin) section.
 {% if item.title == "User Guides" and item.children %}
 {% for page in item.children %}
 {% if page.title != "User Guides" %}
--   **[{{ page.title }}]({{ page.url | url }})**
+-   **[{{ page.title }}]({{ page.url }})**
 {% endif %}
 {% endfor %}
 {% endif %}

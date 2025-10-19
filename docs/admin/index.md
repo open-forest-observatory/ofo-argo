@@ -11,7 +11,7 @@ workflow submission, see the [Cluster usage](../usage) section.
 {% if item.title == "Administrator Guides" and item.children %}
 {% for page in item.children %}
 {% if page.title != "Administrator Guides" %}
--   **[{{ page.title }}]({{ page.url | url }})**
+-   **[{{ page.title }}]({{ page.url }})**
 {% endif %}
 {% endfor %}
 {% endif %}
