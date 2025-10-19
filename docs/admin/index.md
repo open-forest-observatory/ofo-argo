@@ -1,8 +1,8 @@
 ---
-title: Administrator Guides
+title: Administrator guides
 ---
 
-# Administrator Guides
+# Administrator guides
 
 This section contains guides for administrators who need to set up and configure the OFO Argo
 cluster infrastructure.  For day-to-day cluster usage instructions, including cluster resizing and

@@ -1,4 +1,4 @@
 nav:
   - index.md
-  - usage
-  - admin
+  - User guides: usage
+  - Administrator guides: admin
