@@ -9,3 +9,4 @@ plugins:
   - search
   - awesome-pages
   - mkdocs-nav-weight
+  - section-index
