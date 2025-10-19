@@ -7,9 +7,13 @@ admin](../admin) section.
 ## Guides
 
 <div class="grid cards" markdown>
-{% for page in navigation.usage.children %}
+{% for item in navigation %}
+{% if item.title == "User Guides" and item.children %}
+{% for page in item.children %}
 {% if page.title != "User Guides" %}
 -   **[{{ page.title }}]({{ page.url | url }})**
+{% endif %}
+{% endfor %}
 {% endif %}
 {% endfor %}
 </div>

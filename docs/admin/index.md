@@ -7,9 +7,13 @@ workflow submission, see the [Cluster usage](../usage) section.
 ## Guides
 
 <div class="grid cards" markdown>
-{% for page in navigation.admin.children %}
+{% for item in navigation %}
+{% if item.title == "Administrator Guides" and item.children %}
+{% for page in item.children %}
 {% if page.title != "Administrator Guides" %}
 -   **[{{ page.title }}]({{ page.url | url }})**
+{% endif %}
+{% endfor %}
 {% endif %}
 {% endfor %}
 </div>
