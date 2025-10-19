@@ -4,9 +4,8 @@ theme:
   name: material
   features:
     - navigation.footer
-    - navigation.indexes
+    - navigation.indexes # Exclude index page from nav list
 plugins:
   - search
   - awesome-pages
   - mkdocs-nav-weight
-  - section-index
