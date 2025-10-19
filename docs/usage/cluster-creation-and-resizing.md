@@ -28,15 +28,12 @@ create and manage cloud resources.
 sudo apt update
 sudo apt install -y python3-full python3-venv
 python3 -m venv ~/venv/openstack
+source ~/venv/openstack/bin/activate
 ```
 
 ### Install OpenStack command line tools
 
 ```bash
-# Activate environment
-source ~/venv/openstack/bin/activate
-
-# Install OpenStack utilities
 pip install -U python-openstackclient python-magnumclient python-designateclient
 ```
 
