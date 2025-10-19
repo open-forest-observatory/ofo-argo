@@ -6,6 +6,15 @@ workflow submission, see the [Cluster usage](../usage) section.
 
 ## Guides
 
+DEBUG INFO:
+```
+{% for item in navigation %}
+{% if item.title == "Administrator Guides" and item.children %}
+{{ item.children }}
+{% endif %}
+{% endfor %}
+```
+
 <div class="grid cards" markdown>
 {% for item in navigation %}
 {% if item.title == "Administrator Guides" and item.children %}
