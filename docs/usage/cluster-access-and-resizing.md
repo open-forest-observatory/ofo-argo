@@ -8,7 +8,12 @@ weight: 5
 This guide assumes a cluster has already been created, any necessary persistent volumes (e.g. Manila
 share) have already been configured, and Argo has already been installed. It describes how to access and resize the
 cluster as a user. For details on initial cluster deployment and setup, including
-installation of Argo and configuration of persistent volumes, see the [Admin guides](../admin/index.md).
+installation of Argo and configuration of persistent volumes, see the [Admin
+guides](../admin/index.md).
+
+The OFO cluster is named `ofocluster`. The nodes that comprise it can be seen in Exosphere starting
+with the string `ofocluster-`. They appear as created by `dyoung@access-ci.org`. The nodes should
+not be modified via Exosphere or Horizon, only through the command line tools described below.
 
 ## OFO cluster management principles
 
@@ -63,11 +68,12 @@ sudo apt install -y kubectl
 ### Download OpenStack application credential
 
 This is a credential (and associated secret key) that allows you to authenticate with OpenStack in
-order to manage cloud resources in our project. In the OFO
-[Vaultwarden](http://vault.focal-lab.org), find the `OpenStack application credential`. Download the
-attached file `app-cred-ofocluster-openrc.sh` onto your **local computer** (do not put it on a JS2
-machine), ideally into `~/.ofocluster/app-cred-ofocluster-openrc.sh` (which is where we will assume
-it is in these docs).
+order to manage cloud resources in our project. It will be rotated occasionally, so if yours doesn't
+appear to work, check whether you have the latest version. In the OFO
+[Vaultwarden](http://vault.focal-lab.org), find the entry `OpenStack application credential`.
+Download the attached file `app-cred-ofocluster-openrc.sh` onto your **local computer** (do not put
+it on a JS2 machine), ideally into `~/.ofocluster/app-cred-ofocluster-openrc.sh` (which is where we
+will assume it is in these docs).
 
 Source the application credential (which sets relevant environment variables to authenticate the OpenStack command line tools):
 
