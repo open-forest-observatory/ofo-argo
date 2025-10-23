@@ -89,7 +89,7 @@ docker run --rm \
 
 *OUTPUT_MAX_DIM* **optional** parameter to specify the max dimensions of thumbnails. Defaults to 800 pixels.
 
-*WORKING_DIR* **optional** parameter specifying the directory within the container where the imagery products are downloaded to and processed. I see no reason to change from `/tmp/processing`
+*WORKING_DIR* **optional** parameter specifying the directory within the container where the imagery products are downloaded to and postprocessed. The typical place is`/tmp/processing` which means the data will be downloaded to the processing computer and postprocessed there. You have the ability to change the WORKING_DIR to a persistent volume (PVC).
 
 
 
