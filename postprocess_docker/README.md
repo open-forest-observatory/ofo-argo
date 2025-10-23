@@ -5,9 +5,11 @@
 
 This Docker image provides automated post-processing of photogrammetry products from drone surveys. It downloads raw photogrammetry outputs (orthomosaics, DSMs, DTMs) and mission boundary polygons from S3 storage, crops rasters to mission boundaries, generates Canopy Height Models (CHMs), creates Cloud Optimized GeoTIFFs (COGs), produces PNG thumbnails, and uploads processed products back to S3 in organized mission-specific directories.
 
+The current version PROCESSES ONE MISSION AT A TIME. You cannot use this standalone docker image to process multiple missions in an automated way. For that, please use Argo. 
+
 The image is based on GDAL (Geospatial Data Abstraction Library) and includes Python geospatial tools (rasterio, geopandas) and rclone for S3 operations.
 
-The docker image is located at `ghcr.io/open-forest-observatory/photogrammetry-postprocess:1.2` and is attached as a package to this repo.
+The docker image is located at `ghcr.io/open-forest-observatory/photogrammetry-postprocess:1.4` and is attached as a package to this repo.
 
 <br/>
 
@@ -18,25 +20,21 @@ For the standalone docker image to work, there needs to exist a directory in the
 ```
 /S3:ofo-internal/
 ├── <INPUT_DATA_DIRECTORY>/
-    ├── 01_dataset1/
         ├── 01_dataset1_dsm-ptcloud.tif
         ├── 01_dataset1_dtm-ptcloud.tif
         ├── 01_dataset1_ortho-dtm-ptcloud.tif
         ├── 01_dataset1_points-copc.laz
         └── 01_dataset1_report.pdf
-    ├── 02_dataset1/
         ├── 02_dataset1_dsm-ptcloud.tif
         ├── 02_dataset1_dtm-ptcloud.tif
         ├── 02_dataset1_ortho-dtm-ptcloud.tif
         ├── 02_dataset1_points-copc.laz
         └── 02_dataset1_report.pdf
-    ├── 01_dataset2/
         ├── 01_dataset2_dsm-ptcloud.tif
         ├── 01_dataset2_dtm-ptcloud.tif
         ├── 01_dataset2_ortho-dtm-ptcloud.tif
         ├── 01_dataset2_points-copc.laz
         └── 01_dataset2_report.pdf
-    ├── 02_dataset2/
         ├── 02_dataset2_dsm-ptcloud.tif
         ├── 02_dataset2_dtm-ptcloud.tif
         ├── 02_dataset2_ortho-dtm-ptcloud.tif
@@ -77,7 +75,7 @@ docker run --rm \
 
 *INPUT_DATA_DIRECTORY* is the parent directory where existing Metashape products reside.
 
-*S3_BUCKET_INPUT_BOUNDARY* is the bucket where the mission boundary polygons reside. These are used to clip imagery products.
+*S3_BUCKET_INPUT_BOUNDARY* is the bucket where the mission boundary polygons reside. These are used to clip imagery products. Currently in `ofo-public`
 
 *INPUT_BOUNDARY_DIRECTORY* is the parent directory where the mission boundary polygons reside.
 
@@ -85,7 +83,7 @@ docker run --rm \
 
 *OUTPUT_DIRECTORY* is the parent directory where the postprocessed products will be stored
 
-*DATASET_NAME* **optional** parameter if you want to postprocess a single config and dataset. If omitted, all datasets in the *INPUT_DATA_DIRECTORY* will be postprocessed. 
+*DATASET_NAME* is the name of the dataset mission you want to process. This docker container will only process one dataset name. 
 
 *OUTPUT_MAX_DIM* **optional** parameter to specify the max dimensions of thumbnails. Defaults to 800 pixels.
 
@@ -179,20 +177,18 @@ When the container starts, it follows this three-phase execution sequence:
 │    └─> Write ~/.config/rclone/rclone.conf                   │
 │                                                             │
 │ 4. download_photogrammetry_products()                       │
-│    ├─> Discover missions with rclone lsd                    │
-│    ├─> Download each mission to /tmp/processing/input/      │
-│    └─> Return mission_dirs list                             │
+│    ├─> downloads all files with dataset_name prefix         │
+│    ├─> Downloads the files to /tmp/processing/input/        │
+│    └─> Returns:str: The dataset/mission name                │
 │                                                             │
-│ 5. download_boundary_polygons(mission_dirs)                 │
+│ 5. download_boundary_polygons(mission_name)                 │
 │    ├─> Extract base mission names                           │
-│    ├─> Download .gpkg files to /tmp/processing/boundary/    │
-│    └─> Return download count                                │
+│    └─> Download .gpkg file to /tmp/processing/boundary/     │
 │                                                             │
 │ 6. detect_and_match_missions()                              │
-│    ├─> Match products to boundaries                         │
-│    └─> Return list of mission match dicts                   │
+│    ├─> Match products to boundary                           │
 │                                                             │
-│ 7. FOR EACH mission in mission_matches:                     │
+│ 7. For the Dataset_name matched with a boundary             │
 │    ├─> postprocess_photogrammetry_containerized()  ─-───┐   │
 │    │   (calls Phase 3)                                  │   │
 │    ├─> upload_processed_products()                      │   │
@@ -250,10 +246,7 @@ When the container starts, it follows this three-phase execution sequence:
 │ 9. Print statistics (file counts)                           │
 │ 10. Return True                                             │
 └────────────────┬────────────────────────────────────────────┘
-                 │
-                 ▼
-         Return to Phase 2
-    (upload and continue loop)
+
 ```
 
 ---
