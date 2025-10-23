@@ -89,188 +89,172 @@ endpoint = {s3_endpoint}
 
 
 def download_photogrammetry_products():
-    """Download photogrammetry products from S3 mission subdirectories."""
+    """Download photogrammetry products from flat S3 directory structure.
+
+    Downloads all files from the flat S3 structure (run_folder/imagery_products)
+    and filters by DATASET_NAME prefix to get files for the specified mission.
+    Organizes files locally into a mission subdirectory for processing.
+
+    Returns:
+        str: The dataset/mission name
+    """
     input_bucket = os.environ.get('S3_BUCKET_INPUT_DATA')
     input_dir = os.environ.get('INPUT_DATA_DIRECTORY')
-    dataset_name = os.environ.get('DATASET_NAME')  # Optional: filter to single dataset
+    dataset_name = os.environ.get('DATASET_NAME')  # Required: mission to process
     working_dir = os.environ.get('WORKING_DIR', '/tmp/processing')
     local_input_dir = f"{working_dir}/input"
 
+    if not dataset_name:
+        print("Error: DATASET_NAME environment variable is required")
+        sys.exit(1)
+
+    print(f"Processing mission: '{dataset_name}'")
+
+    # Remote path now points directly to the flat directory structure
     remote_base_path = f"s3remote:{input_bucket}/{input_dir}"
+    local_mission_dir = os.path.join(local_input_dir, dataset_name)
+    os.makedirs(local_mission_dir, exist_ok=True)
 
-    # Single-dataset mode: process only the specified dataset
-    if dataset_name:
-        print(f"Single-dataset mode: Processing only '{dataset_name}'")
-        mission_dirs = [dataset_name]
-    else:
-        # Multi-dataset mode: discover all subdirectories
-        print(f"Discovering mission subdirectories in: {remote_base_path}")
+    print(f"Downloading products from: {remote_base_path}")
+    print(f"Filtering files with prefix: {dataset_name}_")
 
-        # List subdirectories (mission folders) using rclone lsd
-        lsd_cmd = ['rclone', 'lsd', remote_base_path]
+    # Download all files matching the dataset prefix
+    copy_cmd = [
+        'rclone', 'copy',
+        remote_base_path,
+        local_mission_dir,
+        '--include', f'{dataset_name}_*',  # Filter by mission prefix
+        '--progress',
+        '--transfers', '8',
+        '--checkers', '8',
+        '--retries', '5',
+        '--retries-sleep', '15s',
+        '--stats', '30s'
+    ]
 
-        try:
-            result = subprocess.run(lsd_cmd, check=True, capture_output=True, text=True)
-            # Parse output: each line format is like "          -1 2024-10-03 12:00:00        -1 mission-name"
-            mission_dirs = []
-            for line in result.stdout.strip().split('\n'):
-                if line.strip():
-                    parts = line.split()
-                    if parts:
-                        mission_name = parts[-1]  # Last part is directory name
-                        mission_dirs.append(mission_name)
+    try:
+        subprocess.run(copy_cmd, check=True)
+        files = os.listdir(local_mission_dir) if os.path.exists(local_mission_dir) else []
 
-            print(f"Found {len(mission_dirs)} mission directories: {', '.join(mission_dirs)}")
-        except subprocess.CalledProcessError as e:
-            print(f"Failed to list mission directories: {e}")
+        if not files:
+            print(f"Error: No files found matching prefix '{dataset_name}_*' in {remote_base_path}")
             sys.exit(1)
 
-        if not mission_dirs:
-            print("Error: No mission directories found")
-            sys.exit(1)
+        print(f"Downloaded {len(files)} files for {dataset_name}")
 
-    # Download each mission's products
-    total_files = 0
-    for mission_name in mission_dirs:
-        remote_mission_path = f"{remote_base_path}/{mission_name}"
-        local_mission_dir = os.path.join(local_input_dir, mission_name)
+    except subprocess.CalledProcessError as e:
+        print(f"Error: Failed to download products for {dataset_name}: {e}")
+        sys.exit(1)
 
-        print(f"Downloading products for mission: {mission_name}")
-
-        copy_cmd = [
-            'rclone', 'copy',
-            remote_mission_path,
-            local_mission_dir,
-            '--progress',
-            '--transfers', '8',
-            '--checkers', '8',
-            '--retries', '5',
-            '--retries-sleep', '15s',
-            '--stats', '30s'
-        ]
-
-        try:
-            subprocess.run(copy_cmd, check=True)
-            files = os.listdir(local_mission_dir) if os.path.exists(local_mission_dir) else []
-            total_files += len(files)
-            print(f"  Downloaded {len(files)} files for {mission_name}")
-        except subprocess.CalledProcessError as e:
-            print(f"Warning: Failed to download products for {mission_name}: {e}")
-
-    print(f"Total downloaded: {total_files} photogrammetry files from {len(mission_dirs)} missions")
-
-    return mission_dirs
+    return dataset_name
 
 
-def download_boundary_polygons(mission_dirs):
-    """Download boundary polygons from nested S3 structure for each mission.
+def download_boundary_polygons(mission_name):
+    """Download boundary polygon from nested S3 structure for the specified mission.
 
     Args:
-        mission_dirs: List of mission directory names (may include numeric prefixes)
+        mission_name: Mission name (may include numeric prefix like '01_mission-name')
+
+    Returns:
+        bool: True if boundary file was downloaded successfully
     """
     boundary_bucket = os.environ.get('S3_BUCKET_INPUT_BOUNDARY')
     boundary_base_dir = os.environ.get('INPUT_BOUNDARY_DIRECTORY')
     working_dir = os.environ.get('WORKING_DIR', '/tmp/processing')
     local_boundary_dir = f"{working_dir}/boundary"
 
-    print(f"Downloading boundary polygons for {len(mission_dirs)} missions")
+    print(f"Downloading boundary polygon for mission: {mission_name}")
 
-    downloaded_count = 0
-    for mission_name in mission_dirs:
-        # Extract base mission name (strip numeric prefix) for boundary lookup
-        base_mission_name = extract_base_mission_name(mission_name)
+    # Extract base mission name (strip numeric prefix) for boundary lookup
+    base_mission_name = extract_base_mission_name(mission_name)
 
-        # Construct path using base name: <boundary_base>/<base_name>/metadata-mission/<base_name>_mission-metadata.gpkg
-        remote_boundary_file = f"s3remote:{boundary_bucket}/{boundary_base_dir}/{base_mission_name}/metadata-mission/{base_mission_name}_mission-metadata.gpkg"
-        local_mission_boundary_dir = os.path.join(local_boundary_dir, mission_name)
-        os.makedirs(local_mission_boundary_dir, exist_ok=True)
-        local_boundary_file = os.path.join(local_mission_boundary_dir, f"{base_mission_name}_mission-metadata.gpkg")
+    # Construct path using base name: <boundary_base>/<base_name>/metadata-mission/<base_name>_mission-metadata.gpkg
+    remote_boundary_file = f"s3remote:{boundary_bucket}/{boundary_base_dir}/{base_mission_name}/metadata-mission/{base_mission_name}_mission-metadata.gpkg"
+    local_mission_boundary_dir = os.path.join(local_boundary_dir, mission_name)
+    os.makedirs(local_mission_boundary_dir, exist_ok=True)
+    local_boundary_file = os.path.join(local_mission_boundary_dir, f"{base_mission_name}_mission-metadata.gpkg")
 
-        print(f"Downloading boundary for {mission_name} (using base name: {base_mission_name})")
+    print(f"Using base name for boundary lookup: {base_mission_name}")
 
-        copy_cmd = [
-            'rclone', 'copyto',
-            remote_boundary_file,
-            local_boundary_file,
-            '--progress',
-            '--retries', '5',
-            '--retries-sleep', '15s'
-        ]
+    copy_cmd = [
+        'rclone', 'copyto',
+        remote_boundary_file,
+        local_boundary_file,
+        '--progress',
+        '--retries', '5',
+        '--retries-sleep', '15s'
+    ]
 
-        try:
-            subprocess.run(copy_cmd, check=True)
-            if os.path.exists(local_boundary_file):
-                downloaded_count += 1
-                print(f"  Downloaded boundary: {mission_name}_mission-metadata.gpkg")
-            else:
-                print(f"  Warning: Boundary file not found for {mission_name}")
-        except subprocess.CalledProcessError as e:
-            print(f"  Warning: Failed to download boundary for {mission_name}: {e}")
-
-    print(f"Downloaded {downloaded_count} boundary files")
-
-    return downloaded_count
+    try:
+        subprocess.run(copy_cmd, check=True)
+        if os.path.exists(local_boundary_file):
+            print(f"Successfully downloaded boundary file")
+            return True
+        else:
+            print(f"Error: Boundary file not found for {mission_name}")
+            return False
+    except subprocess.CalledProcessError as e:
+        print(f"Error: Failed to download boundary for {mission_name}: {e}")
+        return False
 
 
 def detect_and_match_missions():
     """
-    Auto-detect missions using directory names and match products to boundaries.
+    Match products to boundary file for the single mission being processed.
     Handles numeric prefixes (e.g., 01_mission-name, 02_mission-name) by mapping
     to the same base boundary file.
 
     Returns:
-        List of dicts with keys: 'prefix', 'boundary_file', 'product_files'
+        Dict with keys: 'prefix', 'boundary_file', 'product_files'
+        Returns None if matching fails
     """
     working_dir = os.environ.get('WORKING_DIR', '/tmp/processing')
     input_dir = f"{working_dir}/input"
     boundary_dir = f"{working_dir}/boundary"
+    dataset_name = os.environ.get('DATASET_NAME')
 
-    # Get list of mission directories
+    # Validate directories exist
     if not os.path.exists(input_dir):
         raise ValueError("Input directory not found")
 
     if not os.path.exists(boundary_dir):
         raise ValueError("Boundary directory not found")
 
-    mission_dirs = [d for d in os.listdir(input_dir) if os.path.isdir(os.path.join(input_dir, d))]
+    # Get the mission directory
+    mission_input_dir = os.path.join(input_dir, dataset_name)
+    mission_boundary_dir = os.path.join(boundary_dir, dataset_name)
 
-    if not mission_dirs:
-        raise ValueError("No mission directories found")
+    if not os.path.exists(mission_input_dir):
+        raise ValueError(f"Mission input directory not found: {mission_input_dir}")
 
-    print(f"Found {len(mission_dirs)} mission directories")
+    # Get all product files for this mission
+    product_files = []
+    if os.path.exists(mission_input_dir):
+        product_files = [
+            os.path.join(mission_input_dir, f)
+            for f in os.listdir(mission_input_dir)
+            if os.path.isfile(os.path.join(mission_input_dir, f))
+        ]
 
-    mission_matches = []
+    if not product_files:
+        print(f"Error: No product files found for mission: {dataset_name}")
+        return None
 
-    for mission_name in sorted(mission_dirs):
-        mission_input_dir = os.path.join(input_dir, mission_name)
-        mission_boundary_dir = os.path.join(boundary_dir, mission_name)
+    # Find boundary file using base mission name (strips numeric prefix)
+    base_mission_name = extract_base_mission_name(dataset_name)
+    boundary_file = os.path.join(mission_boundary_dir, f"{base_mission_name}_mission-metadata.gpkg")
 
-        # Get all product files for this mission
-        product_files = []
-        if os.path.exists(mission_input_dir):
-            product_files = [
-                os.path.join(mission_input_dir, f)
-                for f in os.listdir(mission_input_dir)
-                if os.path.isfile(os.path.join(mission_input_dir, f))
-            ]
+    if not os.path.exists(boundary_file):
+        print(f"Error: No boundary file found for mission: {dataset_name} (expected: {base_mission_name}_mission-metadata.gpkg)")
+        return None
 
-        # Find boundary file using base mission name (strips numeric prefix)
-        base_mission_name = extract_base_mission_name(mission_name)
-        boundary_file = os.path.join(mission_boundary_dir, f"{base_mission_name}_mission-metadata.gpkg")
+    print(f"Matched mission '{dataset_name}' with {len(product_files)} products")
 
-        if os.path.exists(boundary_file) and product_files:
-            mission_matches.append({
-                'prefix': mission_name,
-                'boundary_file': boundary_file,
-                'product_files': product_files
-            })
-            print(f"Matched mission '{mission_name}' with {len(product_files)} products")
-        elif not os.path.exists(boundary_file):
-            print(f"Warning: No boundary file found for mission: {mission_name} (expected: {base_mission_name}_mission-metadata.gpkg)")
-        elif not product_files:
-            print(f"Warning: No product files found for mission: {mission_name}")
-
-    return mission_matches
+    return {
+        'prefix': dataset_name,
+        'boundary_file': boundary_file,
+        'product_files': product_files
+    }
 
 
 def upload_processed_products(mission_prefix):
@@ -354,13 +338,14 @@ def main():
     print("Starting Python post-processing container...")
     print(f"Working directory: {working_dir}")
 
-    # Validate required parameters
+    # Validate required parameters (including DATASET_NAME)
     required_vars = [
         'S3_ENDPOINT',
         'S3_ACCESS_KEY',
         'S3_SECRET_KEY',
         'S3_BUCKET_INPUT_DATA',
-        'S3_BUCKET_INPUT_BOUNDARY'
+        'S3_BUCKET_INPUT_BOUNDARY',
+        'DATASET_NAME'
     ]
 
     missing_vars = [var for var in required_vars if not os.environ.get(var)]
@@ -381,84 +366,69 @@ def main():
     if not os.access(working_dir, os.W_OK):
         print(f"ERROR: WORKING_DIR '{working_dir}' is not writable")
         sys.exit(1)
-    
+
     # Set up working directory
     os.environ['TMPDIR'] = working_dir
     Path(working_dir).mkdir(parents=True, exist_ok=True)
 
-    # Log processing mode
+    # Log processing configuration
     dataset_name = os.environ.get('DATASET_NAME')
-    if dataset_name:
-        print(f"Running in SINGLE-DATASET mode for: {dataset_name}")
-    else:
-        print("Running in MULTI-DATASET mode (will process all datasets)")
-
+    print(f"Processing single mission: {dataset_name}")
     print(f"Output max dimension: {os.environ.get('OUTPUT_MAX_DIM', '800')}")
 
     # Configure rclone
     setup_rclone_config()
 
-    # Download all available data
-    mission_dirs = download_photogrammetry_products()
-    download_boundary_polygons(mission_dirs)
+    # Download data for the specified mission
+    mission_name = download_photogrammetry_products()
 
-    # Auto-detect and match missions
+    boundary_success = download_boundary_polygons(mission_name)
+    if not boundary_success:
+        print(f"Error: Failed to download boundary file for mission: {mission_name}")
+        sys.exit(1)
+
+    # Match products to boundary
     try:
-        mission_matches = detect_and_match_missions()
+        mission_match = detect_and_match_missions()
     except ValueError as e:
         print(f"Error: {e}")
         sys.exit(1)
 
-    if not mission_matches:
-        print("Error: No matching photogrammetry products and boundary polygons found")
+    if not mission_match:
+        print("Error: Could not match photogrammetry products to boundary polygon")
         sys.exit(1)
 
-    print(f"Found {len(mission_matches)} missions to process")
+    # Process the mission
+    print(f"\n=== Processing mission: {mission_match['prefix']} ===")
 
-    # Process each detected mission
-    success_count = 0
+    try:
+        result = postprocess_photogrammetry_containerized(
+            mission_match['prefix'],
+            mission_match['boundary_file'],
+            mission_match['product_files']
+        )
 
-    for i, mission in enumerate(mission_matches):
-        print(f"\n=== Processing mission {i+1} of {len(mission_matches)}: {mission['prefix']} ===")
+        if result:
+            upload_processed_products(mission_match['prefix'])
+            print(f"✓ Successfully processed mission: {mission_match['prefix']}")
 
-        try:
-            result = postprocess_photogrammetry_containerized(
-                mission['prefix'],
-                mission['boundary_file'],
-                mission['product_files']
-            )
+            cleanup_working_directory()
 
-            if result:
-                upload_processed_products(mission['prefix'])
-                success_count += 1
-                print(f"✓ Successfully processed mission: {mission['prefix']}")
-            else:
-                print(f"✗ Failed to process mission: {mission['prefix']}")
+            print("\n=== Summary ===")
+            print(f"Mission '{mission_match['prefix']}' processed successfully!")
+            sys.exit(0)
+        else:
+            print(f"✗ Failed to process mission: {mission_match['prefix']}")
+            cleanup_working_directory()
+            sys.exit(1)
 
-        except Exception as e:
-            print(f"✗ Error processing mission {mission['prefix']}: {e}")
-            import traceback
-            traceback.print_exc()
-
-    cleanup_working_directory()
-
-    # Print summary
-    print("\n=== Summary ===")
-    print(f"Total missions found: {len(mission_matches)}")
-    print(f"Successfully processed: {success_count}")
-    print(f"Failed: {len(mission_matches) - success_count}")
-
-    if success_count == len(mission_matches):
-        print("All missions processed successfully!")
-        sys.exit(0)
-    elif success_count > 0:
-        print("Partial success - some missions failed")
-        sys.exit(1)
-    else:
-        print("All missions failed")
+    except Exception as e:
+        print(f"✗ Error processing mission {mission_match['prefix']}: {e}")
+        import traceback
+        traceback.print_exc()
+        cleanup_working_directory()
         sys.exit(1)
 
 
 if __name__ == '__main__':
     main()
-
