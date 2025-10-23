@@ -155,14 +155,14 @@ spec:
                 - name: dataset-name
                   value: "{{inputs.parameters.dataset-name}}"
 
-          - name: postprocess-dataset
-            dependencies: [rclone-upload]
-            template: run-postprocessing
-            arguments:
-              parameters:
-                - name: dataset-name
-                  value: "{{inputs.parameters.dataset-name}}"
-            when: "{{tasks.rclone-upload.status}} == Succeeded"
+         # - name: postprocess-dataset
+         #   dependencies: [rclone-upload]
+         #   template: run-postprocessing
+         #   arguments:
+         #     parameters:
+         #       - name: dataset-name
+         #         value: "{{inputs.parameters.dataset-name}}"
+         #   when: "{{tasks.rclone-upload.status}} == Succeeded"
                   
           #- name: log-completion-success
             #dependencies: [run-processing]
@@ -352,49 +352,49 @@ spec:
                 key: secret_key
 
   # --------- POST-PROCESSING (Python Docker image) ---------
-    - name: run-postprocessing
-      inputs:
-        parameters:
-          - name: dataset-name
-      container:
-        image: ghcr.io/open-forest-observatory/photogrammetry-postprocess:1.2
-        env:
-          - name: S3_ENDPOINT
-            value: "{{workflow.parameters.S3_ENDPOINT}}"
-          - name: S3_PROVIDER
-            value: "{{workflow.parameters.S3_PROVIDER}}"
-          - name: S3_ACCESS_KEY
-            valueFrom:
-              secretKeyRef:
-                name: s3-credentials
-                key: access_key
-          - name: S3_SECRET_KEY
-            valueFrom:
-              secretKeyRef:
-                name: s3-credentials
-                key: secret_key
-          - name: S3_BUCKET_INPUT_DATA
-            value: "{{workflow.parameters.S3_BUCKET}}"
-          - name: INPUT_DATA_DIRECTORY
-            value: "{{workflow.parameters.RUN_FOLDER}}"
-          - name: DATASET_NAME
-            value: "{{inputs.parameters.dataset-name}}"
-          - name: S3_BUCKET_INPUT_BOUNDARY
-            value: "{{workflow.parameters.S3_BUCKET_OUTPUT}}"
-          - name: INPUT_BOUNDARY_DIRECTORY
-            value: "{{workflow.parameters.BOUNDARY_DIRECTORY}}"
-          - name: S3_BUCKET_OUTPUT
-            value: "{{workflow.parameters.S3_BUCKET_OUTPUT}}"
-          - name: OUTPUT_DIRECTORY
-            value: "{{workflow.parameters.OUTPUT_DIRECTORY}}"
-          #- name: OUTPUT_MAX_DIM
-            #value: "{{workflow.parameters.OUTPUT_MAX_DIM}}"
-          - name: WORKING_DIR
-            value: "{{workflow.parameters.WORKING_DIR}}"
-        resources:
-          requests:
-            cpu: "1"
-            memory: "4Gi"
-          limits:
-            cpu: "4"
-            memory: "16Gi"
+#    - name: run-postprocessing
+#      inputs:
+#        parameters:
+#          - name: dataset-name
+#      container:
+#        image: ghcr.io/open-forest-observatory/photogrammetry-postprocess:1.2
+#        env:
+#          - name: S3_ENDPOINT
+#            value: "{{workflow.parameters.S3_ENDPOINT}}"
+#          - name: S3_PROVIDER
+#            value: "{{workflow.parameters.S3_PROVIDER}}"
+#          - name: S3_ACCESS_KEY
+#            valueFrom:
+#              secretKeyRef:
+#                name: s3-credentials
+#                key: access_key
+#          - name: S3_SECRET_KEY
+#            valueFrom:
+#              secretKeyRef:
+#                name: s3-credentials
+#                key: secret_key
+#          - name: S3_BUCKET_INPUT_DATA
+#            value: "{{workflow.parameters.S3_BUCKET}}"
+#          - name: INPUT_DATA_DIRECTORY
+#            value: "{{workflow.parameters.RUN_FOLDER}}"
+#          - name: DATASET_NAME
+#            value: "{{inputs.parameters.dataset-name}}"
+#          - name: S3_BUCKET_INPUT_BOUNDARY
+#            value: "{{workflow.parameters.S3_BUCKET_OUTPUT}}"
+#          - name: INPUT_BOUNDARY_DIRECTORY
+#            value: "{{workflow.parameters.BOUNDARY_DIRECTORY}}"
+#          - name: S3_BUCKET_OUTPUT
+#            value: "{{workflow.parameters.S3_BUCKET_OUTPUT}}"
+#          - name: OUTPUT_DIRECTORY
+#            value: "{{workflow.parameters.OUTPUT_DIRECTORY}}"
+#          #- name: OUTPUT_MAX_DIM
+#            #value: "{{workflow.parameters.OUTPUT_MAX_DIM}}"
+#          - name: WORKING_DIR
+#            value: "{{workflow.parameters.WORKING_DIR}}"
+#        resources:
+#          requests:
+#            cpu: "1"
+#            memory: "4Gi"
+#          limits:
+#            cpu: "4"
+#            memory: "16Gi"
