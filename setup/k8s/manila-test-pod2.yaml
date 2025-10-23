@@ -1,0 +1,37 @@
+# Purpose: This defines a pod we can use to confirm that the CephFS share is being mounted correctly
+# via the CSI driver and the PVC we defined in `js2-manila-cephfs-csi-config.yaml`.
+
+apiVersion: v1
+kind: Pod
+metadata:
+  name: manila-test-pod2
+  namespace: argo
+spec:
+  containers:
+  - name: test
+    image: busybox:latest
+    command: ["/bin/sh"]
+    args: ["-c", "sleep 3600"]
+    volumeMounts:
+    - name: ceph-storage
+      mountPath: /mnt/cephfs
+  volumes:
+  - name: ceph-storage
+    persistentVolumeClaim:
+      claimName: ceph-share-rw-pvc2
+
+# Once the pod is running, exec into it and check the contents:
+
+# # Check pod status
+# kubectl get pod -n argo cephfs-test-pod
+
+# # Once running, exec into the pod
+# kubectl exec -n argo -it cephfs-test-pod -- /bin/sh
+
+# # Inside the pod, check the mount
+# ls -la /mnt/cephfs
+# df -h /mnt/cephfs
+
+# # Test write access
+# echo "test" > /mnt/cephfs/test-file.txt
+# cat /mnt/cephfs/test-file.txt
