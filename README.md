@@ -421,6 +421,7 @@ argo submit -n argo workflow.yaml --watch \
 
 *BOUNDARY_DIRECTORY* is the parent directory where the mission boundary polygons reside. These are used to clip imagery products.
 
+*WORKING_DIR* parameter specifies the directory within the container where the imagery products are downloaded to and postprocessed. The typical place is`/tmp/processing` which means the data will be downloaded to the processing computer and postprocessed there. You have the ability to change the WORKING_DIR to a persistent volume (PVC).
 
 <br/>
 
