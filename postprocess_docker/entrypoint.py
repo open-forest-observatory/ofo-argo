@@ -2,7 +2,6 @@
 """
 Main entrypoint for photogrammetry post-processing container.
 Handles S3 downloads/uploads, mission detection, and orchestration.
-Python conversion of entrypoint.R
 """
 
 import os
@@ -43,28 +42,28 @@ def extract_prefix_number(dataset_name):
     Extract numeric prefix from dataset name to determine processed_NN directory number.
 
     Handles patterns like:
-    - '01_benchmarking-greasewood' -> 1
-    - '02_benchmarking-greasewood' -> 2
-    - '15_benchmarking-greasewood' -> 15
-    - 'benchmarking-greasewood' -> 1 (default when no prefix)
+    - '01_benchmarking-greasewood' -> '01'
+    - '02_benchmarking-greasewood' -> '02'
+    - '15_benchmarking-greasewood' -> '15'
+    - 'benchmarking-greasewood' -> '01' (default when no prefix)
 
     Args:
         dataset_name: Dataset/mission name (may include numeric prefix)
 
     Returns:
-        Integer representing the prefix number (defaults to 1 if no prefix)
+        Two-character zero-padded string representing the prefix number (defaults to '01' if no prefix)
     """
     # Match pattern: digits at start followed by underscore
     match = re.match(r'^(\d+)_', dataset_name)
     if match:
-        return int(match.group(1))
-    return 1  # Default to 1 if no numeric prefix
+        return match.group(1)
+    return "01"  # Default to '01' if no numeric prefix
 
 
 def get_s3_flags():
     """Build common S3 authentication flags for rclone commands."""
     return [
-        '--s3-provider', os.environ.get('S3_PROVIDER', 'Other'),
+        '--s3-provider', os.environ.get('S3_PROVIDER'),
         '--s3-endpoint', os.environ.get('S3_ENDPOINT'),
         '--s3-access-key-id', os.environ.get('S3_ACCESS_KEY'),
         '--s3-secret-access-key', os.environ.get('S3_SECRET_KEY')
@@ -84,7 +83,7 @@ def download_photogrammetry_products():
     input_bucket = os.environ.get('S3_BUCKET_INPUT_DATA')
     input_dir = os.environ.get('INPUT_DATA_DIRECTORY')
     dataset_name = os.environ.get('DATASET_NAME')  # Required: mission to process
-    working_dir = os.environ.get('WORKING_DIR', '/tmp/processing')
+    working_dir = os.environ.get('WORKING_DIR')
     local_input_dir = f"{working_dir}/input"
 
     if not dataset_name:
@@ -143,7 +142,7 @@ def download_boundary_polygons(mission_name):
     """
     boundary_bucket = os.environ.get('S3_BUCKET_INPUT_BOUNDARY')
     boundary_base_dir = os.environ.get('INPUT_BOUNDARY_DIRECTORY')
-    working_dir = os.environ.get('WORKING_DIR', '/tmp/processing')
+    working_dir = os.environ.get('WORKING_DIR')
     local_boundary_dir = f"{working_dir}/boundary"
 
     print(f"Downloading boundary polygon for mission: {mission_name}")
@@ -191,7 +190,7 @@ def detect_and_match_missions():
         Dict with keys: 'prefix', 'boundary_file', 'product_files'
         Returns None if matching fails
     """
-    working_dir = os.environ.get('WORKING_DIR', '/tmp/processing')
+    working_dir = os.environ.get('WORKING_DIR')
     input_dir = f"{working_dir}/input"
     boundary_dir = f"{working_dir}/boundary"
     dataset_name = os.environ.get('DATASET_NAME')
@@ -260,14 +259,14 @@ def upload_processed_products(mission_prefix):
     base_mission_name = extract_base_mission_name(mission_prefix)
     processed_num = extract_prefix_number(mission_prefix)
 
-    print(f"Uploading to {base_mission_name}/processed_{processed_num:02d}/")
+    print(f"Uploading to {base_mission_name}/processed_{processed_num}/")
 
     # Upload both full resolution and thumbnails to mission-specific processed_NN directories
-    working_dir = os.environ.get('WORKING_DIR', '/tmp/processing')
+    working_dir = os.environ.get('WORKING_DIR')
     for subdir in ['full', 'thumbnails']:
         local_path = f"{working_dir}/output/{subdir}"
         # Remote path: <output_base>/<base_mission_name>/processed_NN/<subdir>/
-        remote_path = f":s3:{output_bucket}/{output_base_dir}/{base_mission_name}/processed_{processed_num:02d}/{subdir}"
+        remote_path = f":s3:{output_bucket}/{output_base_dir}/{base_mission_name}/processed_{processed_num}/{subdir}"
 
         # Only upload files that match this mission prefix
         if not os.path.exists(local_path):
@@ -303,39 +302,57 @@ def upload_processed_products(mission_prefix):
     print(f"Upload completed for mission: {mission_prefix}")
 
 
-def cleanup_working_directory():
-    """Remove temporary processing files."""
-    print("Cleaning up temporary files...")
-    working_dir = os.environ.get('WORKING_DIR', '/tmp/processing')
+def cleanup_working_directory(mission_prefix):
+    """Remove temporary processing files for a specific mission.
 
-    if os.path.exists(working_dir):
-        shutil.rmtree(working_dir)
+    Only deletes mission-specific directories and files to support parallel
+    processing where multiple containers may share the same WORKING_DIR.
 
-    print("Cleanup completed")
+    Args:
+        mission_prefix: Mission identifier (e.g., '01_mission-name')
+    """
+    print(f"Cleaning up temporary files for mission: {mission_prefix}")
+    working_dir = os.environ.get('WORKING_DIR')
+
+    # Delete mission-specific input directory
+    mission_input_dir = os.path.join(working_dir, 'input', mission_prefix)
+    if os.path.exists(mission_input_dir):
+        shutil.rmtree(mission_input_dir)
+        print(f"Removed: {mission_input_dir}")
+
+    # Delete mission-specific boundary directory
+    mission_boundary_dir = os.path.join(working_dir, 'boundary', mission_prefix)
+    if os.path.exists(mission_boundary_dir):
+        shutil.rmtree(mission_boundary_dir)
+        print(f"Removed: {mission_boundary_dir}")
+
+    # Delete mission-specific output files (full resolution)
+    full_output_dir = os.path.join(working_dir, 'output', 'full')
+    if os.path.exists(full_output_dir):
+        for filename in os.listdir(full_output_dir):
+            if filename.startswith(f"{mission_prefix}_"):
+                filepath = os.path.join(full_output_dir, filename)
+                os.remove(filepath)
+                print(f"Removed: {filepath}")
+
+    # Delete mission-specific output files (thumbnails)
+    thumbnails_output_dir = os.path.join(working_dir, 'output', 'thumbnails')
+    if os.path.exists(thumbnails_output_dir):
+        for filename in os.listdir(thumbnails_output_dir):
+            if filename.startswith(f"{mission_prefix}_"):
+                filepath = os.path.join(thumbnails_output_dir, filename)
+                os.remove(filepath)
+                print(f"Removed: {filepath}")
+
+    print(f"Cleanup completed for mission: {mission_prefix}")
 
 
 def main():
     """Main execution function."""
-    working_dir = os.environ.get('WORKING_DIR', '/tmp/processing')
+    working_dir = os.environ.get('WORKING_DIR')
 
     print("Starting Python post-processing container...")
     print(f"Working directory: {working_dir}")
-
-    # Validate required parameters (including DATASET_NAME)
-    required_vars = [
-        'S3_ENDPOINT',
-        'S3_ACCESS_KEY',
-        'S3_SECRET_KEY',
-        'S3_BUCKET_INPUT_DATA',
-        'S3_BUCKET_INPUT_BOUNDARY',
-        'DATASET_NAME'
-    ]
-
-    missing_vars = [var for var in required_vars if not os.environ.get(var)]
-
-    if missing_vars:
-        print(f"Error: Missing required environment variables: {', '.join(missing_vars)}")
-        sys.exit(1)
 
     # Validate WORKING_DIR exists and is writable
     if not os.path.exists(working_dir):
@@ -357,7 +374,7 @@ def main():
     # Log processing configuration
     dataset_name = os.environ.get('DATASET_NAME')
     print(f"Processing single mission: {dataset_name}")
-    print(f"Output max dimension: {os.environ.get('OUTPUT_MAX_DIM', '800')}")
+    print(f"Output max dimension: {os.environ.get('OUTPUT_MAX_DIM')}")
 
     # Download data for the specified mission
     mission_name = download_photogrammetry_products()
@@ -392,21 +409,21 @@ def main():
             upload_processed_products(mission_match['prefix'])
             print(f"✓ Successfully processed mission: {mission_match['prefix']}")
 
-            cleanup_working_directory()
+            cleanup_working_directory(mission_match['prefix'])
 
             print("\n=== Summary ===")
             print(f"Mission '{mission_match['prefix']}' processed successfully!")
             sys.exit(0)
         else:
             print(f"✗ Failed to process mission: {mission_match['prefix']}")
-            cleanup_working_directory()
+            cleanup_working_directory(mission_match['prefix'])
             sys.exit(1)
 
     except Exception as e:
         print(f"✗ Error processing mission {mission_match['prefix']}: {e}")
         import traceback
         traceback.print_exc()
-        cleanup_working_directory()
+        cleanup_working_directory(mission_match['prefix'])
         sys.exit(1)
 
 
