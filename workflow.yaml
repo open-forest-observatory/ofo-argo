@@ -125,18 +125,21 @@ spec:
         volumeMounts:
           - name: data
             mountPath: /data
-          - name: results
-            mountPath: /results
         command: ["python3", "/app/python/metashape_workflow.py"]
         args:
           - "--config_file"
           - "/data/argo-input/configs/{{inputs.parameters.dataset-name}}.yml"
           - "--project-path"
-          - "/results/{{workflow.parameters.RUN_FOLDER}}/{{inputs.parameters.dataset-name}}/project"
+          - "/data/argo-output/{{workflow.parameters.RUN_FOLDER}}/{{inputs.parameters.dataset-name}}/project"
           - "--output-path"
-          - "/results/{{workflow.parameters.RUN_FOLDER}}/{{inputs.parameters.dataset-name}}/output"
+          - "/data/argo-output/{{workflow.parameters.RUN_FOLDER}}/{{inputs.parameters.dataset-name}}/output"
           - "--run-name"
           - "{{inputs.parameters.dataset-name}}"
+        resources:
+          requests:
+            nvidia.com/gpu: 1
+          limits:
+            nvidia.com/gpu: 1
         env:
           - name: AGISOFT_FLS
             value: "{{workflow.parameters.AGISOFT_FLS}}"
