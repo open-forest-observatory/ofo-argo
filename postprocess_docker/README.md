@@ -60,7 +60,7 @@ docker run --rm \
   -e DATASET_NAME=01_benchmarking-greasewood \
   -e OUTPUT_MAX_DIM=800 \
   -e WORKING_DIR=/tmp/processing \
-  ghcr.io/open-forest-observatory/photogrammetry-postprocess:1.2
+  ghcr.io/open-forest-observatory/photogrammetry-postprocess:1.6
 ```
 
 *S3_ENDPOINT* is the url of the Jetstream2s S3 storage
@@ -87,7 +87,7 @@ docker run --rm \
 
 *OUTPUT_MAX_DIM* **optional** parameter to specify the max dimensions of thumbnails. Defaults to 800 pixels.
 
-*WORKING_DIR* parameter specifying the directory within the container where the imagery products are downloaded to and postprocessed. The typical place is `/tmp/processing` which means the data will be downloaded to the processing computer and postprocessed there. You have the ability to change the WORKING_DIR to a persistent volume (PVC).
+*WORKING_DIR* **optional** parameter specifying the directory within the container where the imagery products are downloaded to and postprocessed. The typical place is `/tmp/processing` which means the data will be downloaded to the processing computer and postprocessed there. You have the ability to change the WORKING_DIR to a persistent volume (PVC).
 
 
 
