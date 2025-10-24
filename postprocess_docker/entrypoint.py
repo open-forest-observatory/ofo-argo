@@ -61,31 +61,14 @@ def extract_prefix_number(dataset_name):
     return 1  # Default to 1 if no numeric prefix
 
 
-def setup_rclone_config():
-    """Create rclone configuration file from environment variables."""
-    s3_endpoint = os.environ.get('S3_ENDPOINT')
-    s3_provider = os.environ.get('S3_PROVIDER', 'Other')
-    s3_access_key = os.environ.get('S3_ACCESS_KEY')
-    s3_secret_key = os.environ.get('S3_SECRET_KEY')
-
-    # Create config content
-    config_content = f"""[s3remote]
-type = s3
-provider = {s3_provider}
-access_key_id = {s3_access_key}
-secret_access_key = {s3_secret_key}
-endpoint = {s3_endpoint}
-"""
-
-    # Write config file
-    config_dir = Path.home() / '.config' / 'rclone'
-    config_dir.mkdir(parents=True, exist_ok=True)
-    config_file = config_dir / 'rclone.conf'
-
-    with open(config_file, 'w') as f:
-        f.write(config_content)
-
-    print("rclone configuration created")
+def get_s3_flags():
+    """Build common S3 authentication flags for rclone commands."""
+    return [
+        '--s3-provider', os.environ.get('S3_PROVIDER', 'Other'),
+        '--s3-endpoint', os.environ.get('S3_ENDPOINT'),
+        '--s3-access-key-id', os.environ.get('S3_ACCESS_KEY'),
+        '--s3-secret-access-key', os.environ.get('S3_SECRET_KEY')
+    ]
 
 
 def download_photogrammetry_products():
@@ -111,7 +94,7 @@ def download_photogrammetry_products():
     print(f"Processing mission: '{dataset_name}'")
 
     # Remote path now points directly to the flat directory structure
-    remote_base_path = f"s3remote:{input_bucket}/{input_dir}"
+    remote_base_path = f":s3:{input_bucket}/{input_dir}"
     local_mission_dir = os.path.join(local_input_dir, dataset_name)
     os.makedirs(local_mission_dir, exist_ok=True)
 
@@ -130,7 +113,7 @@ def download_photogrammetry_products():
         '--retries', '5',
         '--retries-sleep', '15s',
         '--stats', '30s'
-    ]
+    ] + get_s3_flags()
 
     try:
         subprocess.run(copy_cmd, check=True)
@@ -169,7 +152,7 @@ def download_boundary_polygons(mission_name):
     base_mission_name = extract_base_mission_name(mission_name)
 
     # Construct path using base name: <boundary_base>/<base_name>/metadata-mission/<base_name>_mission-metadata.gpkg
-    remote_boundary_file = f"s3remote:{boundary_bucket}/{boundary_base_dir}/{base_mission_name}/metadata-mission/{base_mission_name}_mission-metadata.gpkg"
+    remote_boundary_file = f":s3:{boundary_bucket}/{boundary_base_dir}/{base_mission_name}/metadata-mission/{base_mission_name}_mission-metadata.gpkg"
     local_mission_boundary_dir = os.path.join(local_boundary_dir, mission_name)
     os.makedirs(local_mission_boundary_dir, exist_ok=True)
     local_boundary_file = os.path.join(local_mission_boundary_dir, f"{base_mission_name}_mission-metadata.gpkg")
@@ -183,7 +166,7 @@ def download_boundary_polygons(mission_name):
         '--progress',
         '--retries', '5',
         '--retries-sleep', '15s'
-    ]
+    ] + get_s3_flags()
 
     try:
         subprocess.run(copy_cmd, check=True)
@@ -284,7 +267,7 @@ def upload_processed_products(mission_prefix):
     for subdir in ['full', 'thumbnails']:
         local_path = f"{working_dir}/output/{subdir}"
         # Remote path: <output_base>/<base_mission_name>/processed_NN/<subdir>/
-        remote_path = f"s3remote:{output_bucket}/{output_base_dir}/{base_mission_name}/processed_{processed_num:02d}/{subdir}"
+        remote_path = f":s3:{output_bucket}/{output_base_dir}/{base_mission_name}/processed_{processed_num:02d}/{subdir}"
 
         # Only upload files that match this mission prefix
         if not os.path.exists(local_path):
@@ -310,7 +293,7 @@ def upload_processed_products(mission_prefix):
                     '--progress',
                     '--retries', '5',
                     '--retries-sleep', '15s'
-                ]
+                ] + get_s3_flags()
 
                 try:
                     subprocess.run(cmd, check=True)
@@ -375,9 +358,6 @@ def main():
     dataset_name = os.environ.get('DATASET_NAME')
     print(f"Processing single mission: {dataset_name}")
     print(f"Output max dimension: {os.environ.get('OUTPUT_MAX_DIM', '800')}")
-
-    # Configure rclone
-    setup_rclone_config()
 
     # Download data for the specified mission
     mission_name = download_photogrammetry_products()
