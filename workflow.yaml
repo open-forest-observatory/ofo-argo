@@ -28,7 +28,7 @@ spec:
   volumes:
     - name: data
       persistentVolumeClaim:
-        claimName: ofo-share-nfs-pvc
+        claimName: ceph-share-rw-pvc2
     - name: results
       persistentVolumeClaim:
         claimName: argo-output-nfs-pvc
@@ -80,13 +80,6 @@ spec:
           - name: dataset-name
       dag:
         tasks:
-          - name: log-start
-            template: log-dataset-start
-            arguments:
-              parameters:
-                - name: dataset-name
-                  value: "{{inputs.parameters.dataset-name}}"
-
           - name: run-processing
             template: run-automate-metashape
             arguments:
@@ -104,28 +97,6 @@ spec:
               parameters:
                 - name: dataset-name
                   value: "{{inputs.parameters.dataset-name}}"
-
-          - name: log-completion-success
-            dependencies: [run-processing]
-            template: log-dataset-completion
-            arguments:
-              parameters:
-                - name: dataset-name
-                  value: "{{inputs.parameters.dataset-name}}"
-                - name: success
-                  value: "true"
-            when: "{{tasks.run-processing.status}} == Succeeded"
-
-          - name: log-completion-failure
-            dependencies: [run-processing]
-            template: log-dataset-completion
-            arguments:
-              parameters:
-                - name: dataset-name
-                  value: "{{inputs.parameters.dataset-name}}"
-                - name: success
-                  value: "false"
-            when: "{{tasks.run-processing.status}} != Succeeded"
 
     ## Here we define what each step does in 'process-dataset-workflow' step
 
