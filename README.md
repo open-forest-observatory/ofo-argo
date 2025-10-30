@@ -399,7 +399,11 @@ argo submit -n argo workflow.yaml --watch \
 -p BOUNDARY_DIRECTORY=jgillan_test \
 -p WORKING_DIR=/tmp/processing 
 
-
+Database parameters (not currently functional)
+-p DB_PASSWORD=<password> \
+-p DB_HOST=<vm_ip_address> \
+-p DB_NAME=<db_name> \
+-p DB_USER=<user_name> \
  
 ```
 
@@ -422,6 +426,8 @@ argo submit -n argo workflow.yaml --watch \
 *BOUNDARY_DIRECTORY* is the parent directory where the mission boundary polygons reside. These are used to clip imagery products.
 
 *WORKING_DIR* parameter specifies the directory within the container where the imagery products are downloaded to and postprocessed. The typical place is`/tmp/processing` which means the data will be downloaded to the processing computer and postprocessed there. You have the ability to change the WORKING_DIR to a persistent volume (PVC).
+
+The rest of the 'DB' parameters are for logging argo status in a postGIS database. These are not public credentials. Authorized users can find them [here](https://docs.google.com/document/d/155AP0P3jkVa-yT53a-QLp7vBAfjRa78gdST1Dfb4fls/edit?tab=t.0).
 
 <br/>
 
