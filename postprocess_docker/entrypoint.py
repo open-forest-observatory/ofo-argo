@@ -70,6 +70,67 @@ def get_s3_flags():
     ]
 
 
+def setup_working_directory():
+    """
+    Create base working directory structure.
+
+    Creates all required base directories under WORKING_DIR:
+    - input/: Base directory for downloaded photogrammetry products
+    - boundary/: Base directory for mission boundary polygons
+    - output/full/: Directory for processed full-resolution COGs
+    - output/thumbnails/: Directory for generated thumbnails
+    - temp/: Reserved for temporary processing files
+
+    Mission-specific subdirectories (e.g., input/01_mission-name/) are created
+    on-the-fly by individual download functions.
+
+    Returns:
+        bool: True if all directories created successfully
+
+    Raises:
+        SystemExit: If WORKING_DIR doesn't exist, can't be created, or isn't writable
+    """
+    working_dir = os.environ.get('WORKING_DIR', '/tmp/processing')
+
+    print(f"Setting up working directory: {working_dir}")
+
+    # Validate WORKING_DIR exists or can be created
+    if not os.path.exists(working_dir):
+        try:
+            os.makedirs(working_dir, exist_ok=True)
+            print(f"Created working directory: {working_dir}")
+        except Exception as e:
+            print(f"ERROR: Cannot create WORKING_DIR '{working_dir}': {e}")
+            sys.exit(1)
+
+    # Validate WORKING_DIR is writable
+    if not os.access(working_dir, os.W_OK):
+        print(f"ERROR: WORKING_DIR '{working_dir}' is not writable")
+        sys.exit(1)
+
+    # Define all base directories to create
+    base_directories = [
+        f"{working_dir}/input",
+        f"{working_dir}/boundary",
+        f"{working_dir}/output",
+        f"{working_dir}/output/full",
+        f"{working_dir}/output/thumbnails",
+        f"{working_dir}/temp"
+    ]
+
+    # Create each base directory
+    for directory in base_directories:
+        try:
+            os.makedirs(directory, exist_ok=True)
+            print(f"✓ Created directory: {directory}")
+        except Exception as e:
+            print(f"ERROR: Failed to create directory '{directory}': {e}")
+            sys.exit(1)
+
+    print(f"Working directory setup complete")
+    return True
+
+
 def download_photogrammetry_products():
     """Download photogrammetry products from flat S3 directory structure.
 
@@ -95,6 +156,7 @@ def download_photogrammetry_products():
     # Remote path now points directly to the flat directory structure
     remote_base_path = f":s3:{input_bucket}/{input_dir}"
     local_mission_dir = os.path.join(local_input_dir, dataset_name)
+    # Create mission-specific subdirectory (base input/ directory already exists from setup)
     os.makedirs(local_mission_dir, exist_ok=True)
 
     print(f"Downloading products from: {remote_base_path}")
@@ -153,6 +215,7 @@ def download_boundary_polygons(mission_name):
     # Construct path using base name: <boundary_base>/<base_name>/metadata-mission/<base_name>_mission-metadata.gpkg
     remote_boundary_file = f":s3:{boundary_bucket}/{boundary_base_dir}/{base_mission_name}/metadata-mission/{base_mission_name}_mission-metadata.gpkg"
     local_mission_boundary_dir = os.path.join(local_boundary_dir, mission_name)
+    # Create mission-specific subdirectory (base boundary/ directory already exists from setup)
     os.makedirs(local_mission_boundary_dir, exist_ok=True)
     local_boundary_file = os.path.join(local_mission_boundary_dir, f"{base_mission_name}_mission-metadata.gpkg")
 
@@ -349,27 +412,14 @@ def cleanup_working_directory(mission_prefix):
 
 def main():
     """Main execution function."""
-    working_dir = os.environ.get('WORKING_DIR')
-
     print("Starting Python post-processing container...")
-    print(f"Working directory: {working_dir}")
 
-    # Validate WORKING_DIR exists and is writable
-    if not os.path.exists(working_dir):
-        try:
-            os.makedirs(working_dir, exist_ok=True)
-            print(f"Created working directory: {working_dir}")
-        except Exception as e:
-            print(f"ERROR: Cannot create WORKING_DIR '{working_dir}': {e}")
-            sys.exit(1)
+    # Set up working directory structure
+    setup_working_directory()
 
-    if not os.access(working_dir, os.W_OK):
-        print(f"ERROR: WORKING_DIR '{working_dir}' is not writable")
-        sys.exit(1)
-
-    # Set up working directory
+    # Set TMPDIR to use working directory for temporary files
+    working_dir = os.environ.get('WORKING_DIR', '/tmp/processing')
     os.environ['TMPDIR'] = working_dir
-    Path(working_dir).mkdir(parents=True, exist_ok=True)
 
     # Log processing configuration
     dataset_name = os.environ.get('DATASET_NAME')
