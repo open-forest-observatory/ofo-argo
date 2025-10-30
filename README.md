@@ -6,6 +6,8 @@ The current setup includes a _master_  VM instance and multiple _worker_ instanc
 
 The current workflow: 1. pulls raw drone imagery from `/ofo-share` onto the kubernetes VM cluster, 2. processes the imagery with Metashape, 3. writes the imagery products to `/ofo-share` and uploads them to `S3:ofo-internal`, 4. Deletes all outputs on `/ofo-share`, 5. Downloads the imagery products from S3 back to the cluster and performs [postprocessing](/postprocess_docker) (chms, clipping, COGs, thumbnails), 6. uploads the final products to `S3:ofo-public`. 
 
+Go directly to the [Run Command!](https://github.com/open-forest-observatory/ofo-argo/blob/jgillan/R_post_process/README.md#run-the-workflow) 
+
 
 <br/>
 
