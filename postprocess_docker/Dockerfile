@@ -27,7 +27,4 @@ RUN pip3 install --no-cache-dir -r requirements.txt
 RUN chmod +x docker-entrypoint.sh
 RUN chmod +x entrypoint.py
 
-# Create processing directories
-RUN mkdir -p /tmp/processing/{input,boundary,output/full,output/thumbnails,temp}
-
 ENTRYPOINT ["./docker-entrypoint.sh"]
