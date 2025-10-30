@@ -395,7 +395,7 @@ argo submit -n argo workflow.yaml --watch \
 -p RUN_FOLDER=gillan_june27 \
 -p S3_BUCKET=ofo-internal \
 -p S3_PROVIDER=Other \
--p S3_ENDPOINT=https://js2.jetstream-cloud.org:8001
+-p S3_ENDPOINT=https://js2.jetstream-cloud.org:8001 \
 -p S3_BUCKET_OUTPUT=ofo-public \
 -p OUTPUT_DIRECTORY=jgillan_test \
 -p BOUNDARY_DIRECTORY=jgillan_test \
