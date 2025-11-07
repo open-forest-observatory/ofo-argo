@@ -47,10 +47,10 @@ spec:
   volumes:
     - name: data
       persistentVolumeClaim:
-        claimName: ofo-share-nfs-pvc
-    - name: results
-      persistentVolumeClaim:
-        claimName: argo-output-nfs-pvc
+        claimName: ceph-share-rw-pvc2
+    # - name: results
+    #   persistentVolumeClaim:
+    #     claimName: ceph-share-rw-pvc2
 
   templates:
     # the 'main' template defines the order of high-level steps to be completed in the workflow. 
@@ -145,24 +145,25 @@ spec:
                   value: "{{inputs.parameters.dataset-name}}"
             continueOn:
               failed: true
-              
-          # As soon as processing finishes, kick off upload in parallel on any available node
-          - name: rclone-upload
-            dependencies: [run-processing]
-            template: rclone-upload-to-s3
-            arguments:
-              parameters:
-                - name: dataset-name
-                  value: "{{inputs.parameters.dataset-name}}"
 
-          - name: postprocess-dataset
-            dependencies: [rclone-upload]
-            template: run-postprocessing
-            arguments:
-              parameters:
-                - name: dataset-name
-                  value: "{{inputs.parameters.dataset-name}}"
-            when: "{{tasks.rclone-upload.status}} == Succeeded"
+          # TEMPORARILY DISABLED these two blocks (up to just before logging) just for testing    
+          # # As soon as processing finishes, kick off upload in parallel on any available node
+          # - name: rclone-upload
+          #   dependencies: [run-processing]
+          #   template: rclone-upload-to-s3
+          #   arguments:
+          #     parameters:
+          #       - name: dataset-name
+          #         value: "{{inputs.parameters.dataset-name}}"
+
+          # - name: postprocess-dataset
+          #   dependencies: [rclone-upload]
+          #   template: run-postprocessing
+          #   arguments:
+          #     parameters:
+          #       - name: dataset-name
+          #         value: "{{inputs.parameters.dataset-name}}"
+          #   when: "{{tasks.rclone-upload.status}} == Succeeded"
                   
           #- name: log-completion-success
             #dependencies: [run-processing]
@@ -265,18 +266,24 @@ spec:
         volumeMounts:
           - name: data
             mountPath: /data
-          - name: results
-            mountPath: /results
+          # - name: results
+          #   mountPath: /results
+            # subPath: derek-test-results
         command: ["python3", "/app/python/metashape_workflow.py"]
         args:
           - "--config_file"
           - "/data/argo-input/configs/{{inputs.parameters.dataset-name}}.yml"
           - "--project-path"
-          - "/results/{{workflow.parameters.RUN_FOLDER}}/{{inputs.parameters.dataset-name}}/project"
+          - "/data/argo-output/{{workflow.parameters.RUN_FOLDER}}/{{inputs.parameters.dataset-name}}/project"
           - "--output-path"
-          - "/results/{{workflow.parameters.RUN_FOLDER}}/{{inputs.parameters.dataset-name}}/output"
+          - "/data/argo-output/{{workflow.parameters.RUN_FOLDER}}/{{inputs.parameters.dataset-name}}/output"
           - "--run-name"
           - "{{inputs.parameters.dataset-name}}"
+        resources:
+          requests:
+            nvidia.com/gpu: 1
+          limits:
+            nvidia.com/gpu: 1
         env:
           - name: AGISOFT_FLS
             value: "{{workflow.parameters.AGISOFT_FLS}}"
@@ -291,6 +298,7 @@ spec:
         volumeMounts:
           - name: results
             mountPath: /results
+            subPath: derek-test-results
         command: ["/bin/sh", "-lc"]
         args:
           - |
