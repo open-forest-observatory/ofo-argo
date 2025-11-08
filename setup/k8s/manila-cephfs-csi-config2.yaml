@@ -51,7 +51,6 @@ spec:
     volumeAttributes:
       clusterID: "12345" # Arbitrary but has to match the ConfigMap above
       fsName: "cephfs"
-      # monitors: "${MANILA_MONITORS}" # Should be something like "149.165.158.38:6789,149.165.158.22:6789,149.165.158.54:6789,149.165.158.70:6789,149.165.158.86:6789"
       rootPath: "${MANILA_ROOT_PATH}/argo-data" # Should be something like "/volumes/_nogroup/<UUID>/<UUID>"
       staticVolume: "true"
   storageClassName: "" # Tells K8s we don't want dynamic provisioning, it already exists. Must match the same attribute/value in the PV and PVC, though in PV "" is the deafult whereas in PVC it is not, so technically this is required for the PVC but not PV
