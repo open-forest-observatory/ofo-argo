@@ -64,7 +64,9 @@ spec:
             arguments:
               parameters:
                 - name: dataset-name
-                  value: "{{item}}"
+                  value: "{{item.name}}"
+                - name: config-file
+                  value: "{{item.config_file}}"
             withParam: "{{steps.determine-datasets.outputs.result}}"
 
     ## Here we define what the main steps actually do
@@ -86,8 +88,12 @@ spec:
               for line in f:
                   name = line.strip()
                   if name:
-                      base = os.path.splitext(name)[0]  # removes .yml, .yaml, etc.
-                      datasets.append(base)
+                      # Output dict with both full filename and basename
+                      base = os.path.splitext(name)[0]
+                      datasets.append({
+                          "name": base,
+                          "config_file": name
+                      })
 
               # Output as JSON list
               json.dump(datasets, sys.stdout)
@@ -97,6 +103,7 @@ spec:
       inputs:
         parameters:
           - name: dataset-name
+          - name: config-file
       dag:
         tasks:
           - name: run-processing
@@ -105,6 +112,8 @@ spec:
               parameters:
                 - name: dataset-name
                   value: "{{inputs.parameters.dataset-name}}"
+                - name: config-file
+                  value: "{{inputs.parameters.config-file}}"
             continueOn:
               failed: true
 
@@ -134,6 +143,7 @@ spec:
       inputs:
         parameters:
           - name: dataset-name
+          - name: config-file
       # Override workflow-level CPU-only affinity; GPU resource requirement ensures GPU node scheduling
       podSpecPatch: ""
       # Use docker automate-metashape to do photogrammetry
@@ -145,7 +155,7 @@ spec:
         command: ["python3", "/app/python/metashape_workflow.py"]
         args:
           - "--config_file"
-          - "/data/argo-input/configs/{{inputs.parameters.dataset-name}}.yml"
+          - "/data/argo-input/configs/{{inputs.parameters.config-file}}"
           - "--project-path"
           - "/data/argo-output/{{workflow.parameters.RUN_FOLDER}}/{{inputs.parameters.dataset-name}}/project"
           - "--output-path"

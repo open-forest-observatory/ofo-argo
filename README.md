@@ -72,9 +72,14 @@ One data transfer method is a CLI tool called SCP
 Metashape processing parameters are specified in [configuration *.yml](https://github.com/open-forest-observatory/automate-metashape/blob/main/config/config-base.yml) files which need to be located at `/ofo-share/argo-input/configs`. Every dataset to be processed needs to have its own standalone configuration file. These config files should be named to match the naming convention <config_datasetname.yml>. For example '01_benchmarking-greasewood.yml or '02_benchmarking-greasewood.yml'. 
 
 
-Within each metashape config.yml file, you need to specify 'photo_path' which is the location of the drone imagery dataset to be processed. This path refers to the location of the images inside a docker container. For example, if your drone images were uploaded to `/ofo-share/argo-input/datasets/dataset_1`, then the 'photo_path' should be written as `/data/argo-input/datasets/dataset_1`
+Within each metashape config.yml file, you need to specify `photo_path` which is the location of the drone imagery dataset to be processed. This path refers to the location of the images inside a docker container. For example, if your drone images were uploaded to `/ofo-share-2/argo-data/argo-input/datasets/dataset_1`, then the 'photo_path' should be written as `/data/argo-input/datasets/dataset_1`
 
-The 'output_path', 'project_path', and 'run_name' are handled in the argo workflow. Please do not specify them in the metashape config.yml.
+The `output_path` and `project_path`, and `run_name` configuration parameters are handled in the
+argo workflow. `output_path` and `project_path` are determined via the arguments passed to the
+automate-metashape container, which in turn are derived from the `RUN_FOLDER` workflow parameter
+passed when invoking `argo run`). `run_name` is pulled from the name of the config file (minus the
+extension) by the Argo workflow. Any values specified for these parameters in the config.yml will be
+ignored.
 
 <br/>
 
@@ -91,7 +96,8 @@ For example:
 02_benchmarking-emerald-subset.yml
 ```  
 
-You can create your own config_list.txt file and name it whatever you want as long as it is kept in this directory `/ofo-share/argo-input`. 
+You can create your own config_list.txt file and name it whatever you want as long as it is kept in
+the directory `/ofo-share/argo-input/`. Inclusion of the `.yml` extension in this list is optional.
 
 <br/>
 <br/>
