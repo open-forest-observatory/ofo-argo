@@ -6,6 +6,17 @@ spec:
   serviceAccountName: argo
   entrypoint: main
 
+  # Ensure that by default, workflow pods are scheduled on non-GPU nodes. Will need to override for
+  # GPU tasks with podSpecPatch: ""
+  podSpecPatch: |
+    affinity:
+      nodeAffinity:
+        requiredDuringSchedulingIgnoredDuringExecution:
+          nodeSelectorTerms:
+            - matchExpressions:
+                - key: nvidia.com/gpu
+                  operator: DoesNotExist
+
   # A list of input parameters available to the workflow at runtime. 
   # These parameters can be referenced throughout the workflow templates using {{workflow.parameters.<name>}}
   arguments:
@@ -123,6 +134,8 @@ spec:
       inputs:
         parameters:
           - name: dataset-name
+      # Override workflow-level CPU-only affinity; GPU resource requirement ensures GPU node scheduling
+      podSpecPatch: ""
       # Use docker automate-metashape to do photogrammetry
       container:
         image: ghcr.io/open-forest-observatory/automate-metashape
@@ -140,8 +153,6 @@ spec:
           - "--run-name"
           - "{{inputs.parameters.dataset-name}}"
         resources:
-          requests:
-            nvidia.com/gpu: 1
           limits:
             nvidia.com/gpu: 1
         env:
