@@ -163,6 +163,8 @@ spec:
           - "--run-name"
           - "{{inputs.parameters.dataset-name}}"
         resources:
+          requests:
+            nvidia.com/gpu: 1
           limits:
             nvidia.com/gpu: 1
         env:
