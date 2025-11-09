@@ -1,4 +1,4 @@
-# Open Forest Observatory Argo Workflow
+# Open Forest Observatory Argo Workflows
 
 This repository contains [Argo Workflows](https://argoproj.github.io/workflows) used by the **Open Forest Observatory (OFO)** to process drone imagery at scale on [Jetstream2 Cloud](https://jetstream-cloud.org/).
 
@@ -24,16 +24,15 @@ The system uses [Kubernetes](https://kubernetes.io/docs/concepts/overview/) whic
 
 ## Files & Directories In this Repository
 
-| File Name   | Purpose       |
+| File/Directory   | Purpose       |
 |  --- | ----  |
-| argo-output-pv.yaml | Defines read-write PV for workflow output storage mounted at /ofo-share/argo-output |
-| argo-output-pvc.yaml | PVC bound to output volume |
-| ofo-share-pv.yaml | Defines read-only NFS PV for /ofo-share (input data) |
-| ofo-share-pvc.yaml | PVC bound to shared data volume |
-| workflow.yaml | Argo configuration for entire automated workflow |
-| /ofo-argo-utils | files to build a docker image for database logging of argo workflow metadata |
-| /postprocess_docker | files to build the docker image that does postprocessing of metashape products|
-| /.github/workflows | a github action workflow to automatically build a new DB logging docker image if any changes have been made to repo. **CURRENTLY DISABLED in GITHUB ACTIONS** |
+| workflow.yaml | Main Argo Workflows configuration for the automated photogrammetry pipeline |
+| docs/ | Documentation site source (published to GitHub Pages) |
+| mkdocs.yml | Configuration for the MkDocs documentation site |
+| workflow-utils/ | Files defining utility docker containers called by the workflow (e.g. DB logging) |
+| workflow-custom-tasks/ | Files defining custom docker containers performing core workflow tasks (e.g. postprocessing) |
+| setup/ | Kubernetes and Argo setup configurations (described in [admin docs](https://open-forest-observatory.github.io/ofo-argo/admin)) |
+| test-workflows/ | Test workflow definitions for development and validation |
 
 ## Getting Started
 
@@ -42,6 +41,7 @@ For complete setup and usage instructions, please visit the [full documentation 
 **Quick start guide:**
 
 1. [Access the cluster](https://open-forest-observatory.github.io/ofo-argo/usage/cluster-access-and-resizing/)
-2. [Run the photogrammetry workflow](https://open-forest-observatory.github.io/ofo-argo/usage/photogrammetry-workflow/) (includes input preparation)
+1. [Get set up with Argo](https://open-forest-observatory.github.io/ofo-argo/usage/argo-usage/)
+2. [Run the photogrammetry workflow](https://open-forest-observatory.github.io/ofo-argo/usage/photogrammetry-workflow/)
 
 For cluster administration, see the [admin guides](https://open-forest-observatory.github.io/ofo-argo/admin/).
