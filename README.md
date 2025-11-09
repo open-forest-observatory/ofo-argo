@@ -49,9 +49,9 @@ Inputs to the metashape argo workflow include **1.** drone imagery datasets cons
 **2.** a list of the names of metashape configuration files (config_list.txt), and **3.** the
 metashape config.ymls. All of these inputs need to be in `/ofo-share-2/argo-data/`.
 
-Here is a schematic of the `/ofo-share-2/argo-data` directory. 
+Here is a schematic of the `/ofo-share-2/argo-data` directory.
 ```bash
-/ofo-share/
+/ofo-share-2/argo-data/
 ├── argo-input/
    ├── datasets/
    │   ├──dataset_1/
@@ -67,7 +67,7 @@ Here is a schematic of the `/ofo-share-2/argo-data` directory.
 
 ```
 
-#### a. Add drone imagery to /ofo-share-2/argo-data/argo-inputs
+#### a. Add drone imagery to /ofo-share-2/argo-data/argo-input
 To add new drone imagery datasets to be processed using Argo, transfer files from your local machine (or the cloud) to the `/ofo-share-2` volume. Put the drone imagery projects to be processed in their own directory in `/ofo-share-2/argo-data/argo-input/datasets`. 
 
 One data transfer method is a CLI tool called SCP
@@ -81,7 +81,7 @@ One data transfer method is a CLI tool called SCP
 
 Metashape processing parameters are specified in [configuration
 *.yml](https://github.com/open-forest-observatory/automate-metashape/blob/main/config/config-base.yml)
-files which need to be located at `/ofo-share/argo-input/configs`. Every dataset to be processed
+files which need to be located at `/ofo-share-2/argo-data/argo-input/configs`. Every dataset to be processed
 needs to have its own standalone configuration file. These config files should be named to match the
 naming convention `<config_id>_<datasetname.yml>`. DYCHECK. For example `01_benchmarking-greasewood.yml` or
 `02_benchmarking-greasewood.yml`. 
@@ -167,7 +167,7 @@ Database parameters (not currently functional)
  
 ```
 
-*CONFIG_LIST* is a text file that lists each of the metashape parameter config files to be processed which should be located in `/ofo-share/argo-input`
+*CONFIG_LIST* is a text file that lists each of the metashape parameter config files to be processed which should be located in `/ofo-share-2/argo-data/argo-input`
 
 *AGISOFT_FLS* is the ip address of the metashape license server. You declared this as an environmental variable in the previous step
 
