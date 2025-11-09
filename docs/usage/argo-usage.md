@@ -49,22 +49,16 @@ argo version
 
 ## Authenticate with the cluster
 
-Once after every reboot, you will need to re-set your `KUBECONFIG` environment variable and source your OpenStack credentials so that `argo` and `kubectl` CLI tools can authenticate with the cluster:
+Once after every reboot, you will need to re-set your `KUBECONFIG` environment variable so that
+`argo` (and the underlying `kubectl`) CLI tools can authenticate with the cluster:
 
 ```bash
 source ~/venv/openstack/bin/activate
 export KUBECONFIG=~/.ofocluster/ofocluster.kubeconfig
-source ~/.ofocluster/app-cred-ofocluster-openrc.sh
 ```
 
 
 ## Submit a workflow
-
-```bash
-source ~/venv/openstack/bin/activate
-export KUBECONFIG=~/.ofocluster/ofocluster.kubeconfig
-source ~/.ofocluster/app-cred-ofocluster-openrc.sh
-```
 
 Simply run `argo submit -n argo /path/to/your/workflow.yaml --watch`, optionally adding parameters
  by appending text in the format `-p PARAMETER_NAME=parameter_value`. The `parameter_value` can be
