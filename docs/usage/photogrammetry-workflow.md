@@ -140,8 +140,6 @@ argo submit -n argo workflow.yaml --watch \
 -p AGISOFT_FLS=$AGISOFT_FLS \
 -p RUN_FOLDER=gillan_june27 \
 -p S3_BUCKET=ofo-internal \
--p S3_PROVIDER=Other \
--p S3_ENDPOINT=https://js2.jetstream-cloud.org:8001 \
 -p S3_BUCKET_OUTPUT=ofo-public \
 -p OUTPUT_DIRECTORY=jgillan_test \
 -p BOUNDARY_DIRECTORY=jgillan_test \
@@ -166,13 +164,13 @@ This workflow uses a Kubernetes secret (`s3-credentials`) for accessing Jetstrea
 | `AGISOFT_FLS` | IP address of the Metashape license server (declared as environment variable) |
 | `RUN_FOLDER` | Name for the parent directory of the Metashape outputs |
 | `S3_BUCKET` | Bucket where Metashape products are uploaded (typically `ofo-internal`) |
-| `S3_PROVIDER` | Keep as `Other` |
-| `S3_ENDPOINT` | URL of Jetstream2's S3 storage (`https://js2.jetstream-cloud.org:8001`) |
 | `S3_BUCKET_OUTPUT` | Final destination after postprocessing (typically `ofo-public`) |
 | `OUTPUT_DIRECTORY` | Name of parent folder where postprocessed products are uploaded |
 | `BOUNDARY_DIRECTORY` | Parent directory where mission boundary polygons reside (used to clip imagery) |
 | `WORKING_DIR` | Directory within container for downloading and postprocessing (typically `/tmp/processing` which downloads data to the processing computer; can be changed to a persistent volume) |
 | `DB_*` | Database parameters for logging Argo status (not currently functional; credentials in [OFO credentials document](https://docs.google.com/document/d/155AP0P3jkVa-yT53a-QLp7vBAfjRa78gdST1Dfb4fls/edit?tab=t.0)) |
+
+**S3 credentials:** S3 access credentials, provider type, and endpoint URL are configured via the `s3-credentials` Kubernetes secret rather than workflow parameters.
 
 ## Monitor the workflow
 

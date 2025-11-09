@@ -213,6 +213,8 @@ create`.
 kubectl create secret generic s3-credentials \
   --from-literal=access_key=<YOUR_ACCESS_KEY_ID> \
   --from-literal=secret_key=<YOUR_SECRET_ACCESS_KEY> \
+  --from-literal=s3_provider=Other \
+  --from-literal=s3_endpoint=https://js2.jetstream-cloud.org:8001 \
   -n argo
 ```
 
