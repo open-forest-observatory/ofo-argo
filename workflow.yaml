@@ -222,14 +222,12 @@ spec:
 
             echo "[rclone] Upload and cleanup completed for {{inputs.parameters.dataset-name}}"
 
-        # Light footprint so it can co-locate with Metashape if the node has room.
         resources:
           requests:
             cpu: "100m"
             memory: "256Mi"
           limits:
-            cpu: "1"
-            memory: "2Gi"
+            memory: "1Gi"
         env:
           - name: RCLONE_S3_ACCESS_KEY_ID
             valueFrom:
