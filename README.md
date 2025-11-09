@@ -7,7 +7,6 @@ This repository contains [Argo Workflows](https://argoproj.github.io/workflows) 
 **For complete documentation, visit [https://open-forest-observatory.github.io/ofo-argo/](https://open-forest-observatory.github.io/ofo-argo/)**
 
 Quick links:
-- [Preparing inputs for workflows](https://open-forest-observatory.github.io/ofo-argo/usage/input-preparation/)
 - [Running the photogrammetry workflow](https://open-forest-observatory.github.io/ofo-argo/usage/photogrammetry-workflow/)
 - [Cluster access and resizing](https://open-forest-observatory.github.io/ofo-argo/usage/cluster-access-and-resizing/)
 - [Admin guides](https://open-forest-observatory.github.io/ofo-argo/admin/)
@@ -42,8 +41,7 @@ For complete setup and usage instructions, please visit the [full documentation 
 
 **Quick start guide:**
 
-1. [Prepare your inputs](https://open-forest-observatory.github.io/ofo-argo/usage/input-preparation/) (drone imagery, config files)
-2. [Access the cluster](https://open-forest-observatory.github.io/ofo-argo/usage/cluster-access-and-resizing/)
-3. [Run the photogrammetry workflow](https://open-forest-observatory.github.io/ofo-argo/usage/photogrammetry-workflow/)
+1. [Access the cluster](https://open-forest-observatory.github.io/ofo-argo/usage/cluster-access-and-resizing/)
+2. [Run the photogrammetry workflow](https://open-forest-observatory.github.io/ofo-argo/usage/photogrammetry-workflow/) (includes input preparation)
 
 For cluster administration, see the [admin guides](https://open-forest-observatory.github.io/ofo-argo/admin/).
