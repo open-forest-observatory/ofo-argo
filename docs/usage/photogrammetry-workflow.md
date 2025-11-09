@@ -14,10 +14,11 @@ Before running the workflow, ensure you have:
 1. [Installed and set up the `openstack` and `kubectl` utilities](cluster-access-and-resizing.md)
 1. [Installed the Argo CLI](argo-usage.md)
 1. Added the appropriate type and number of nodes to the cluster (cluster-access-and-resizing.md#cluster-resizing)
-1. Set up your `kubectl` authentication env var:
+1. Set up your `kubectl` authentication env var (part of instructions for adding nodes). Quick reference:
 
 ```
 source ~/venv/openstack/bin/activate
+source ~/.ofocluster/app-cred-ofocluster-openrc.sh
 export KUBECONFIG=~/.ofocluster/ofocluster.kubeconfig
 ```
 
@@ -129,19 +130,6 @@ export AGISOFT_FLS=<ip_address>:5842
 
 This variable will only last during the terminal session and will have to be re-declared each time you start a new terminal. The IP address is not published here to prevent unauthorized use. Authorized users can find it in the [OFO credentials document](https://docs.google.com/document/d/155AP0P3jkVa-yT53a-QLp7vBAfjRa78gdST1Dfb4fls/edit?tab=t.0).
 
-### 3. Create S3 credentials secret
-
-This Argo workflow uploads and downloads to Jetstream2's S3-compatible buckets. You need to create a Kubernetes secret to store the S3 Access ID and Secret Key:
-
-```bash
-kubectl create secret generic s3-credentials \
-  --from-literal=access_key=<YOUR_ACCESS_KEY_ID> \
-  --from-literal=secret_key=<YOUR_SECRET_ACCESS_KEY> \
-  -n argo
-```
-
-**This only needs to be done once per cluster.**
-
 ## Submit the workflow
 
 Once your cluster authentication is set up and your inputs are prepared, run:
@@ -167,6 +155,8 @@ Database parameters (not currently functional):
 -p DB_NAME=<db_name> \
 -p DB_USER=<user_name>
 ```
+
+This workflow uses a Kubernetes secret (`s3-credentials`) for accessing Jetstream2's S3-compatible buckets. This secret should have been created during [cluster creation](../admin/cluster-creation-and-resizing.md#create-s3-credentials-secret).
 
 ### Workflow parameters
 

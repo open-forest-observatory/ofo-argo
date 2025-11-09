@@ -200,6 +200,24 @@ mv -i config ~/.ofocluster/ofocluster.kubeconfig
 export KUBECONFIG=~/.ofocluster/ofocluster.kubeconfig
 ```
 
+## Create S3 credentials secret
+
+The Argo workflows upload to and download from Jetstream2's S3-compatible buckets. You need to
+create a Kubernetes secret to store the S3 Access ID and Secret Key. Obtain the access key ID and
+secret access key from the OFO [Vaultwarden](http://vault.focal-lab.org) organization. The
+credentials were originally created by Derek following [JS2
+docs](https://docs.jetstream-cloud.org/general/object/) and particularly `openstack ec2 credentials
+create`.
+
+```bash
+kubectl create secret generic s3-credentials \
+  --from-literal=access_key=<YOUR_ACCESS_KEY_ID> \
+  --from-literal=secret_key=<YOUR_SECRET_ACCESS_KEY> \
+  -n argo
+```
+
+This only needs to be done once per cluster.
+
 ## Kubernetes management
 
 If you are resuming cluster management after a reboot, you will need to re-set environment variables and source the application credential:
