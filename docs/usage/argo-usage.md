@@ -5,7 +5,9 @@ weight: 15
 
 # Using Argo on the OFO cluster
 
-This guide describes how to submit workflows to Argo and monitor them.
+This guide describes how to submit workflows to Argo and monitor them. This is a generic guide for any Argo workflow.
+
+For specific instructions on running the photogrammetry (automate-metashape) workflow, see the [Photogrammetry workflow guide](photogrammetry-workflow.md).
 
 ## Prerequisites
 
@@ -47,9 +49,13 @@ argo version
 
 ## Authenticate with the cluster
 
-Once after every reboot, you will need to re-set your `KUBECONFIG` environment variable so that
-`argo` and `kubectl` CLI tools can authenticate with the cluster. Simply run `export
-KUBECONFIG=~/.ofocluster/ofocluster.kubeconfig`.
+Once after every reboot, you will need to re-set your `KUBECONFIG` environment variable and source your OpenStack credentials so that `argo` and `kubectl` CLI tools can authenticate with the cluster:
+
+```bash
+source ~/venv/openstack/bin/activate
+export KUBECONFIG=~/.ofocluster/ofocluster.kubeconfig
+source ~/.ofocluster/app-cred-ofocluster-openrc.sh
+```
 
 
 ## Submit a workflow
