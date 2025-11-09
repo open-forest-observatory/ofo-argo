@@ -1,6 +1,14 @@
 # Open Forest Observatory Argo Workflow
 
-This repository contains [Argo Workflows](https://argoproj.github.io/workflows) used by the **Open Forest Observatory (OFO)**. The workflow runs the [automate-metashape](https://github.com/open-forest-observatory/automate-metashape) pipeline simultaneously across multiple virtual machines on [Jetstream2 Cloud](https://jetstream-cloud.org/). This type of scaling enables OFO to process many photogrammetry projects simultaneously with a single run command. Argo is meant to work on [Kubernetes](https://kubernetes.io/docs/concepts/overview/) which orchestrates containers (ie, automate-metashape in docker), scales the processing to multiple VMs, and balances the load between the VMs. 
+This repository contains [Argo Workflows](https://argoproj.github.io/workflows) used by the **Open
+Forest Observatory (OFO)**. The workflow runs the
+[automate-metashape](https://github.com/open-forest-observatory/automate-metashape) pipeline,
+followed by post-processing steps, simultaneously across multiple virtual machines on [Jetstream2
+Cloud](https://jetstream-cloud.org/). This type of scaling enables OFO to process many
+photogrammetry projects simultaneously with a single run command. Argo is meant to work on
+[Kubernetes](https://kubernetes.io/docs/concepts/overview/) which orchestrates containers (ie,
+automate-metashape in docker), scales the processing to multiple VMs, and balances the load between
+the VMs. 
 
 The current setup includes a _master_  VM instance and multiple _worker_ instances (they process metashape projects). The worker instances are configured to process one metashape project at a time. If there are more metashape projects than worker instances, the projects will be queued until a worker is free. GPU worker instances will greatly increase the speed of processing.  
 
@@ -37,9 +45,11 @@ Go directly to the [Run Command!](https://github.com/open-forest-observatory/ofo
 
 ### 1. Inputs
 
-Inputs to the metashape argo workflow include **1.** drone imagery datasets consisting of jpegs, **2.** a list of the names of metashape configuration files (config_list.txt), and **3.** the metashape config.ymls. All of these inputs need to be on the `ofo-share` volume. This volume will be automatically mounted to any VM built from `ofo-dev` image using [Exosphere interface](https://jetstream2.exosphere.app/exosphere/). The volume is mounted at `/ofo-share` of the VM.
+Inputs to the metashape argo workflow include **1.** drone imagery datasets consisting of jpegs,
+**2.** a list of the names of metashape configuration files (config_list.txt), and **3.** the
+metashape config.ymls. All of these inputs need to be in `/ofo-share-2/argo-data/`.
 
-Here is a schematic of the `/ofo-share` directory. 
+Here is a schematic of the `/ofo-share-2/argo-data` directory. 
 ```bash
 /ofo-share/
 ├── argo-input/
@@ -57,24 +67,29 @@ Here is a schematic of the `/ofo-share` directory.
 
 ```
 
-#### a. Add drone imagery to OFO shared volume
-To add new drone imagery datasets to be processed using Argo, transfer files from your local machine (or the cloud) to the `/ofo-share` volume. Put the drone imagery projects to be processed in their own directory in `/ofo-share/argo-input/datasets`. 
+#### a. Add drone imagery to /ofo-share-2/argo-data/argo-inputs
+To add new drone imagery datasets to be processed using Argo, transfer files from your local machine (or the cloud) to the `/ofo-share-2` volume. Put the drone imagery projects to be processed in their own directory in `/ofo-share-2/argo-data/argo-input/datasets`. 
 
 One data transfer method is a CLI tool called SCP
 
-`scp -r <local/directory/drone_image_dataset/> exouser@<vm.ip.address>:/ofo-share/argo-input/datasets`
+`scp -r <local/directory/drone_image_dataset/> exouser@<vm.ip.address>:/ofo-share-2/argo-data/argo-input/datasets`
 
 
 <br/>
 
 #### b. Specify Metashape Parameters
 
-Metashape processing parameters are specified in [configuration *.yml](https://github.com/open-forest-observatory/automate-metashape/blob/main/config/config-base.yml) files which need to be located at `/ofo-share/argo-input/configs`. Every dataset to be processed needs to have its own standalone configuration file. These config files should be named to match the naming convention <config_datasetname.yml>. For example '01_benchmarking-greasewood.yml or '02_benchmarking-greasewood.yml'. 
+Metashape processing parameters are specified in [configuration
+*.yml](https://github.com/open-forest-observatory/automate-metashape/blob/main/config/config-base.yml)
+files which need to be located at `/ofo-share/argo-input/configs`. Every dataset to be processed
+needs to have its own standalone configuration file. These config files should be named to match the
+naming convention `<config_id>_<datasetname.yml>`. DYCHECK. For example `01_benchmarking-greasewood.yml` or
+`02_benchmarking-greasewood.yml`. 
 
 
-Within each metashape config.yml file, you need to specify `photo_path` which is the location of the drone imagery dataset to be processed. This path refers to the location of the images inside a docker container. For example, if your drone images were uploaded to `/ofo-share-2/argo-data/argo-input/datasets/dataset_1`, then the 'photo_path' should be written as `/data/argo-input/datasets/dataset_1`
+Within each metashape config.yml file, you must specify `photo_path` which is the location of the drone imagery dataset to be processed. This path refers to the location of the images inside a docker container. For example, if your drone images were uploaded to `/ofo-share-2/argo-data/argo-input/datasets/dataset_1`, then the 'photo_path' should be written as `/data/argo-input/datasets/dataset_1`
 
-The `output_path` and `project_path`, and `run_name` configuration parameters are handled in the
+The `output_path`, `project_path`, and `run_name` configuration parameters are handled in the
 argo workflow. `output_path` and `project_path` are determined via the arguments passed to the
 automate-metashape container, which in turn are derived from the `RUN_FOLDER` workflow parameter
 passed when invoking `argo run`). `run_name` is pulled from the name of the config file (minus the
@@ -96,285 +111,22 @@ For example:
 02_benchmarking-emerald-subset.yml
 ```  
 
-You can create your own config_list.txt file and name it whatever you want as long as it is kept in
-the directory `/ofo-share/argo-input/`. Inclusion of the `.yml` extension in this list is optional.
+You can create your own config_list.txt file and name it whatever you want as long as it is kept at
+the root level of `/ofo-share-2/argo-data/argo-input/`.
 
 <br/>
 <br/>
 
-### 2. Lauch VMs with CACAO
-
-CACAO is an interface for provisioning and launching virtual machines on Jetstream2 Cloud. OFO is using this interface because it has the ability to quickly launch multiple VMs with kubernetes pre-installed. This capability does not currently exist in Exosphere (the default UI for JS2). 
-
-Log into CACAO at https://cacao.jetstream-cloud.org/ using your ACCESS credentials. Before launching VMs, you should [add public ssh keys](https://docs.jetstream-cloud.org/ui/cacao/credentials/) to CACAO if you would like to acccess VMs from your local IDE. These keys are specific to the local computer you are using. Once your keys are in CACAO, they will be uploaded to any VM you launch in CACAO.  
-
-On the left-side menu, select 'Templates' and look for the template called 'single-image-k3s'. Deploy this template. 
-
-<img width="500" alt="cacao_k3" src="https://github.com/user-attachments/assets/deaafcef-dd91-4972-a9fb-dfc87ec2fc96" />
-
-<br/>
-<br/>
-
-
-After clicking deploy, you will be stepped through a series of parameters to select
-
-* Cloud = Jetstream2
-* Project = your js2 allocation name
-* Region = IU
-* Type a deployment name (e.g., jgillan-test-0618)
-* Featured Ubuntu24 
-* Choose the number of instances. This should be a miminum of 3 VMs. One VM will be the master (does no work), the other two will be workers.
-* Choose the size of the VMs. It is recommended to start with `g3.medium` which has a gpu for each instance. GPUs are useful for accelerating some steps of the metashape pipeline. Because the master node does no processing, it doesn't need to be GPU. After launch, you can resize to CPU using Exophere interface.
-* Under Advanced Settings, specify to use a boot volume with 60 GB of storage. This will allow you to later resize the nodes to the smaller flavors. (If you leave the default of “local volume”, you will be unable to later resize any nodes to m3.quad or smaller.)
-
-
-<img width="400" alt="cacao_parameters" src="https://github.com/user-attachments/assets/bb34c732-311d-4710-beba-19da1d3c0ad7" />
-
-
-
-<br/>
-<br/>
-
-### 3. Connecting to the VM Instances
-
-You can connect to the terminal of any of the VMs through two methods:
-
-#### Click on the webshell icon associated with the VM 
-<img width="660" alt="Screenshot 2025-06-20 at 9 33 53 AM" src="https://github.com/user-attachments/assets/a3ee09ba-d701-4fa5-97d3-586b4c640dc1" />
-
-#### SSH into the VM from your local terminal or IDE
-`ssh <access_username>@<vm_public_ip_address>`
-
-IMPORTANT NOTE. If you have created VMs from Cacao, the ssh username is **<access_username>**! If you have created VMs in Exosphere, the ssh username is **exouser**!
-
-<br/>
-<br/>
-
-### 4. Check Status of Kubernetes
-Connect to the master VM instance either through webshell or local IDE
-
-Kubernetes (k3s) have been pre-installed on each of the instances. 
-
-View nodes in your cluster `kubectl get nodes`
-
-Describe a specific node in your cluster
-`kubectl describe node <node-name>`
-
-Provides a summary of your Kubernetes cluster's core components and services.
-`kubectl cluster-info`
-
-
-<br/>
-<br/>
-
-
-### 5. Prevent the Master Node from Processing a Job
-
-`kubectl get nodes`
-
-note the name of the master node
-
-`kubectl taint nodes <master-node-name> node-role.kubernetes.io/master=:NoSchedule`
-
-<br/>
-<br/>
-
-### 6. Install Argo on Master instance
-a. The following commands will download argo, unzip it, and bring it into your system path ready for use. 
-
-```
-# Download the binary
-curl -sLO "https://github.com/argoproj/argo-workflows/releases/download/v3.6.10/argo-linux-amd64.gz"
-
-# Unzip
-gunzip "argo-linux-amd64.gz"
-
-# Make binary executable
-chmod +x "argo-linux-amd64"
-
-# Move binary to path
-sudo mv "./argo-linux-amd64" /usr/local/bin/argo
-
-# Test installation
-argo version
-```
-<br/>
-
-The output of `argo version` should look similar to the following screen shot. 
-
-<img width="400" alt="argo_version" src="https://github.com/user-attachments/assets/ae423ae7-56b9-4362-b88a-396eceec48cc" />
-
-
-<br/>
-<br/>
-
-b. Create a isolated namespace for the argo workflow on kubernetes
-
-`kubectl create namespace argo`
-
-<br/>
-<br/>
-
-c. Installs workflow Controller which manages overall lifecycle of workflows and installs argo server which includes a web-based user interface. This specific url will install Argo workflow components in the `argo` kubernetes namespace, instead of cluster-wide. It provides an isolated environment separate from other applications in your cluster. The namespace acts as a virtual boundary that keeps Argo's resources (like its controller, server, and configurations) organized and segregated from other workloads.  
-
-`kubectl apply -n argo -f https://github.com/argoproj/argo-workflows/releases/download/v3.6.10/namespace-install.yaml`
-
-<br/>
-<br/>
-
-d. Check if pods are running
-
-`kubectl get pods -n argo`
-
-<img width="682" alt="Screenshot 2025-06-20 at 10 15 41 AM" src="https://github.com/user-attachments/assets/9002ab34-f5f6-499b-a61d-a2588b0ef708" />
-
-<br/>
-<br/>
-
-e. Describe pods
-
-`kubectl describe pod <pod-name> -n argo`
-
-<br/>
-<br/>
-
-f. Create a ClusterRole - a set of permissions that can be used across the entire Kubernetes cluster (not just one namespace). Then assign the permissions to the argo namespace in a process called ClusterRoleBinding. 
-
-
-<br/>
-
-Please run the following command to define the role and global permissions
-
-```
-kubectl apply -f - <<EOF
-apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRole
-metadata:
-  name: argo-workflow-role
-rules:
-- apiGroups: ["argoproj.io"]
-  resources: 
-    - workflows
-    - workflowtaskresults
-  verbs: 
-    - create
-    - get
-    - list
-    - watch
-    - update
-    - patch
-    - delete
-EOF
-```
-<br/>
-<br/>
-
-Please run the following command to assing the permissions to namesspace argo
-
-```
-kubectl apply -f - <<EOF
-apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRoleBinding
-metadata:
-  name: argo-workflow-binding
-roleRef:
-  apiGroup: rbac.authorization.k8s.io
-  kind: ClusterRole
-  name: argo-workflow-role
-subjects:
-- kind: ServiceAccount
-  name: argo
-  namespace: argo
-EOF
-```
-<br/>
-<br/>
-
-g. Run the following command to check permissions. The output should say 'yes'.
-
-`kubectl auth can-i create workflowtaskresults.argoproj.io -n argo --as=system:serviceaccount:argo:argo`
-
-<br/>
-<br/>
-
-h. Optional: check roles and role-bindings
-
-`kubectl get role -n argo`
-
-<img width="660" alt="Screenshot 2025-06-20 at 10 27 29 AM" src="https://github.com/user-attachments/assets/a62b6253-1c89-4008-bbbb-8c8403f5db45" />
-
-<br/>
-<br/>
-
-`kubectl describe role <role_name> -n argo`
-
-<img width="807" alt="Screenshot 2025-06-20 at 10 29 35 AM" src="https://github.com/user-attachments/assets/0357d932-ca01-4e52-8762-c8480700e3ed" />
-
-<img width="822" alt="Screenshot 2025-06-20 at 10 30 17 AM" src="https://github.com/user-attachments/assets/9ab3d32a-4239-48d0-8129-1a191b0b2a76" />
-
-<br/>
-<br/>
-
-### 7. Clone ofo-argo repository to Master instance
-
-In the home directory of your terminal, type in the following
-
-`git clone https://github.com/open-forest-observatory/ofo-argo.git`
-
-NOTE: if you want to use a development branch of the repo. eg, `git checkout docs/JG/readme-editing`
-
-<br/>
-
-### 8. Connect VM instances to shared volume
-
-The following is about connecting the VM instances with the `/ofo-share` volume so it can read the drone imagery to process and write the outputs.
-
-a. Install Network File System (NFS) on all instances including the master and each worker. You will need to connect to each VM terminal to do installation. 
-
-`sudo apt update`
-
-`sudo apt install nfs-common -y`
-
-
-<br/>
-
-b. Reconnect to the master instance and navigate into the cloned repository
-
-`cd ~/ofo-argo`
-
-<br/>
-
-c. Set up the persistent volumes (PV) defined by the workflow. You are specifying the read (raw drone imagery on `ofo-share`) and the write (metashape output location)
-
-`kubectl apply -f argo-output-pv.yaml`
-
-`kubectl apply -f ofo-share-pv.yaml`
-
-<br/>
-
-d. Set up persistent volume claims (PVC)
-
-`kubectl apply -f argo-output-pvc.yaml -n argo`
-
-`kubectl apply -f ofo-share-pvc.yaml -n argo`
-
-<br/>
-
-e. Check the PVs
-
-`kubectl get pv`
-
-`kubectl get pvc -n argo`
-
-<br/>
-<br/>
-<br/>
 
 ## Run the Workflow
 
+### 0. Authenticate to the cluster
+
+DYTODO
+
 ### 1. Declare the ip address of the metashape license server
 
-On the master instance terminal, type:
+On the local machine you'll use to submit the Argo job, type:
 
 `export AGISOFT_FLS=<ip_address>:5842`
 
@@ -440,61 +192,10 @@ The rest of the 'DB' parameters are for logging argo status in a postGIS databas
 <br/>
 
 ### 4. Monitor Argo Workflow
-The Argo UI is great for troubleshooting and checking additional logs. You can access it either through the Cacao WebDesktop or ssh from your local terminal.
+The Argo UI is great for troubleshooting and checking additional logs. You can access it at at
+argo.focal-lab.org, using the credentials explained in DYTODO.
 
-#### WebDesktop Method
-* In the CACAO interface, launch a WebDesktop for your master instance
 
-<img width="660" alt="Screenshot 2025-06-20 at 9 33 53 AM" src="https://github.com/user-attachments/assets/a3ee09ba-d701-4fa5-97d3-586b4c640dc1" />
-
-<br/>
-<br/>
-
-* Launch a terminal in the WebDesktop 
-
-* Get around a known issue with v3.6.10
-  
-`export GRPC_ENFORCE_ALPN_ENABLED=false`
-
-* Then type this to launch the server UI. 
-
-`argo server --auth-mode server -n argo`
-
-<br/>
-
-* Now go to a browser (firefox) in the WebDesktop and go the address. You may receive a "Connection not secure" error but just bypass it.
-
-`https://localhost:2746`
-
-<br/>
-
-#### Local ssh method
-
-* Open a terminal or IDE on your local machine
-
-* Connect via ssh to the master node 
-
-`ssh <access_username>@<master_ip_address>` 
-
-* Get around a known issue with v3.6.10
-  
-`export GRPC_ENFORCE_ALPN_ENABLED=false`
-
-* Lauch server UI
-
-`argo server --auth-mode server -n argo`
-
-* Open a web browser on your local computer and type in the address (bypass the security warning)
-
-  `https://<master_ip_address>:2746`
-
-<br/>
-<br/>
-
-**Note on UI Server.** The command `argo server --auth-mode server -n argo`is not the most secure method because it is exposed to the open internet. In the future we may use `argo server --auth-mode client -n argo` which restricts access to users with tokens. More information on the topic [here](https://docs.google.com/document/d/1H1TWZAvRbiRLD4jBOIUFKLgV1vvD7FeXNG58IH0irJ8/edit?tab=t.0)
-
-<br/>
-<br/>
 
 #### Navigating Argo UI
 
@@ -574,6 +275,8 @@ The final outputs will be written to 'S3:ofo-public' in the following directory 
 <br/>
 <br/>
 <br/>
+
+<!-- 
 
 ### 6. Argo Workflow Logging in postGIS database 
 
@@ -690,6 +393,6 @@ There is github action workflow that rebuilds the logging docker image if any ch
 <br/>
 <br/>
 
-
+-->
 
 
