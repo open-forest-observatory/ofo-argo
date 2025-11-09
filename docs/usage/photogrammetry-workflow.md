@@ -11,17 +11,24 @@ This guide describes how to run the OFO photogrammetry workflow, which processes
 
 Before running the workflow, ensure you have:
 
-1. [Authenticated to the cluster](argo-usage.md#authenticate-with-the-cluster)
-2. Installed the [Argo CLI](argo-usage.md#install-the-argo-cli-locally-one-time)
+1. [Installed and set up the `openstack` and `kubectl` utilities](cluster-access-and-resizing.md)
+1. [Installed the Argo CLI](argo-usage.md)
+1. Added the appropriate type and number of nodes to the cluster (cluster-access-and-resizing.md#cluster-resizing)
+1. Set up your `kubectl` authentication env var:
+
+```
+source ~/venv/openstack/bin/activate
+export KUBECONFIG=~/.ofocluster/ofocluster.kubeconfig
+```
 
 ## Workflow overview
 
-The current workflow performs the following steps:
+The workflow performs the following steps:
 
-1. Pulls raw drone imagery from `/ofo-share` onto the Kubernetes VM cluster
+1. Pulls raw drone imagery from `/ofo-share-2` onto the Kubernetes VM cluster
 2. Processes the imagery with Metashape
-3. Writes the imagery products to `/ofo-share` and uploads them to `S3:ofo-internal`
-4. Deletes all outputs on `/ofo-share`
+3. Writes the imagery products to `/ofo-share-2`
+4. Uploads the imagery products to `S3:ofo-internal` and deletes them from `/ofo-share`
 5. Downloads the imagery products from S3 back to the cluster and performs [postprocessing](https://github.com/open-forest-observatory/ofo-argo/tree/main/postprocess_docker) (CHMs, clipping, COGs, thumbnails)
 6. Uploads the final products to `S3:ofo-public`
 
@@ -71,7 +78,7 @@ Replace `<vm.ip.address>` with the IP address of a cluster node that has the sha
 
 #### Specify Metashape parameters
 
-Metashape processing parameters are specified in [configuration YAML files](https://github.com/open-forest-observatory/automate-metashape/blob/main/config/config-base.yml) which need to be located at `/ofo-share-2/argo-data/argo-input/configs`.
+Metashape processing parameters are specified in [configuration YAML files](https://github.com/open-forest-observatory/automate-metashape/blob/main/config/config-base.yml) which need to be located at `/ofo-share-2/argo-data/argo-input/configs/`.
 
 Every dataset to be processed needs to have its own standalone configuration file.
 
@@ -80,7 +87,9 @@ Every dataset to be processed needs to have its own standalone configuration fil
 - `01_benchmarking-greasewood.yml`
 - `02_benchmarking-greasewood.yml`
 
-**Setting the photo_path:** Within each metashape config.yml file, you must specify `photo_path` which is the location of the drone imagery dataset to be processed. This path refers to the location of the images **inside a docker container**.
+**Setting the `photo_path`:** Within each metashape config.yml file, you must specify `photo_path`
+which is the location of the drone imagery dataset to be processed. When running via Argo workflows,
+this path refers to the location of the images **inside the docker container**.
 
 For example, if your drone images were uploaded to `/ofo-share-2/argo-data/argo-input/datasets/dataset_1`, then the `photo_path` should be written as:
 
