@@ -1,0 +1,136 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Workflow
+metadata:
+  generateName: detect-trees-
+spec:
+  serviceAccountName: argo
+  entrypoint: main
+  affinity:
+    nodeAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        nodeSelectorTerms:
+          - matchExpressions:
+              - key: nvidia.com/gpu.present
+                operator: DoesNotExist
+
+  # A list of input parameters available to the workflow at runtime.
+  # These parameters can be referenced throughout the workflow templates using {{workflow.parameters.<name>}}
+  arguments:
+    parameters:
+      - name: INPUT_FOLDER
+      - name: OUTPUT_FOLDER
+      - name: DETECTOR_PARAMS
+
+  # Defining where to read/write data from ofo-share-2
+  volumes:
+    - name: data
+      persistentVolumeClaim:
+        claimName: ceph-share-rw-pvc2
+
+  templates:
+    # the 'main' template defines the order of high-level steps to be completed in the workflow.
+    # the 'detect-trees' step has a looping directive (withParam) which goes through each filename and processes it.
+    - name: main
+      steps:
+        - - name: predict-all-datasets
+            template: predict-all-datasets
+            arguments:
+              parameters:
+                - name: params
+                  value: "{{item}}"
+            withParam: "{{workflow.parameters.DETECTOR_PARAMS}}"
+
+    - name: predict-all-datasets
+      inputs:
+        parameters:
+          - name: params
+      steps:
+        - - name: determine-datasets
+            template: determine-datasets
+        - - name: create-folder-name
+            template: create-folder-name
+            arguments:
+              parameters:
+                - name: params
+                  value: "{{inputs.parameters.params}}"
+        - - name: detect-trees
+            template: detect-trees
+            arguments:
+              parameters:
+                - name: dataset-name
+                  value: "{{item}}"
+                - name: params
+                  value: "{{inputs.parameters.params}}"
+                - name: param_folder
+                  value: "{{steps.create-folder-name.outputs.result}}"
+            withParam: "{{steps.determine-datasets.outputs.result}}"
+
+## Here we define what the main steps actually do
+    # This should just list all the subfolders of the input one and print them a json list
+    - name: determine-datasets
+      script:
+        image: python:3.9
+        volumeMounts:
+          - name: data
+            mountPath: /data
+        command: ["python3"]
+        source: |
+          import os, sys, json
+          datasets = os.listdir("{{workflow.parameters.INPUT_FOLDER}}")
+          # Remove the tif extension
+          datasets = [f.split(".")[0] for f in datasets]
+
+          # Output as JSON list
+          json.dump(datasets, sys.stdout)
+
+    - name: create-folder-name
+      inputs:
+        parameters:
+          - name: params
+      script:
+        image: python:3.9
+        command: ["python3"]
+        source: |
+          import os, sys, json
+
+          # Turn the dict into a string
+          params_str = str({{inputs.parameters.params}})
+
+          # Sanitize all the weird characters
+          params_str = params_str.replace(" ", "").replace("'", "").replace("{", "").replace("}", "")
+          print(params_str)
+
+    # Defining how to process each dataset name
+    - name: detect-trees
+      inputs:
+        parameters:
+          - name: dataset-name
+          - name: params
+          - name: param_folder
+      container:
+        image: ghcr.io/open-forest-observatory/tree-detection-framework:feature-dr-containerize
+        resources:
+          # TODO determine how to set these intelligently
+          requests:
+            cpu: "2"
+            memory: "8Gi"
+          limits:
+            cpu: "2"
+            memory: "8Gi"
+        volumeMounts:
+          - name: data
+            mountPath: /data
+        command: ["python3", "/app/tree_detection_framework/entrypoints/generate_predictions.py"]
+        args:
+          - "--raster-folder-path"
+          - "{{workflow.parameters.INPUT_FOLDER}}/{{inputs.parameters.dataset-name}}.tif"
+          - "--predictions-save-path"
+          - "{{workflow.parameters.OUTPUT_FOLDER}}/{{inputs.parameters.param_folder}}/{{inputs.parameters.dataset-name}}.gpkg"
+          - "--detector-kwargs"
+          - "{{inputs.parameters.params}}"
+          - "--chip-size"
+          - "2000"
+          - "--chip-stride"
+          - "1900"
+          - "--tree-detection-model"
+          - "geometric"
