@@ -107,16 +107,18 @@ Any values specified for these parameters in the config.yml will be ignored.
 
 #### Create a config list file
 
-We use a text file, for example `config_list.txt`, to tell the Argo workflow which config files should be processed in the current run. This text file should list each of the names of the config.yml files you want to process, one config file name per line.
+We use a text file, for example `config_list.txt`, to tell the Argo workflow which config files should be processed in the current run. This text file should list the paths to each config.yml file you want to process (relative to `/ofo-share-2/argo-data`), one config file path per line.
 
 For example:
 
 ```
-01_benchmarking-greasewood.yml
-02_benchmarking-greasewood.yml
-01_benchmarking-emerald-subset.yml
-02_benchmarking-emerald-subset.yml
+argo-input/configs/01_benchmarking-greasewood.yml
+argo-input/configs/02_benchmarking-greasewood.yml
+argo-input/configs/01_benchmarking-emerald-subset.yml
+argo-input/configs/02_benchmarking-emerald-subset.yml
 ```
+
+This allows you to organize your config files in subdirectories or different locations. The dataset name will be automatically derived from the config filename (e.g., `argo-input/configs/dataset-name.yml` becomes dataset `dataset-name`).
 
 You can create your own config_list.txt file and name it whatever you want as long as it is kept at the root level of `/ofo-share-2/argo-data/argo-input/`.
 
@@ -149,7 +151,7 @@ Database parameters (not currently functional):
 
 | Parameter | Description |
 |-----------|-------------|
-| `CONFIG_LIST` | Text file listing metashape config files to process (located in `/ofo-share-2/argo-data/argo-input`) |
+| `CONFIG_LIST` | Text file listing paths to metashape config files (relative to `/ofo-share-2/argo-data`) |
 | `RUN_FOLDER` | Name for the parent directory of the Metashape outputs (locally under `argo-data/argo-outputs` and at the top level of the S3 bucket). Recommend `photogrammetry-outputs/config_<config_id>`. |
 | `S3_BUCKET` | Bucket where Metashape products are uploaded (typically `ofo-internal`) |
 | `S3_BUCKET_OUTPUT` | Final destination after postprocessing (typically `ofo-public`) |
