@@ -1,4 +1,4 @@
-name: Publish workflow-utils image to Github Packages
+name: Publish argo-workflow-utils image to Github Packages
 
 on:
   push:
