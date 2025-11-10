@@ -22,7 +22,7 @@ spec:
   arguments:
     parameters:
       - name: CONFIG_LIST
-        default: "config_list.txt"
+        default: "argo-input/config-lists/config_list.txt"
       - name: RUN_FOLDER
         default: "default-run"
       # S3 / rclone upload parameters
@@ -72,12 +72,11 @@ spec:
         image: python:3.9
         volumeMounts:
           - name: data
-            mountPath: /input
-            subPath: "argo-input/{{workflow.parameters.CONFIG_LIST}}"
+            mountPath: /data
         command: ["python3"]
         source: |
           import json, sys, os
-          with open("/input", "r") as f:
+          with open("/data/{{workflow.parameters.CONFIG_LIST}}", "r") as f:
               datasets = []
               for line in f:
                   config_path = line.strip()

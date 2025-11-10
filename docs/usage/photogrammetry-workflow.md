@@ -120,7 +120,7 @@ argo-input/configs/02_benchmarking-emerald-subset.yml
 
 This allows you to organize your config files in subdirectories or different locations. The dataset name will be automatically derived from the config filename (e.g., `argo-input/configs/dataset-name.yml` becomes dataset `dataset-name`).
 
-You can create your own config_list.txt file and name it whatever you want as long as it is kept at the root level of `/ofo-share-2/argo-data/argo-input/`.
+You can create your own config list file and name it whatever you want, placing it anywhere within `/ofo-share-2/argo-data/`. Then specify the path to it (relative to `/ofo-share-2/argo-data`) using the `CONFIG_LIST` parameter when submitting the workflow.
 
 
 ## Submit the workflow
@@ -128,8 +128,8 @@ You can create your own config_list.txt file and name it whatever you want as lo
 Once your cluster authentication is set up and your inputs are prepared, run:
 
 ```bash
-argo submit -n argo workflow.yaml --watch \
--p CONFIG_LIST=config_list.txt \
+argo submit -n argo workflow.yaml \
+-p CONFIG_LIST=argo-input/config-lists/config_list.txt \
 -p RUN_FOLDER=gillan_june27 \
 -p S3_BUCKET=ofo-internal \
 -p S3_BUCKET_OUTPUT=ofo-public \
@@ -151,7 +151,7 @@ Database parameters (not currently functional):
 
 | Parameter | Description |
 |-----------|-------------|
-| `CONFIG_LIST` | Text file listing paths to metashape config files (relative to `/ofo-share-2/argo-data`) |
+| `CONFIG_LIST` | Path to text file listing paths to metashape config files (all paths relative to `/ofo-share-2/argo-data`) |
 | `RUN_FOLDER` | Name for the parent directory of the Metashape outputs (locally under `argo-data/argo-outputs` and at the top level of the S3 bucket). Recommend `photogrammetry-outputs/config_<config_id>`. |
 | `S3_BUCKET` | Bucket where Metashape products are uploaded (typically `ofo-internal`) |
 | `S3_BUCKET_OUTPUT` | Final destination after postprocessing (typically `ofo-public`) |
