@@ -29,8 +29,8 @@ The system uses [Kubernetes](https://kubernetes.io/docs/concepts/overview/) whic
 | workflow.yaml | Main Argo Workflows configuration for the automated photogrammetry pipeline |
 | docs/ | Documentation site source (published to GitHub Pages) |
 | mkdocs.yml | Configuration for the MkDocs documentation site |
-| workflow-utils/ | Files defining utility docker containers called by the workflow (e.g. DB logging) |
-| workflow-custom-tasks/ | Files defining custom docker containers performing core workflow tasks (e.g. postprocessing) |
+| docker-workflow-utils/ | Files defining utility docker containers called by the workflow (e.g. DB logging) |
+| docker-photogrammetry-postprocessing/ | Files defining custom docker containers performing core workflow tasks (e.g. postprocessing) |
 | setup/ | Kubernetes and Argo setup configurations (described in [admin docs](https://open-forest-observatory.github.io/ofo-argo/admin)) |
 | test-workflows/ | Test workflow definitions for development and validation |
 
