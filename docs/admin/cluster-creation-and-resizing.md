@@ -200,10 +200,14 @@ mv -i config ~/.ofocluster/ofocluster.kubeconfig
 export KUBECONFIG=~/.ofocluster/ofocluster.kubeconfig
 ```
 
-## Create S3 credentials secret
+## Create Kubernetes secrets
+
+The Argo workflows require two Kubernetes secrets to be created:
+
+### S3 credentials secret
 
 The Argo workflows upload to and download from Jetstream2's S3-compatible buckets. You need to
-create a Kubernetes secret to store the S3 Access ID and Secret Key. Obtain the access key ID and
+create a secret to store the S3 Access ID, Secret Key, provider type, and endpoint URL. Obtain the access key ID and
 secret access key from the OFO [Vaultwarden](http://vault.focal-lab.org) organization. The
 credentials were originally created by Derek following [JS2
 docs](https://docs.jetstream-cloud.org/general/object/) and particularly `openstack ec2 credentials
@@ -211,14 +215,28 @@ create`.
 
 ```bash
 kubectl create secret generic s3-credentials \
-  --from-literal=access_key=<YOUR_ACCESS_KEY_ID> \
-  --from-literal=secret_key=<YOUR_SECRET_ACCESS_KEY> \
-  --from-literal=s3_provider=Other \
-  --from-literal=s3_endpoint=https://js2.jetstream-cloud.org:8001 \
+  --from-literal=provider='Other' \
+  --from-literal=endpoint='https://js2.jetstream-cloud.org:8001' \
+  --from-literal=access_key='<YOUR_ACCESS_KEY_ID>' \
+  --from-literal=secret_key='<YOUR_SECRET_ACCESS_KEY>' \
   -n argo
 ```
 
-This only needs to be done once per cluster.
+### Agisoft Metashape license secret
+
+The photogrammetry workflow requires access to an Agisoft Metashape floating license server. Create
+a secret to store the license server address. Obtain the license server IP address from the OFO
+[Vaultwarden](http://vault.focal-lab.org) organization.
+
+```bash
+kubectl create secret generic agisoft-license \
+  --from-literal=license_server='<LICENSE_SERVER_IP>:5842' \
+  -n argo
+```
+
+Replace `<LICENSE_SERVER_IP>` with the actual IP address from the credentials document.
+
+These secrets only need to be created once per cluster.
 
 ## Kubernetes management
 

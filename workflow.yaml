@@ -25,8 +25,6 @@ spec:
         default: "config_list.txt"
       - name: RUN_FOLDER
         default: "default-run"
-      - name: AGISOFT_FLS
-        default: ""
       # S3 / rclone upload parameters
       - name: S3_BUCKET
         default: ""
@@ -165,7 +163,10 @@ spec:
             nvidia.com/gpu: 1
         env:
           - name: AGISOFT_FLS
-            value: "{{workflow.parameters.AGISOFT_FLS}}"
+            valueFrom:
+              secretKeyRef:
+                name: agisoft-license
+                key: license_server
 
     # --------- RCLONE UPLOAD (Docker image) ---------
     - name: rclone-upload-to-s3

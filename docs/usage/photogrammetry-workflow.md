@@ -120,15 +120,6 @@ For example:
 
 You can create your own config_list.txt file and name it whatever you want as long as it is kept at the root level of `/ofo-share-2/argo-data/argo-input/`.
 
-### 2. Declare the Metashape license server address
-
-On your local machine, set the Agisoft floating license server address as an environment variable:
-
-```bash
-export AGISOFT_FLS=<ip_address>:5842
-```
-
-This variable will only last during the terminal session and will have to be re-declared each time you start a new terminal. The IP address is not published here to prevent unauthorized use. Authorized users can find it in the [OFO credentials document](https://docs.google.com/document/d/155AP0P3jkVa-yT53a-QLp7vBAfjRa78gdST1Dfb4fls/edit?tab=t.0).
 
 ## Submit the workflow
 
@@ -137,7 +128,6 @@ Once your cluster authentication is set up and your inputs are prepared, run:
 ```bash
 argo submit -n argo workflow.yaml --watch \
 -p CONFIG_LIST=config_list.txt \
--p AGISOFT_FLS=$AGISOFT_FLS \
 -p RUN_FOLDER=gillan_june27 \
 -p S3_BUCKET=ofo-internal \
 -p S3_BUCKET_OUTPUT=ofo-public \
@@ -154,14 +144,12 @@ Database parameters (not currently functional):
 -p DB_USER=<user_name>
 ```
 
-This workflow uses a Kubernetes secret (`s3-credentials`) for accessing Jetstream2's S3-compatible buckets. This secret should have been created during [cluster creation](../admin/cluster-creation-and-resizing.md#create-s3-credentials-secret).
 
 ### Workflow parameters
 
 | Parameter | Description |
 |-----------|-------------|
 | `CONFIG_LIST` | Text file listing metashape config files to process (located in `/ofo-share-2/argo-data/argo-input`) |
-| `AGISOFT_FLS` | IP address of the Metashape license server (declared as environment variable) |
 | `RUN_FOLDER` | Name for the parent directory of the Metashape outputs |
 | `S3_BUCKET` | Bucket where Metashape products are uploaded (typically `ofo-internal`) |
 | `S3_BUCKET_OUTPUT` | Final destination after postprocessing (typically `ofo-public`) |
@@ -170,7 +158,12 @@ This workflow uses a Kubernetes secret (`s3-credentials`) for accessing Jetstrea
 | `WORKING_DIR` | Directory within container for downloading and postprocessing (typically `/tmp/processing` which downloads data to the processing computer; can be changed to a persistent volume) |
 | `DB_*` | Database parameters for logging Argo status (not currently functional; credentials in [OFO credentials document](https://docs.google.com/document/d/155AP0P3jkVa-yT53a-QLp7vBAfjRa78gdST1Dfb4fls/edit?tab=t.0)) |
 
-**S3 credentials:** S3 access credentials, provider type, and endpoint URL are configured via the `s3-credentials` Kubernetes secret rather than workflow parameters.
+**Secrets configuration:**
+- **S3 credentials**: S3 access credentials, provider type, and endpoint URL are configured via the `s3-credentials` Kubernetes secret
+- **Agisoft license**: Metashape floating license server address is configured via the
+  `agisoft-license` Kubernetes secret
+
+These secrets should have been created (within the `argo` namespace) during [cluster creation](../admin/cluster-creation-and-resizing.md).
 
 ## Monitor the workflow
 
