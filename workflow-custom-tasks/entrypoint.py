@@ -237,9 +237,11 @@ def download_boundary_polygons(mission_name):
             return True
         else:
             print(f"Error: Boundary file not found for {mission_name}")
+            print(f"Attempted to download from: {remote_boundary_file}")
             return False
     except subprocess.CalledProcessError as e:
         print(f"Error: Failed to download boundary for {mission_name}: {e}")
+        print(f"Attempted to download from: {remote_boundary_file}")
         return False
 
 
@@ -322,7 +324,9 @@ def upload_processed_products(mission_prefix):
     base_mission_name = extract_base_mission_name(mission_prefix)
     processed_num = extract_prefix_number(mission_prefix)
 
-    print(f"Uploading to {base_mission_name}/processed_{processed_num}/")
+    # Construct full remote path for status output
+    full_remote_path = f"{output_bucket}/{output_base_dir}/{base_mission_name}/processed_{processed_num}/"
+    print(f"Uploading to {full_remote_path}")
 
     # Upload both full resolution and thumbnails to mission-specific processed_NN directories
     working_dir = os.environ.get('WORKING_DIR')
