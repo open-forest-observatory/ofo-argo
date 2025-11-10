@@ -46,6 +46,11 @@ jobs:
     uses: ./.github/workflows/black.yml
 
   # Ensure publish-image runs after Black and Isort have completed
-  publish-image:
+  publish-utils-image:
     needs: [isort, black]
-    uses: ./.github/workflows/publish-image.yml
+    uses: ./.github/workflows/publish-utils-image.yml
+
+  # Ensure publish-custom-tasks-image runs after Black and Isort have completed
+  publish-custom-tasks-image:
+    needs: [isort, black]
+    uses: ./.github/workflows/publish-custom-tasks-image.yml
