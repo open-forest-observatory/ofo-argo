@@ -112,8 +112,10 @@ spec:
             continueOn:
               failed: true
 
-          # TEMPORARILY DISABLED these two blocks (up to just before logging) just for testing    
-          # As soon as processing finishes, kick off upload in parallel on any available node
+          # As soon as processing finishes successfully, kick off upload on any available node
+          # The 'when' condition is needed because run-processing has continueOn.failed=true,
+          # which allows the workflow to process other datasets even if this one fails.
+          # Without 'when', rclone-upload would try to upload non-existent files after a failed processing run.
           - name: rclone-upload
             dependencies: [run-processing]
             template: rclone-upload-to-s3
@@ -121,15 +123,15 @@ spec:
               parameters:
                 - name: dataset-name
                   value: "{{inputs.parameters.dataset-name}}"
+            when: "{{tasks.run-processing.status}} == Succeeded"
 
-          # - name: postprocess-dataset
-          #   dependencies: [rclone-upload]
-          #   template: run-postprocessing
-          #   arguments:
-          #     parameters:
-          #       - name: dataset-name
-          #         value: "{{inputs.parameters.dataset-name}}"
-          #   when: "{{tasks.rclone-upload.status}} == Succeeded"
+          - name: postprocess-dataset
+            dependencies: [rclone-upload]
+            template: run-postprocessing
+            arguments:
+              parameters:
+                - name: dataset-name
+                  value: "{{inputs.parameters.dataset-name}}"
 
     ## Here we define what each step does in 'process-dataset-workflow' step
 
