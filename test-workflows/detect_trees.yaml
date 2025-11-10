@@ -20,6 +20,12 @@ spec:
       - name: INPUT_FOLDER
       - name: OUTPUT_FOLDER
       - name: DETECTOR_PARAMS
+      - name: CHIP_SIZE
+        default: 2000
+      - name: CHIP_STRIDE
+        default: 1900
+      - name: DETECTION_MODEL
+        default: "geometric"
 
   # Defining where to read/write data from ofo-share-2
   volumes:
@@ -129,8 +135,8 @@ spec:
           - "--detector-kwargs"
           - "{{inputs.parameters.params}}"
           - "--chip-size"
-          - "2000"
+          - "{{workflow.parameters.CHIP_SIZE}}"
           - "--chip-stride"
-          - "1900"
+          - "{{workflow.parameters.CHIP_STRIDE}}"
           - "--tree-detection-model"
-          - "geometric"
+          - "{{workflow.parameters.DETECTION_MODEL}}"
