@@ -113,20 +113,19 @@ spec:
               failed: true
 
           # As soon as processing finishes successfully, kick off upload on any available node
-          # The 'when' condition is needed because run-processing has continueOn.failed=true,
+          # Using 'depends' with .Succeeded ensures this only runs when run-processing succeeds.
+          # This is needed because run-processing has continueOn.failed=true,
           # which allows the workflow to process other datasets even if this one fails.
-          # Without 'when', rclone-upload would try to upload non-existent files after a failed processing run.
           - name: rclone-upload
-            dependencies: [run-processing]
+            depends: "run-processing.Succeeded"
             template: rclone-upload-to-s3
             arguments:
               parameters:
                 - name: dataset-name
                   value: "{{inputs.parameters.dataset-name}}"
-            when: "{{tasks.run-processing.status}} == Succeeded"
 
           - name: postprocess-dataset
-            dependencies: [rclone-upload]
+            depends: "rclone-upload.Succeeded"
             template: run-postprocessing
             arguments:
               parameters:
@@ -257,6 +256,9 @@ spec:
           - name: dataset-name
       container:
         image: ghcr.io/open-forest-observatory/photogrammetry-postprocess:1.7
+        volumeMounts:
+          - name: data
+            mountPath: /data
         env:
           - name: S3_PROVIDER
             valueFrom:
