@@ -135,7 +135,7 @@ argo submit -n argo workflow.yaml \
 -p S3_BUCKET_OUTPUT=ofo-public \
 -p OUTPUT_DIRECTORY=jgillan_test \
 -p BOUNDARY_DIRECTORY=jgillan_test \
--p WORKING_DIR=/tmp/processing
+-p WORKING_DIR=/argo-output/temp-working-dir
 ```
 
 Database parameters (not currently functional):
