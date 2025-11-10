@@ -14,4 +14,5 @@ COPY . .
 
 RUN chmod +x *.py
 
+
 CMD ["python", "-c", "import sys; print('Ofo-argo-utils running, reference a specific script')"]
