@@ -150,7 +150,7 @@ Database parameters (not currently functional):
 | Parameter | Description |
 |-----------|-------------|
 | `CONFIG_LIST` | Text file listing metashape config files to process (located in `/ofo-share-2/argo-data/argo-input`) |
-| `RUN_FOLDER` | Name for the parent directory of the Metashape outputs |
+| `RUN_FOLDER` | Name for the parent directory of the Metashape outputs (locally under `argo-data/argo-outputs` and at the top level of the S3 bucket). Recommend `photogrammetry-outputs/config_<config_id>`. |
 | `S3_BUCKET` | Bucket where Metashape products are uploaded (typically `ofo-internal`) |
 | `S3_BUCKET_OUTPUT` | Final destination after postprocessing (typically `ofo-public`) |
 | `OUTPUT_DIRECTORY` | Name of parent folder where postprocessed products are uploaded |
