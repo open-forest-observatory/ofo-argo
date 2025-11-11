@@ -42,13 +42,13 @@ docker run --rm \
   -e S3_ACCESS_KEY=<your_access_key> \
   -e S3_SECRET_KEY=<your_secret_key> \
   -e S3_BUCKET_INPUT_DATA=ofo-internal \
-  -e INPUT_DATA_DIRECTORY=gillan_oct10 \
+  -e RUN_FOLDER=gillan_oct10 \
+  -e METASHAPE_CONFIG_ID=01 \
   -e S3_BUCKET_INPUT_BOUNDARY=ofo-public \
   -e INPUT_BOUNDARY_DIRECTORY=jgillan_test \
   -e S3_BUCKET_OUTPUT=ofo-public \
   -e OUTPUT_DIRECTORY=jgillan_test \
   -e DATASET_NAME=benchmarking-greasewood \
-  -e METASHAPE_CONFIG_ID=00 \
   -e OUTPUT_MAX_DIM=800 \
   -e WORKING_DIR=/tmp/processing \
   ghcr.io/open-forest-observatory/photogrammetry-postprocess:1.6
@@ -64,7 +64,9 @@ docker run --rm \
 
 *S3_BUCKET_INPUT_DATA* is the S3 bucket where existing Metashape products reside. Currently on 'ofo-internal'
 
-*INPUT_DATA_DIRECTORY* is the parent directory where existing Metashape products reside.
+*RUN_FOLDER* is the parent directory in S3 where existing Metashape products reside. When combined with METASHAPE_CONFIG_ID, the full path becomes `{RUN_FOLDER}/config_{METASHAPE_CONFIG_ID}/`.
+
+*METASHAPE_CONFIG_ID* **optional** parameter specifying the two-digit (zero-padded) configuration ID. Used to construct the input path (`{RUN_FOLDER}/config_{METASHAPE_CONFIG_ID}/`) and output directory (`photogrammetry_{METASHAPE_CONFIG_ID}`). Must be a string (e.g., '01', '02'). If not specified, input is read from `{RUN_FOLDER}/` directly and output goes to `photogrammetry_00/`.
 
 *S3_BUCKET_INPUT_BOUNDARY* is the bucket where the mission boundary polygons reside. These are used to clip imagery products. Currently in `ofo-public`
 
@@ -72,11 +74,9 @@ docker run --rm \
 
 *S3_BUCKET_OUTPUT* is the bucket where the postprocessed products will be stored. 'ofo-public'
 
-*OUTPUT_DIRECTORY* is the parent directory where the postprocessed products will be stored
+*OUTPUT_DIRECTORY* is the parent directory where the postprocessed products will be stored. Products are organized as `{OUTPUT_DIRECTORY}/{mission_name}/photogrammetry_{METASHAPE_CONFIG_ID}/`.
 
 *DATASET_NAME* is the name of the dataset mission you want to process. This docker container will only process one dataset name.
-
-*METASHAPE_CONFIG_ID* **optional** parameter specifying the two-digit (zero-padded) configuration ID that determines the `processed_NN` output directory. Must be a string (e.g., '00', '01', '02'). Defaults to '00'.
 
 *OUTPUT_MAX_DIM* **optional** parameter to specify the max dimensions of thumbnails. Defaults to 800 pixels.
 
@@ -90,18 +90,18 @@ docker run --rm \
 ## Outputs
 
 ```
-S3:ofo-public/OUTPUT_DIRECTORY/dataset1/processed_00/
+S3:ofo-public/OUTPUT_DIRECTORY/dataset1/photogrammetry_01/
 ├── full/
 │   ├── mission_ortho-dtm-ptcloud.tif
 │   ├── mission_dsm-ptcloud.tif
 │   ├── mission_dtm-ptcloud.tif
-│   ├── mission_chm.tif
+│   ├── mission_chm-ptcloud.tif
 │   └── mission_points-copc.laz
 └── thumbnails/
     ├── mission_ortho-dtm-ptcloud.png
     ├── mission_dsm-ptcloud.png
     ├── mission_dtm-ptcloud.png
-    └── mission_chm.png
+    └── mission_chm-ptcloud.png
 ```
 <br/>
 <br/>
@@ -352,14 +352,14 @@ Uploads processed outputs to mission-specific S3 directories.
 
 Process:
 1. Reads `METASHAPE_CONFIG_ID` environment variable (defaults to '00')
-2. Constructs remote path: `{mission_id}/processed_{metashape_config_id}/`
+2. Constructs remote path: `{mission_id}/photogrammetry_{metashape_config_id}/`
 3. Uploads files from `$WORKING_DIR/output/full/` and `thumbnails/`
 4. Only uploads files matching `{mission_id}_*` pattern
 
 Examples:
-- `METASHAPE_CONFIG_ID='00'` → `mission/processed_00/`
-- `METASHAPE_CONFIG_ID='01'` → `mission/processed_01/`
-- `METASHAPE_CONFIG_ID='02'` → `mission/processed_02/`
+- `METASHAPE_CONFIG_ID='00'` → `mission/photogrammetry_00/`
+- `METASHAPE_CONFIG_ID='01'` → `mission/photogrammetry_01/`
+- `METASHAPE_CONFIG_ID='02'` → `mission/photogrammetry_02/`
 
 #### `cleanup_working_directory(mission_id)`
 **Parallel-safe cleanup** that only deletes mission-specific files.
@@ -488,7 +488,7 @@ Processed products are uploaded to mission-specific directories:
 ```
 S3:{S3_BUCKET_OUTPUT}/{OUTPUT_DIRECTORY}/
 └── {mission_name}/
-    ├── processed_00/
+    ├── photogrammetry_00/
     │   ├── full/
     │   │   ├── mission_ortho-dtm-ptcloud.tif
     │   │   ├── mission_dsm-ptcloud.tif
@@ -503,21 +503,16 @@ S3:{S3_BUCKET_OUTPUT}/{OUTPUT_DIRECTORY}/
     │       ├── mission_chm-ptcloud.png
     │       └── mission_chm-mesh.png
     │
-    ├── processed_01/
+    ├── photogrammetry_01/
     │   ├── full/
     │   └── thumbnails/
     │
-    └── processed_02/
+    └── photogrammetry_02/
         ├── full/
         └── thumbnails/
 ```
 
-**Output Directory Logic**:
-The `processed_NN` directory number is determined by the `METASHAPE_CONFIG_ID` parameter:
-- `METASHAPE_CONFIG_ID='00'` → Output: `benchmarking-greasewood/processed_00/` (default)
-- `METASHAPE_CONFIG_ID='01'` → Output: `benchmarking-greasewood/processed_01/`
-- `METASHAPE_CONFIG_ID='02'` → Output: `benchmarking-greasewood/processed_02/`
-- `METASHAPE_CONFIG_ID` not set → Output: `benchmarking-greasewood/processed_00/` (default)
+The `photogrammetry_NN` directory number is determined by the `METASHAPE_CONFIG_ID` parameter.
 
 ---
 

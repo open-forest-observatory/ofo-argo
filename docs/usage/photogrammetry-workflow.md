@@ -131,6 +131,7 @@ Once your cluster authentication is set up and your inputs are prepared, run:
 argo submit -n argo workflow.yaml \
 -p CONFIG_LIST=argo-input/config-lists/config_list.txt \
 -p RUN_FOLDER=gillan_june27 \
+-p METASHAPE_CONFIG_ID=01 \
 -p S3_BUCKET_PHOTOGRAMMETRY_OUTPUTS=ofo-internal \
 -p S3_BUCKET_POSTPROCESSED_OUTPUTS=ofo-public \
 -p OUTPUT_DIRECTORY=jgillan_test \
@@ -153,10 +154,11 @@ Database parameters (not currently functional):
 | Parameter | Description |
 |-----------|-------------|
 | `CONFIG_LIST` | Path to text file listing paths to metashape config files (all paths relative to `/ofo-share-2/argo-data`) |
-| `RUN_FOLDER` | Name for the parent directory of the Metashape outputs (locally under `argo-data/argo-outputs` **and** at the top level of the S3 bucket). Recommend `photogrammetry-outputs/config_<config_id>`. |
-| `S3_BUCKET_PHOTOGRAMMETRY_OUTPUTS` | S3 bucket where raw Metashape products (orthomosaics, point clouds, etc.) are uploaded (typically `ofo-internal`) |
+| `RUN_FOLDER` | Name for the parent directory of the Metashape outputs (locally under `argo-data/argo-outputs` **and** at the top level of the S3 bucket). Example: `photogrammetry-outputs`. |
+| `METASHAPE_CONFIG_ID` | Two-digit configuration ID (e.g., `01`, `02`) used to organize outputs into `config_NN` subdirectories in S3 for raw products and `photogrammetry_NN` subdirectories for postprocessed products. If not specified, raw products are stored directly in `RUN_FOLDER` and postprocessed products in `photogrammetry_00`. |
+| `S3_BUCKET_PHOTOGRAMMETRY_OUTPUTS` | S3 bucket where raw Metashape products (orthomosaics, point clouds, etc.) are uploaded (typically `ofo-internal`). When `METASHAPE_CONFIG_ID` is set, products are uploaded to `{bucket}/{RUN_FOLDER}/config_{METASHAPE_CONFIG_ID}/`. |
 | `S3_BUCKET_POSTPROCESSED_OUTPUTS` | S3 bucket for final postprocessed outputs and where boundary files are stored (typically `ofo-public`) |
-| `OUTPUT_DIRECTORY` | Name of parent folder where postprocessed products are uploaded |
+| `OUTPUT_DIRECTORY` | Name of parent folder where postprocessed products are uploaded. Products are organized as `{OUTPUT_DIRECTORY}/{mission_name}/photogrammetry_{METASHAPE_CONFIG_ID}/`. |
 | `BOUNDARY_DIRECTORY` | Parent directory where mission boundary polygons reside (used to clip imagery) |
 | `WORKING_DIR` | Directory within container for downloading and postprocessing (typically `/tmp/processing` which downloads data to the processing computer; can be changed to a persistent volume) |
 | `POSTPROCESSING_IMAGE_TAG` | Docker image tag for the postprocessing container (default: `latest`). Use a specific branch name or tag to test development versions (e.g., `dy-manila`) |
@@ -201,36 +203,36 @@ The final outputs will be written to `S3:ofo-public` in the following directory 
          ├── metadata-images/
          ├── metadata-mission/
             └── dataset1_mission-metadata.gpkg
-         ├──processed_01/
+         ├──photogrammetry_01/
             ├── full/
-               ├── 01_dataset1_cameras.xml
-               ├── 01_dataset1_chm.tif
-               ├── 01_dataset1_dsm-ptcloud.tif
-               ├── 01_dataset1_dtm-ptcloud.tif
-               ├── 01_dataset1_log.txt
-               ├── 01_dataset1_ortho-dtm-ptcloud.tif
-               ├── 01_dataset1_points-copc.laz
-               └── 01_dataset1_report.pdf
+               ├── dataset1_cameras.xml
+               ├── dataset1_chm-ptcloud.tif
+               ├── dataset1_dsm-ptcloud.tif
+               ├── dataset1_dtm-ptcloud.tif
+               ├── dataset1_log.txt
+               ├── dataset1_ortho-dtm-ptcloud.tif
+               ├── dataset1_points-copc.laz
+               └── dataset1_report.pdf
             ├── thumbnails/
-               ├── 01_dataset1_chm.png
-               ├── 01_dataset1_dsm-ptcloud.png
-               ├── 01_dataset1_dtm-ptcloud.png
-               └── 01_dataset1-ortho-dtm-ptcloud.png
-         ├──processed_02/
+               ├── dataset1_chm-ptcloud.png
+               ├── dataset1_dsm-ptcloud.png
+               ├── dataset1_dtm-ptcloud.png
+               └── dataset1-ortho-dtm-ptcloud.png
+         ├──photogrammetry_02/
             ├── full/
-               ├── 02_dataset1_cameras.xml
-               ├── 02_dataset1_chm.tif
-               ├── 02_dataset1_dsm-ptcloud.tif
-               ├── 02_dataset1_dtm-ptcloud.tif
-               ├── 02_dataset1_log.txt
-               ├── 02_dataset1_ortho-dtm-ptcloud.tif
-               ├── 02_dataset1_points-copc.laz
-               └── 02_dataset1_report.pdf
+               ├── dataset1_cameras.xml
+               ├── dataset1_chm-ptcloud.tif
+               ├── dataset1_dsm-ptcloud.tif
+               ├── dataset1_dtm-ptcloud.tif
+               ├── dataset1_log.txt
+               ├── dataset1_ortho-dtm-ptcloud.tif
+               ├── dataset1_points-copc.laz
+               └── dataset1_report.pdf
             ├── thumbnails/
-               ├── 02_dataset1_chm.png
-               ├── 02_dataset1_dsm-ptcloud.png
-               ├── 02_dataset1_dtm-ptcloud.png
-               └── 02_dataset1-ortho-dtm-ptcloud.png
+               ├── dataset1_chm-ptcloud.png
+               ├── dataset1_dsm-ptcloud.png
+               ├── dataset1_dtm-ptcloud.png
+               └── dataset1-ortho-dtm-ptcloud.png
     ├── dataset2/
 ```
 

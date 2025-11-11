@@ -24,6 +24,8 @@ spec:
         default: "argo-input/config-lists/config_list.txt"
       - name: RUN_FOLDER
         default: "default-run"
+      - name: METASHAPE_CONFIG_ID
+        default: ""
       # S3 / rclone upload parameters
       - name: S3_BUCKET_PHOTOGRAMMETRY_OUTPUTS
         default: ""
@@ -196,7 +198,13 @@ spec:
             set -euo pipefail
             SRC="/data/argo-output/{{workflow.parameters.RUN_FOLDER}}/{{inputs.parameters.dataset-name}}/output/"
             SRC_parent="/data/argo-output/{{workflow.parameters.RUN_FOLDER}}/{{inputs.parameters.dataset-name}}"
-            DST="s3:{{workflow.parameters.S3_BUCKET_PHOTOGRAMMETRY_OUTPUTS}}/{{workflow.parameters.RUN_FOLDER}}"
+
+            # Build S3 destination path with optional config_NN subfolder
+            if [ -n "{{workflow.parameters.METASHAPE_CONFIG_ID}}" ]; then
+              DST="s3:{{workflow.parameters.S3_BUCKET_PHOTOGRAMMETRY_OUTPUTS}}/{{workflow.parameters.RUN_FOLDER}}/config_{{workflow.parameters.METASHAPE_CONFIG_ID}}"
+            else
+              DST="s3:{{workflow.parameters.S3_BUCKET_PHOTOGRAMMETRY_OUTPUTS}}/{{workflow.parameters.RUN_FOLDER}}"
+            fi
 
             echo "[rclone] Uploading $SRC -> $DST"
 
@@ -292,8 +300,10 @@ spec:
                 key: secret_key
           - name: S3_BUCKET_INPUT_DATA
             value: "{{workflow.parameters.S3_BUCKET_PHOTOGRAMMETRY_OUTPUTS}}"
-          - name: INPUT_DATA_DIRECTORY
+          - name: RUN_FOLDER
             value: "{{workflow.parameters.RUN_FOLDER}}"
+          - name: METASHAPE_CONFIG_ID
+            value: "{{workflow.parameters.METASHAPE_CONFIG_ID}}"
           - name: DATASET_NAME
             value: "{{inputs.parameters.dataset-name}}"
           - name: S3_BUCKET_INPUT_BOUNDARY

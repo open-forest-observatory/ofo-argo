@@ -89,9 +89,9 @@ def setup_working_directory():
 
 
 def download_photogrammetry_products():
-    """Download photogrammetry products from flat S3 directory structure.
+    """Download photogrammetry products from S3 directory structure.
 
-    Downloads all files from the flat S3 structure (run_folder/imagery_products)
+    Downloads all files from S3 structure (run_folder/[config_NN]/imagery_products)
     and filters by DATASET_NAME prefix to get files for the specified mission.
     Organizes files locally into a mission subdirectory for processing.
 
@@ -99,7 +99,8 @@ def download_photogrammetry_products():
         str: The dataset/mission name
     """
     input_bucket = os.environ.get('S3_BUCKET_INPUT_DATA')
-    input_dir = os.environ.get('INPUT_DATA_DIRECTORY')
+    run_folder = os.environ.get('RUN_FOLDER')
+    metashape_config_id = os.environ.get('METASHAPE_CONFIG_ID', '')
     dataset_name = os.environ.get('DATASET_NAME')  # Required: mission to process
     working_dir = os.environ.get('WORKING_DIR')
     local_input_dir = f"{working_dir}/input"
@@ -110,8 +111,11 @@ def download_photogrammetry_products():
 
     print(f"Processing mission: '{dataset_name}'")
 
-    # Remote path now points directly to the flat directory structure
-    remote_base_path = f":s3:{input_bucket}/{input_dir}"
+    # Build remote path with optional config_NN subfolder
+    if metashape_config_id:
+        remote_base_path = f":s3:{input_bucket}/{run_folder}/config_{metashape_config_id}"
+    else:
+        remote_base_path = f":s3:{input_bucket}/{run_folder}"
     local_mission_dir = os.path.join(local_input_dir, dataset_name)
     # Create mission-specific subdirectory (base input/ directory already exists from setup)
     os.makedirs(local_mission_dir, exist_ok=True)
@@ -256,12 +260,12 @@ def detect_and_match_missions():
 def upload_processed_products(mission_id):
     """
     Upload processed products for a specific mission to S3 in mission-specific directories.
-    Uses METASHAPE_CONFIG_ID parameter to determine processed_NN directory number.
+    Uses METASHAPE_CONFIG_ID parameter to determine photogrammetry_NN directory number.
 
     Examples:
-        - METASHAPE_CONFIG_ID='01' -> benchmarking-greasewood/processed_01/
-        - METASHAPE_CONFIG_ID='02' -> benchmarking-greasewood/processed_02/
-        - METASHAPE_CONFIG_ID not set -> benchmarking-greasewood/processed_00/
+        - METASHAPE_CONFIG_ID='01' -> benchmarking-greasewood/photogrammetry_01/
+        - METASHAPE_CONFIG_ID='02' -> benchmarking-greasewood/photogrammetry_02/
+        - METASHAPE_CONFIG_ID not set -> benchmarking-greasewood/photogrammetry_00/
 
     Args:
         mission_id: Mission identifier
@@ -273,15 +277,15 @@ def upload_processed_products(mission_id):
     metashape_config_id = os.environ.get('METASHAPE_CONFIG_ID', '00')
 
     # Construct full remote path for status output
-    full_remote_path = f"{output_bucket}/{output_base_dir}/{mission_id}/processed_{metashape_config_id}/"
+    full_remote_path = f"{output_bucket}/{output_base_dir}/{mission_id}/photogrammetry_{metashape_config_id}/"
     print(f"Uploading to {full_remote_path}")
 
-    # Upload both full resolution and thumbnails to mission-specific processed_NN directories
+    # Upload both full resolution and thumbnails to mission-specific photogrammetry_NN directories
     working_dir = os.environ.get('WORKING_DIR')
     for subdir in ['full', 'thumbnails']:
         local_path = f"{working_dir}/output/{subdir}"
-        # Remote path: <output_base>/<mission_id>/processed_NN/<subdir>/
-        remote_path = f":s3:{output_bucket}/{output_base_dir}/{mission_id}/processed_{metashape_config_id}/{subdir}"
+        # Remote path: <output_base>/<mission_id>/photogrammetry_NN/<subdir>/
+        remote_path = f":s3:{output_bucket}/{output_base_dir}/{mission_id}/photogrammetry_{metashape_config_id}/{subdir}"
 
         # Only upload files that match this mission ID
         if not os.path.exists(local_path):
