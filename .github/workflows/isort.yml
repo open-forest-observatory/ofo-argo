@@ -45,7 +45,13 @@ jobs:
     needs: isort
     uses: ./.github/workflows/black.yml
 
-  # Ensure publish-image runs after Black and Isort have completed
-  publish-image:
+  # Ensure publish-image runs after Black and Isort have completed (can run in parallel to others)
+  publish-workflow-utils-image:
     needs: [isort, black]
-    uses: ./.github/workflows/publish-image.yml
+    uses: ./.github/workflows/publish-workflow-utils-image.yml
+
+  # Ensure publish-photogrammetry-postprocessing-image runs after Black and Isort have completed
+  # (can run in parallel to others)
+  publish-photogrammetry-postprocessing-image:
+    needs: [isort, black]
+    uses: ./.github/workflows/publish-photogrammetry-postprocessing-image.yml
