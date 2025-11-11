@@ -109,6 +109,10 @@ def download_photogrammetry_products():
         print("Error: DATASET_NAME environment variable is required")
         sys.exit(1)
 
+    if not run_folder:
+        print("Error: RUN_FOLDER environment variable is required")
+        sys.exit(1)
+
     print(f"Processing mission: '{dataset_name}'")
 
     # Build remote path with optional config_NN subfolder
