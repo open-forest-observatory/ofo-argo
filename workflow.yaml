@@ -38,6 +38,9 @@ spec:
         default: "/tmp/processing"
       #- name: OUTPUT_MAX_DIM
         #default: "800"
+      # Docker image tag for postprocessing container
+      - name: POSTPROCESSING_IMAGE_TAG
+        default: "latest"
 
   # Defining where to read raw drone imagery data and write out imagery products to `/ofo-share`
   volumes:
@@ -109,13 +112,9 @@ spec:
                   value: "{{inputs.parameters.dataset-name}}"
                 - name: config-file
                   value: "{{inputs.parameters.config-file}}"
-            continueOn:
-              failed: true
 
           # As soon as processing finishes successfully, kick off upload on any available node
           # Using 'depends' with .Succeeded ensures this only runs when run-processing succeeds.
-          # This is needed because run-processing has continueOn.failed=true,
-          # which allows the workflow to process other datasets even if this one fails.
           - name: rclone-upload
             depends: "run-processing.Succeeded"
             template: rclone-upload-to-s3
@@ -144,7 +143,7 @@ spec:
       affinity: {}
       # Use docker automate-metashape to do photogrammetry
       container:
-        image: ghcr.io/open-forest-observatory/automate-metashape
+        image: ghcr.io/open-forest-observatory/automate-metashape:dy-error-exit-code
         volumeMounts:
           - name: data
             mountPath: /data
@@ -255,7 +254,7 @@ spec:
         parameters:
           - name: dataset-name
       container:
-        image: ghcr.io/open-forest-observatory/photogrammetry-postprocessing:latest
+        image: ghcr.io/open-forest-observatory/photogrammetry-postprocessing:{{workflow.parameters.POSTPROCESSING_IMAGE_TAG}}
         volumeMounts:
           - name: data
             mountPath: /data
