@@ -113,15 +113,6 @@ spec:
                 - name: config-file
                   value: "{{inputs.parameters.config-file}}"
 
-          # For testing: print the results that the previous step printed to stdout
-          - name: print-stdout-task
-            depends: "automate-metashape-task.Succeeded || automate-metashape-task.Failed || automate-metashape-task.Errored"
-            template: print-stdout-template
-            arguments:
-              parameters:
-              - name: message
-                value: "{{tasks.automate-metashape-task.outputs.result}}"
-
           # As soon as processing finishes successfully, kick off upload on any available node
           # Using 'depends' with .Succeeded ensures this only runs when automate-metashape-task succeeds.
           - name: rclone-upload-task
@@ -178,15 +169,6 @@ spec:
                 name: agisoft-license
                 key: license_server
 
-    - name: print-stdout-template
-      inputs:
-        parameters:
-        - name: message
-      container:
-        image: alpine:latest
-        command: [sh, -c]
-        args: ["echo result was: '{{inputs.parameters.message}}'"]
-    
     # --------- RCLONE UPLOAD (Docker image) ---------
     - name: rclone-upload-template
       inputs:
