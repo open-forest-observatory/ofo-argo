@@ -142,21 +142,32 @@ spec:
       # Disable workflow-level non-GPU affinity; let GPU resource request handle node selection
       affinity: {}
       # Use docker automate-metashape to do photogrammetry
-      container:
+      script:
         image: ghcr.io/open-forest-observatory/automate-metashape:dy-error-exit-code
         volumeMounts:
           - name: data
             mountPath: /data
-        command: ["python3", "/app/python/metashape_workflow.py"]
-        args:
-          - "--config_file"
-          - "/data/{{inputs.parameters.config-file}}"
-          - "--project-path"
-          - "/data/argo-output/{{workflow.parameters.RUN_FOLDER}}/{{inputs.parameters.dataset-name}}/project"
-          - "--output-path"
-          - "/data/argo-output/{{workflow.parameters.RUN_FOLDER}}/{{inputs.parameters.dataset-name}}/output"
-          - "--run-name"
-          - "{{inputs.parameters.dataset-name}}"
+        command: ["/bin/sh"]
+        source: |
+          set -e
+
+          # Clean up any leftover products from a previous incomplete run
+          # This prevents data mismatches that could cause Metashape to error
+          DATASET_DIR="/data/argo-output/{{workflow.parameters.RUN_FOLDER}}/{{inputs.parameters.dataset-name}}"
+          if [ -d "$DATASET_DIR" ]; then
+            echo "[cleanup] Removing leftover data from previous run: $DATASET_DIR"
+            rm -rf "$DATASET_DIR"
+            echo "[cleanup] Successfully removed: $DATASET_DIR"
+          else
+            echo "[cleanup] No previous data found at: $DATASET_DIR"
+          fi
+
+          # Run the Metashape workflow
+          python3 /app/python/metashape_workflow.py \
+            --config_file "/data/{{inputs.parameters.config-file}}" \
+            --project-path "/data/argo-output/{{workflow.parameters.RUN_FOLDER}}/{{inputs.parameters.dataset-name}}/project" \
+            --output-path "/data/argo-output/{{workflow.parameters.RUN_FOLDER}}/{{inputs.parameters.dataset-name}}/output" \
+            --run-name "{{inputs.parameters.dataset-name}}"
         resources:
           requests:
             nvidia.com/gpu: 1
