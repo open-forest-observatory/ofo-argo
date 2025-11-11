@@ -261,7 +261,7 @@ def upload_processed_products(mission_id):
     Examples:
         - METASHAPE_CONFIG_ID='01' -> benchmarking-greasewood/processed_01/
         - METASHAPE_CONFIG_ID='02' -> benchmarking-greasewood/processed_02/
-        - METASHAPE_CONFIG_ID not set -> benchmarking-greasewood/processed_01/
+        - METASHAPE_CONFIG_ID not set -> benchmarking-greasewood/processed_00/
 
     Args:
         mission_id: Mission identifier
@@ -270,7 +270,7 @@ def upload_processed_products(mission_id):
     output_base_dir = os.environ.get('OUTPUT_DIRECTORY')
 
     # Get config ID from environment
-    metashape_config_id = os.environ.get('METASHAPE_CONFIG_ID', '01')
+    metashape_config_id = os.environ.get('METASHAPE_CONFIG_ID', '00')
 
     # Construct full remote path for status output
     full_remote_path = f"{output_bucket}/{output_base_dir}/{mission_id}/processed_{metashape_config_id}/"

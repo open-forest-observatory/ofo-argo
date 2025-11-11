@@ -25,7 +25,7 @@ spec:
       - name: RUN_FOLDER
         default: "default-run"
       # S3 / rclone upload parameters
-      - name: S3_BUCKET_RAW_OUTPUTS
+      - name: S3_BUCKET_PHOTOGRAMMETRY_OUTPUTS
         default: ""
       # Post-processing parameters
       - name: S3_BUCKET_POSTPROCESSED_OUTPUTS
@@ -196,7 +196,7 @@ spec:
             set -euo pipefail
             SRC="/data/argo-output/{{workflow.parameters.RUN_FOLDER}}/{{inputs.parameters.dataset-name}}/output/"
             SRC_parent="/data/argo-output/{{workflow.parameters.RUN_FOLDER}}/{{inputs.parameters.dataset-name}}"
-            DST="s3:{{workflow.parameters.S3_BUCKET_RAW_OUTPUTS}}/{{workflow.parameters.RUN_FOLDER}}"
+            DST="s3:{{workflow.parameters.S3_BUCKET_PHOTOGRAMMETRY_OUTPUTS}}/{{workflow.parameters.RUN_FOLDER}}"
 
             echo "[rclone] Uploading $SRC -> $DST"
 
@@ -291,7 +291,7 @@ spec:
                 name: s3-credentials
                 key: secret_key
           - name: S3_BUCKET_INPUT_DATA
-            value: "{{workflow.parameters.S3_BUCKET_RAW_OUTPUTS}}"
+            value: "{{workflow.parameters.S3_BUCKET_PHOTOGRAMMETRY_OUTPUTS}}"
           - name: INPUT_DATA_DIRECTORY
             value: "{{workflow.parameters.RUN_FOLDER}}"
           - name: DATASET_NAME

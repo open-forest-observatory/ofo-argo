@@ -48,7 +48,7 @@ docker run --rm \
   -e S3_BUCKET_OUTPUT=ofo-public \
   -e OUTPUT_DIRECTORY=jgillan_test \
   -e DATASET_NAME=benchmarking-greasewood \
-  -e METASHAPE_CONFIG_ID=01 \
+  -e METASHAPE_CONFIG_ID=00 \
   -e OUTPUT_MAX_DIM=800 \
   -e WORKING_DIR=/tmp/processing \
   ghcr.io/open-forest-observatory/photogrammetry-postprocess:1.6
@@ -76,7 +76,7 @@ docker run --rm \
 
 *DATASET_NAME* is the name of the dataset mission you want to process. This docker container will only process one dataset name.
 
-*METASHAPE_CONFIG_ID* **optional** parameter specifying the two-digit (zero-padded) configuration ID that determines the `processed_NN` output directory. Must be a string (e.g., '01', '02'). Defaults to '01'.
+*METASHAPE_CONFIG_ID* **optional** parameter specifying the two-digit (zero-padded) configuration ID that determines the `processed_NN` output directory. Must be a string (e.g., '00', '01', '02'). Defaults to '00'.
 
 *OUTPUT_MAX_DIM* **optional** parameter to specify the max dimensions of thumbnails. Defaults to 800 pixels.
 
@@ -90,7 +90,7 @@ docker run --rm \
 ## Outputs
 
 ```
-S3:ofo-public/OUTPUT_DIRECTORY/dataset1/processed_01/
+S3:ofo-public/OUTPUT_DIRECTORY/dataset1/processed_00/
 ├── full/
 │   ├── mission_ortho-dtm-ptcloud.tif
 │   ├── mission_dsm-ptcloud.tif
@@ -206,7 +206,7 @@ When the container starts, it follows this three-phase execution sequence:
 │    │   (calls Phase 3)                                    │ │
 │    │                                                      │ │
 │    ├─> upload_processed_products(mission_id)              │ │
-│    │   ├─> Get METASHAPE_CONFIG_ID (defaults to '01')     │ │
+│    │   ├─> Get METASHAPE_CONFIG_ID (defaults to '00')     │ │
 │    │   └─> Upload to S3:{mission_id}/processed_{config_id}/│ │
 │    │                                                      │ │
 │    └─> cleanup_working_directory(mission_id)              │ │
@@ -298,7 +298,7 @@ The bash script performs initial validation and sets up the environment before h
 **Optional** (defaults applied):
 - `WORKING_DIR` → `/tmp/processing`
 - `OUTPUT_MAX_DIM` → `800`
-- `METASHAPE_CONFIG_ID` → `01`
+- `METASHAPE_CONFIG_ID` → `00`
 - `S3_PROVIDER` → `Other`
 - `S3_BUCKET_OUTPUT` → `{S3_BUCKET_INPUT_DATA}`
 - `OUTPUT_DIRECTORY` → `processed`
@@ -351,12 +351,13 @@ Returns dict:
 Uploads processed outputs to mission-specific S3 directories.
 
 Process:
-1. Reads `METASHAPE_CONFIG_ID` environment variable (defaults to '01')
+1. Reads `METASHAPE_CONFIG_ID` environment variable (defaults to '00')
 2. Constructs remote path: `{mission_id}/processed_{metashape_config_id}/`
 3. Uploads files from `$WORKING_DIR/output/full/` and `thumbnails/`
 4. Only uploads files matching `{mission_id}_*` pattern
 
 Examples:
+- `METASHAPE_CONFIG_ID='00'` → `mission/processed_00/`
 - `METASHAPE_CONFIG_ID='01'` → `mission/processed_01/`
 - `METASHAPE_CONFIG_ID='02'` → `mission/processed_02/`
 
@@ -487,7 +488,7 @@ Processed products are uploaded to mission-specific directories:
 ```
 S3:{S3_BUCKET_OUTPUT}/{OUTPUT_DIRECTORY}/
 └── {mission_name}/
-    ├── processed_01/
+    ├── processed_00/
     │   ├── full/
     │   │   ├── mission_ortho-dtm-ptcloud.tif
     │   │   ├── mission_dsm-ptcloud.tif
@@ -502,6 +503,10 @@ S3:{S3_BUCKET_OUTPUT}/{OUTPUT_DIRECTORY}/
     │       ├── mission_chm-ptcloud.png
     │       └── mission_chm-mesh.png
     │
+    ├── processed_01/
+    │   ├── full/
+    │   └── thumbnails/
+    │
     └── processed_02/
         ├── full/
         └── thumbnails/
@@ -509,9 +514,10 @@ S3:{S3_BUCKET_OUTPUT}/{OUTPUT_DIRECTORY}/
 
 **Output Directory Logic**:
 The `processed_NN` directory number is determined by the `METASHAPE_CONFIG_ID` parameter:
+- `METASHAPE_CONFIG_ID='00'` → Output: `benchmarking-greasewood/processed_00/` (default)
 - `METASHAPE_CONFIG_ID='01'` → Output: `benchmarking-greasewood/processed_01/`
 - `METASHAPE_CONFIG_ID='02'` → Output: `benchmarking-greasewood/processed_02/`
-- `METASHAPE_CONFIG_ID` not set → Output: `benchmarking-greasewood/processed_01/` (default)
+- `METASHAPE_CONFIG_ID` not set → Output: `benchmarking-greasewood/processed_00/` (default)
 
 ---
 

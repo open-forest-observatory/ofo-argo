@@ -131,7 +131,7 @@ Once your cluster authentication is set up and your inputs are prepared, run:
 argo submit -n argo workflow.yaml \
 -p CONFIG_LIST=argo-input/config-lists/config_list.txt \
 -p RUN_FOLDER=gillan_june27 \
--p S3_BUCKET_RAW_OUTPUTS=ofo-internal \
+-p S3_BUCKET_PHOTOGRAMMETRY_OUTPUTS=ofo-internal \
 -p S3_BUCKET_POSTPROCESSED_OUTPUTS=ofo-public \
 -p OUTPUT_DIRECTORY=jgillan_test \
 -p BOUNDARY_DIRECTORY=jgillan_test \
@@ -154,7 +154,7 @@ Database parameters (not currently functional):
 |-----------|-------------|
 | `CONFIG_LIST` | Path to text file listing paths to metashape config files (all paths relative to `/ofo-share-2/argo-data`) |
 | `RUN_FOLDER` | Name for the parent directory of the Metashape outputs (locally under `argo-data/argo-outputs` **and** at the top level of the S3 bucket). Recommend `photogrammetry-outputs/config_<config_id>`. |
-| `S3_BUCKET_RAW_OUTPUTS` | S3 bucket where raw Metashape products (orthomosaics, point clouds, etc.) are uploaded (typically `ofo-internal`) |
+| `S3_BUCKET_PHOTOGRAMMETRY_OUTPUTS` | S3 bucket where raw Metashape products (orthomosaics, point clouds, etc.) are uploaded (typically `ofo-internal`) |
 | `S3_BUCKET_POSTPROCESSED_OUTPUTS` | S3 bucket for final postprocessed outputs and where boundary files are stored (typically `ofo-public`) |
 | `OUTPUT_DIRECTORY` | Name of parent folder where postprocessed products are uploaded |
 | `BOUNDARY_DIRECTORY` | Parent directory where mission boundary polygons reside (used to clip imagery) |
