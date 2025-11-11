@@ -147,16 +147,16 @@ spec:
         volumeMounts:
           - name: data
             mountPath: /data
-        command: ["python3", "/app/python/metashape_workflow.py"]
+        command: ["/bin/sh", "-c"]
+        # Below we redirect stderr to /dev/null for testing, to isolate stderr from stdout
         args:
-          - "--config_file"
-          - "/data/{{inputs.parameters.config-file}}"
-          - "--project-path"
-          - "/data/argo-output/{{workflow.parameters.RUN_FOLDER}}/{{inputs.parameters.dataset-name}}/project"
-          - "--output-path"
-          - "/data/argo-output/{{workflow.parameters.RUN_FOLDER}}/{{inputs.parameters.dataset-name}}/output"
-          - "--run-name"
-          - "{{inputs.parameters.dataset-name}}"
+          - |
+            python3 /app/python/metashape_workflow.py \
+              --config_file /data/{{inputs.parameters.config-file}} \
+              --project-path /data/argo-output/{{workflow.parameters.RUN_FOLDER}}/{{inputs.parameters.dataset-name}}/project \
+              --output-path /data/argo-output/{{workflow.parameters.RUN_FOLDER}}/{{inputs.parameters.dataset-name}}/output \
+              --run-name {{inputs.parameters.dataset-name}} \
+              2> /dev/null
         resources:
           requests:
             nvidia.com/gpu: 1
