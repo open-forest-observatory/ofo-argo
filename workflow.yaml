@@ -152,7 +152,7 @@ spec:
           set -e
 
           # Clean up any leftover products from a previous incomplete run
-          # This prevents data mismatches that could cause Metashape to error
+          # This prevents data mismatches or incomplete projects that could cause Metashape to error
           DATASET_DIR="/data/argo-output/{{workflow.parameters.RUN_FOLDER}}/{{inputs.parameters.dataset-name}}"
           if [ -d "$DATASET_DIR" ]; then
             echo "[cleanup] Removing leftover data from previous run: $DATASET_DIR"
