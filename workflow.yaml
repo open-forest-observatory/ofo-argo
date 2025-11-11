@@ -5,6 +5,7 @@ metadata:
 spec:
   serviceAccountName: argo
   entrypoint: main
+  imagePullPolicy: Always
 
   # Ensure that by default, workflow pods are scheduled on non-GPU nodes. GPU tasks will explicitly
   # override this with their own affinity configuration.
