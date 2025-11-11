@@ -104,8 +104,8 @@ spec:
           - name: config-file
       dag:
         tasks:
-          - name: run-processing
-            template: run-automate-metashape
+          - name: automate-metashape-task
+            template: automate-metashape-template
             arguments:
               parameters:
                 - name: dataset-name
@@ -114,18 +114,18 @@ spec:
                   value: "{{inputs.parameters.config-file}}"
 
           # As soon as processing finishes successfully, kick off upload on any available node
-          # Using 'depends' with .Succeeded ensures this only runs when run-processing succeeds.
-          - name: rclone-upload
-            depends: "run-processing.Succeeded"
-            template: rclone-upload-to-s3
+          # Using 'depends' with .Succeeded ensures this only runs when automate-metashape-task succeeds.
+          - name: rclone-upload-task
+            depends: "automate-metashape-task.Succeeded"
+            template: rclone-upload-template
             arguments:
               parameters:
                 - name: dataset-name
                   value: "{{inputs.parameters.dataset-name}}"
 
-          - name: postprocess-dataset
-            depends: "rclone-upload.Succeeded"
-            template: run-postprocessing
+          - name: postprocessing-task
+            depends: "rclone-upload-task.Succeeded"
+            template: postprocessing-template
             arguments:
               parameters:
                 - name: dataset-name
@@ -134,7 +134,7 @@ spec:
     ## Here we define what each step does in 'process-dataset-workflow' step
 
     # Defining how to process each dataset name
-    - name: run-automate-metashape
+    - name: automate-metashape-template
       inputs:
         parameters:
           - name: dataset-name
@@ -170,7 +170,7 @@ spec:
                 key: license_server
 
     # --------- RCLONE UPLOAD (Docker image) ---------
-    - name: rclone-upload-to-s3
+    - name: rclone-upload-template
       inputs:
         parameters:
           - name: dataset-name
@@ -249,7 +249,7 @@ spec:
                 key: secret_key
 
     #--------- POST-PROCESSING (Python Docker image) ---------
-    - name: run-postprocessing
+    - name: postprocessing-template
       inputs:
         parameters:
           - name: dataset-name
