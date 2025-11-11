@@ -15,49 +15,6 @@ import re
 from postprocess import postprocess_photogrammetry_containerized
 
 
-def extract_base_mission_name(dataset_name):
-    """
-    Extract base mission name from dataset name by removing numeric prefix.
-
-    Handles patterns like:
-    - '01_benchmarking-greasewood' -> 'benchmarking-greasewood'
-    - '02_benchmarking-greasewood' -> 'benchmarking-greasewood'
-    - 'benchmarking-greasewood' -> 'benchmarking-greasewood' (no prefix)
-
-    Args:
-        dataset_name: Dataset/mission name (may include numeric prefix)
-
-    Returns:
-        Base mission name with numeric prefix removed
-    """
-    # Match pattern: optional digits followed by underscore, then capture the rest
-    match = re.match(r'^(?:\d+_)?(.+)$', dataset_name)
-    if match:
-        return match.group(1)
-    return dataset_name
-
-
-def extract_prefix_number(dataset_name):
-    """
-    Extract numeric prefix from dataset name to determine processed_NN directory number.
-
-    Handles patterns like:
-    - '01_benchmarking-greasewood' -> '01'
-    - '02_benchmarking-greasewood' -> '02'
-    - '15_benchmarking-greasewood' -> '15'
-    - 'benchmarking-greasewood' -> '01' (default when no prefix)
-
-    Args:
-        dataset_name: Dataset/mission name (may include numeric prefix)
-
-    Returns:
-        Two-character zero-padded string representing the prefix number (defaults to '01' if no prefix)
-    """
-    # Match pattern: digits at start followed by underscore
-    match = re.match(r'^(\d+)_', dataset_name)
-    if match:
-        return match.group(1)
-    return "01"  # Default to '01' if no numeric prefix
 
 
 def get_s3_flags():
@@ -209,17 +166,12 @@ def download_boundary_polygons(mission_name):
 
     print(f"Downloading boundary polygon for mission: {mission_name}")
 
-    # Extract base mission name (strip numeric prefix) for boundary lookup
-    base_mission_name = extract_base_mission_name(mission_name)
-
-    # Construct path using base name: <boundary_base>/<base_name>/metadata-mission/<base_name>_mission-metadata.gpkg
-    remote_boundary_file = f":s3:{boundary_bucket}/{boundary_base_dir}/{base_mission_name}/metadata-mission/{base_mission_name}_mission-metadata.gpkg"
+    # Construct path: <boundary_base>/<mission_name>/metadata-mission/<mission_name>_mission-metadata.gpkg
+    remote_boundary_file = f":s3:{boundary_bucket}/{boundary_base_dir}/{mission_name}/metadata-mission/{mission_name}_mission-metadata.gpkg"
     local_mission_boundary_dir = os.path.join(local_boundary_dir, mission_name)
     # Create mission-specific subdirectory (base boundary/ directory already exists from setup)
     os.makedirs(local_mission_boundary_dir, exist_ok=True)
-    local_boundary_file = os.path.join(local_mission_boundary_dir, f"{base_mission_name}_mission-metadata.gpkg")
-
-    print(f"Using base name for boundary lookup: {base_mission_name}")
+    local_boundary_file = os.path.join(local_mission_boundary_dir, f"{mission_name}_mission-metadata.gpkg")
 
     copy_cmd = [
         'rclone', 'copyto',
@@ -248,8 +200,6 @@ def download_boundary_polygons(mission_name):
 def detect_and_match_missions():
     """
     Match products to boundary file for the single mission being processed.
-    Handles numeric prefixes (e.g., 01_mission-name, 02_mission-name) by mapping
-    to the same base boundary file.
 
     Returns:
         Dict with keys: 'prefix', 'boundary_file', 'product_files'
@@ -287,12 +237,11 @@ def detect_and_match_missions():
         print(f"Error: No product files found for mission: {dataset_name}")
         return None
 
-    # Find boundary file using base mission name (strips numeric prefix)
-    base_mission_name = extract_base_mission_name(dataset_name)
-    boundary_file = os.path.join(mission_boundary_dir, f"{base_mission_name}_mission-metadata.gpkg")
+    # Find boundary file
+    boundary_file = os.path.join(mission_boundary_dir, f"{dataset_name}_mission-metadata.gpkg")
 
     if not os.path.exists(boundary_file):
-        print(f"Error: No boundary file found for mission: {dataset_name} (expected: {base_mission_name}_mission-metadata.gpkg)")
+        print(f"Error: No boundary file found for mission: {dataset_name} (expected: {dataset_name}_mission-metadata.gpkg)")
         return None
 
     print(f"Matched mission '{dataset_name}' with {len(product_files)} products")
@@ -304,48 +253,47 @@ def detect_and_match_missions():
     }
 
 
-def upload_processed_products(mission_prefix):
+def upload_processed_products(mission_id):
     """
     Upload processed products for a specific mission to S3 in mission-specific directories.
-    Uses numeric prefix from dataset name to determine processed_NN directory number.
+    Uses METASHAPE_CONFIG_ID parameter to determine processed_NN directory number.
 
     Examples:
-        - '01_benchmarking-greasewood' -> benchmarking-greasewood/processed_01/
-        - '02_benchmarking-greasewood' -> benchmarking-greasewood/processed_02/
-        - 'benchmarking-greasewood' -> benchmarking-greasewood/processed_01/
+        - METASHAPE_CONFIG_ID='01' -> benchmarking-greasewood/processed_01/
+        - METASHAPE_CONFIG_ID='02' -> benchmarking-greasewood/processed_02/
+        - METASHAPE_CONFIG_ID not set -> benchmarking-greasewood/processed_01/
 
     Args:
-        mission_prefix: Mission identifier prefix (may include numeric prefix like 01_name)
+        mission_id: Mission identifier
     """
     output_bucket = os.environ.get('S3_BUCKET_OUTPUT')
     output_base_dir = os.environ.get('OUTPUT_DIRECTORY')
 
-    # Extract base mission name and numeric prefix
-    base_mission_name = extract_base_mission_name(mission_prefix)
-    processed_num = extract_prefix_number(mission_prefix)
+    # Get config ID from environment
+    metashape_config_id = os.environ.get('METASHAPE_CONFIG_ID', '01')
 
     # Construct full remote path for status output
-    full_remote_path = f"{output_bucket}/{output_base_dir}/{base_mission_name}/processed_{processed_num}/"
+    full_remote_path = f"{output_bucket}/{output_base_dir}/{mission_id}/processed_{metashape_config_id}/"
     print(f"Uploading to {full_remote_path}")
 
     # Upload both full resolution and thumbnails to mission-specific processed_NN directories
     working_dir = os.environ.get('WORKING_DIR')
     for subdir in ['full', 'thumbnails']:
         local_path = f"{working_dir}/output/{subdir}"
-        # Remote path: <output_base>/<base_mission_name>/processed_NN/<subdir>/
-        remote_path = f":s3:{output_bucket}/{output_base_dir}/{base_mission_name}/processed_{processed_num}/{subdir}"
+        # Remote path: <output_base>/<mission_id>/processed_NN/<subdir>/
+        remote_path = f":s3:{output_bucket}/{output_base_dir}/{mission_id}/processed_{metashape_config_id}/{subdir}"
 
-        # Only upload files that match this mission prefix
+        # Only upload files that match this mission ID
         if not os.path.exists(local_path):
             continue
 
         files_to_upload = [
             f for f in os.listdir(local_path)
-            if f.startswith(f"{mission_prefix}_")
+            if f.startswith(f"{mission_id}_")
         ]
 
         if files_to_upload:
-            print(f"Uploading {len(files_to_upload)} {subdir} files for mission {mission_prefix}")
+            print(f"Uploading {len(files_to_upload)} {subdir} files for mission {mission_id}")
 
             # Copy files one by one to ensure proper naming
             for filename in files_to_upload:
@@ -366,29 +314,29 @@ def upload_processed_products(mission_prefix):
                 except subprocess.CalledProcessError as e:
                     print(f"Warning: Failed to upload file: {filename}")
 
-    print(f"Upload completed for mission: {mission_prefix}")
+    print(f"Upload completed for mission: {mission_id}")
 
 
-def cleanup_working_directory(mission_prefix):
+def cleanup_working_directory(mission_id):
     """Remove temporary processing files for a specific mission.
 
     Only deletes mission-specific directories and files to support parallel
     processing where multiple containers may share the same WORKING_DIR.
 
     Args:
-        mission_prefix: Mission identifier (e.g., '01_mission-name')
+        mission_id: Mission identifier
     """
-    print(f"Cleaning up temporary files for mission: {mission_prefix}")
+    print(f"Cleaning up temporary files for mission: {mission_id}")
     working_dir = os.environ.get('WORKING_DIR')
 
     # Delete mission-specific input directory
-    mission_input_dir = os.path.join(working_dir, 'input', mission_prefix)
+    mission_input_dir = os.path.join(working_dir, 'input', mission_id)
     if os.path.exists(mission_input_dir):
         shutil.rmtree(mission_input_dir)
         print(f"Removed: {mission_input_dir}")
 
     # Delete mission-specific boundary directory
-    mission_boundary_dir = os.path.join(working_dir, 'boundary', mission_prefix)
+    mission_boundary_dir = os.path.join(working_dir, 'boundary', mission_id)
     if os.path.exists(mission_boundary_dir):
         shutil.rmtree(mission_boundary_dir)
         print(f"Removed: {mission_boundary_dir}")
@@ -397,7 +345,7 @@ def cleanup_working_directory(mission_prefix):
     full_output_dir = os.path.join(working_dir, 'output', 'full')
     if os.path.exists(full_output_dir):
         for filename in os.listdir(full_output_dir):
-            if filename.startswith(f"{mission_prefix}_"):
+            if filename.startswith(f"{mission_id}_"):
                 filepath = os.path.join(full_output_dir, filename)
                 os.remove(filepath)
                 print(f"Removed: {filepath}")
@@ -406,12 +354,12 @@ def cleanup_working_directory(mission_prefix):
     thumbnails_output_dir = os.path.join(working_dir, 'output', 'thumbnails')
     if os.path.exists(thumbnails_output_dir):
         for filename in os.listdir(thumbnails_output_dir):
-            if filename.startswith(f"{mission_prefix}_"):
+            if filename.startswith(f"{mission_id}_"):
                 filepath = os.path.join(thumbnails_output_dir, filename)
                 os.remove(filepath)
                 print(f"Removed: {filepath}")
 
-    print(f"Cleanup completed for mission: {mission_prefix}")
+    print(f"Cleanup completed for mission: {mission_id}")
 
 
 def main():

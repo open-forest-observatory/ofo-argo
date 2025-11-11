@@ -20,26 +20,16 @@ For the standalone docker image to work, there needs to exist a directory in the
 ```
 /S3:ofo-internal/
 ├── <INPUT_DATA_DIRECTORY>/
-        ├── 01_dataset1_dsm-ptcloud.tif
-        ├── 01_dataset1_dtm-ptcloud.tif
-        ├── 01_dataset1_ortho-dtm-ptcloud.tif
-        ├── 01_dataset1_points-copc.laz
-        └── 01_dataset1_report.pdf
-        ├── 02_dataset1_dsm-ptcloud.tif
-        ├── 02_dataset1_dtm-ptcloud.tif
-        ├── 02_dataset1_ortho-dtm-ptcloud.tif
-        ├── 02_dataset1_points-copc.laz
-        └── 02_dataset1_report.pdf
-        ├── 01_dataset2_dsm-ptcloud.tif
-        ├── 01_dataset2_dtm-ptcloud.tif
-        ├── 01_dataset2_ortho-dtm-ptcloud.tif
-        ├── 01_dataset2_points-copc.laz
-        └── 01_dataset2_report.pdf
-        ├── 02_dataset2_dsm-ptcloud.tif
-        ├── 02_dataset2_dtm-ptcloud.tif
-        ├── 02_dataset2_ortho-dtm-ptcloud.tif
-        ├── 02_dataset2_points-copc.laz
-        └── 02_dataset2_report.pdf
+        ├── dataset1_dsm-ptcloud.tif
+        ├── dataset1_dtm-ptcloud.tif
+        ├── dataset1_ortho-dtm-ptcloud.tif
+        ├── dataset1_points-copc.laz
+        └── dataset1_report.pdf
+        ├── dataset2_dsm-ptcloud.tif
+        ├── dataset2_dtm-ptcloud.tif
+        ├── dataset2_ortho-dtm-ptcloud.tif
+        ├── dataset2_points-copc.laz
+        └── dataset2_report.pdf
 ```
 
 
@@ -57,7 +47,8 @@ docker run --rm \
   -e INPUT_BOUNDARY_DIRECTORY=jgillan_test \
   -e S3_BUCKET_OUTPUT=ofo-public \
   -e OUTPUT_DIRECTORY=jgillan_test \
-  -e DATASET_NAME=01_benchmarking-greasewood \
+  -e DATASET_NAME=benchmarking-greasewood \
+  -e METASHAPE_CONFIG_ID=01 \
   -e OUTPUT_MAX_DIM=800 \
   -e WORKING_DIR=/tmp/processing \
   ghcr.io/open-forest-observatory/photogrammetry-postprocess:1.6
@@ -83,7 +74,9 @@ docker run --rm \
 
 *OUTPUT_DIRECTORY* is the parent directory where the postprocessed products will be stored
 
-*DATASET_NAME* is the name of the dataset mission you want to process. This docker container will only process one dataset name. 
+*DATASET_NAME* is the name of the dataset mission you want to process. This docker container will only process one dataset name.
+
+*METASHAPE_CONFIG_ID* **optional** parameter specifying the two-digit (zero-padded) configuration ID that determines the `processed_NN` output directory. Must be a string (e.g., '01', '02'). Defaults to '01'.
 
 *OUTPUT_MAX_DIM* **optional** parameter to specify the max dimensions of thumbnails. Defaults to 800 pixels.
 
@@ -99,16 +92,16 @@ docker run --rm \
 ```
 S3:ofo-public/OUTPUT_DIRECTORY/dataset1/processed_01/
 ├── full/
-│   ├── 01_mission_ortho-dtm-ptcloud.tif
-│   ├── 01_mission_dsm-ptcloud.tif
-│   ├── 01_mission_dtm-ptcloud.tif
-│   ├── 01_mission_chm.tif
-│   └── 01_mission_points-copc.laz
+│   ├── mission_ortho-dtm-ptcloud.tif
+│   ├── mission_dsm-ptcloud.tif
+│   ├── mission_dtm-ptcloud.tif
+│   ├── mission_chm.tif
+│   └── mission_points-copc.laz
 └── thumbnails/
-    ├── 01_mission_ortho-dtm-ptcloud.png
-    ├── 01_mission_dsm-ptcloud.png
-    ├── 01_mission_dtm-ptcloud.png
-    └── 01_mission_chm.png
+    ├── mission_ortho-dtm-ptcloud.png
+    ├── mission_dsm-ptcloud.png
+    ├── mission_dtm-ptcloud.png
+    └── mission_chm.png
 ```
 <br/>
 <br/>
@@ -212,16 +205,15 @@ When the container starts, it follows this three-phase execution sequence:
 │    ├─> postprocess_photogrammetry_containerized()  ───────┐ │
 │    │   (calls Phase 3)                                    │ │
 │    │                                                      │ │
-│    ├─> upload_processed_products(mission_prefix)          │ │
-│    │   ├─> Extract base mission name                      │ │
-│    │   ├─> Extract prefix number (e.g., '01')             │ │
-│    │   └─> Upload to S3:{base_name}/processed_{num}/      │ │
+│    ├─> upload_processed_products(mission_id)              │ │
+│    │   ├─> Get METASHAPE_CONFIG_ID (defaults to '01')     │ │
+│    │   └─> Upload to S3:{mission_id}/processed_{config_id}/│ │
 │    │                                                      │ │
-│    └─> cleanup_working_directory(mission_prefix)          │ │
-│        ├─> Delete $WORKING_DIR/input/{mission_prefix}/    │ │
-│        ├─> Delete $WORKING_DIR/boundary/{mission_prefix}/ │ │
-│        ├─> Delete $WORKING_DIR/output/full/{prefix}_*     │ │
-│        └─> Delete $WORKING_DIR/output/thumbnails/{prefix}_*│ │
+│    └─> cleanup_working_directory(mission_id)              │ │
+│        ├─> Delete $WORKING_DIR/input/{mission_id}/        │ │
+│        ├─> Delete $WORKING_DIR/boundary/{mission_id}/     │ │
+│        ├─> Delete $WORKING_DIR/output/full/{mission_id}_* │ │
+│        └─> Delete $WORKING_DIR/output/thumbnails/{mission_id}_*│ │
 │                                                            │ │
 │ 7. Print summary and exit                                  │ │
 └────────────────────────────────────────────────────────────┼─┘
@@ -306,6 +298,7 @@ The bash script performs initial validation and sets up the environment before h
 **Optional** (defaults applied):
 - `WORKING_DIR` → `/tmp/processing`
 - `OUTPUT_MAX_DIM` → `800`
+- `METASHAPE_CONFIG_ID` → `01`
 - `S3_PROVIDER` → `Other`
 - `S3_BUCKET_OUTPUT` → `{S3_BUCKET_INPUT_DATA}`
 - `OUTPUT_DIRECTORY` → `processed`
@@ -325,24 +318,6 @@ Builds rclone command-line flags for S3 authentication. Uses the **flag-based ap
 
 Returns: `['--s3-provider', ..., '--s3-endpoint', ..., '--s3-access-key-id', ..., '--s3-secret-access-key', ...]`
 
-#### `extract_base_mission_name(dataset_name)`
-Strips numeric prefixes from mission names for boundary file lookups.
-
-Examples:
-- `'01_benchmarking-greasewood'` → `'benchmarking-greasewood'`
-- `'02_benchmarking-greasewood'` → `'benchmarking-greasewood'`
-- `'benchmarking-greasewood'` → `'benchmarking-greasewood'`
-
-#### `extract_prefix_number(dataset_name)`
-Extracts zero-padded numeric prefix to determine output directory number.
-
-Examples:
-- `'01_benchmarking-greasewood'` → `'01'`
-- `'02_benchmarking-greasewood'` → `'02'`
-- `'benchmarking-greasewood'` → `'01'` (default)
-
-Returns a **string** (not int) to enforce zero-padding and prevent accidental `processed_1/` directories.
-
 #### `download_photogrammetry_products()`
 Downloads Metashape outputs from flat S3 directory structure.
 
@@ -356,10 +331,9 @@ Process:
 Downloads mission boundary polygon (`.gpkg` file) from nested S3 structure.
 
 Process:
-1. Extracts base mission name (strips numeric prefix)
-2. Constructs path: `{boundary_dir}/{base_name}/metadata-mission/{base_name}_mission-metadata.gpkg`
-3. Downloads to `$WORKING_DIR/boundary/{mission_name}/`
-4. Returns True/False for success
+1. Constructs path: `{boundary_dir}/{mission_name}/metadata-mission/{mission_name}_mission-metadata.gpkg`
+2. Downloads to `$WORKING_DIR/boundary/{mission_name}/`
+3. Returns True/False for success
 
 #### `detect_and_match_missions()`
 Matches photogrammetry products to boundary files for the single mission being processed.
@@ -373,27 +347,27 @@ Returns dict:
 }
 ```
 
-#### `upload_processed_products(mission_prefix)`
+#### `upload_processed_products(mission_id)`
 Uploads processed outputs to mission-specific S3 directories.
 
 Process:
-1. Extracts base mission name and prefix number
-2. Constructs remote path: `{base_name}/processed_{num}/`
+1. Reads `METASHAPE_CONFIG_ID` environment variable (defaults to '01')
+2. Constructs remote path: `{mission_id}/processed_{metashape_config_id}/`
 3. Uploads files from `$WORKING_DIR/output/full/` and `thumbnails/`
-4. Only uploads files matching `{mission_prefix}_*` pattern
+4. Only uploads files matching `{mission_id}_*` pattern
 
 Examples:
-- `'01_mission'` → `mission/processed_01/`
-- `'02_mission'` → `mission/processed_02/`
+- `METASHAPE_CONFIG_ID='01'` → `mission/processed_01/`
+- `METASHAPE_CONFIG_ID='02'` → `mission/processed_02/`
 
-#### `cleanup_working_directory(mission_prefix)`
+#### `cleanup_working_directory(mission_id)`
 **Parallel-safe cleanup** that only deletes mission-specific files.
 
 Deletes:
-- `$WORKING_DIR/input/{mission_prefix}/` (entire directory)
-- `$WORKING_DIR/boundary/{mission_prefix}/` (entire directory)
-- `$WORKING_DIR/output/full/{mission_prefix}_*` (files only)
-- `$WORKING_DIR/output/thumbnails/{mission_prefix}_*` (files only)
+- `$WORKING_DIR/input/{mission_id}/` (entire directory)
+- `$WORKING_DIR/boundary/{mission_id}/` (entire directory)
+- `$WORKING_DIR/output/full/{mission_id}_*` (files only)
+- `$WORKING_DIR/output/thumbnails/{mission_id}_*` (files only)
 
 **Why mission-specific?** Multiple containers can safely share the same `WORKING_DIR` (e.g., mounted PVC) during parallel Argo processing without interfering with each other.
 
@@ -453,7 +427,7 @@ Process:
    - `chm-*` → `viridis` (height)
 4. Saves as PNG with transparent background for nodata
 
-#### `postprocess_photogrammetry_containerized(mission_prefix, boundary_file, product_files)`
+#### `postprocess_photogrammetry_containerized(mission_id, boundary_file, product_files)`
 Main processing coordinator called from `entrypoint.py`.
 
 Workflow:
@@ -480,8 +454,8 @@ During processing, the `WORKING_DIR` (default: `/tmp/processing`) contains:
 $WORKING_DIR/
 ├── input/
 │   └── {dataset_name}/              # Downloaded Metashape products
-│       ├── 01_mission_dsm-ptcloud.tif
-│       ├── 01_mission_dtm-ptcloud.tif
+│       ├── mission_dsm-ptcloud.tif
+│       ├── mission_dtm-ptcloud.tif
 │       └── ...
 │
 ├── boundary/
@@ -490,13 +464,13 @@ $WORKING_DIR/
 │
 └── output/
     ├── full/                        # Processed COGs
-    │   ├── 01_mission_dsm-ptcloud.tif
-    │   ├── 01_mission_chm-ptcloud.tif
+    │   ├── mission_dsm-ptcloud.tif
+    │   ├── mission_chm-ptcloud.tif
     │   └── ...
     │
     └── thumbnails/                  # PNG thumbnails
-        ├── 01_mission_dsm-ptcloud.png
-        ├── 01_mission_chm-ptcloud.png
+        ├── mission_dsm-ptcloud.png
+        ├── mission_chm-ptcloud.png
         └── ...
 ```
 
@@ -512,31 +486,32 @@ Processed products are uploaded to mission-specific directories:
 
 ```
 S3:{S3_BUCKET_OUTPUT}/{OUTPUT_DIRECTORY}/
-└── {base_mission_name}/
+└── {mission_name}/
     ├── processed_01/
     │   ├── full/
-    │   │   ├── 01_mission_ortho-dtm-ptcloud.tif
-    │   │   ├── 01_mission_dsm-ptcloud.tif
-    │   │   ├── 01_mission_dtm-ptcloud.tif
-    │   │   ├── 01_mission_chm-ptcloud.tif
-    │   │   ├── 01_mission_chm-mesh.tif
-    │   │   └── 01_mission_points-copc.laz
+    │   │   ├── mission_ortho-dtm-ptcloud.tif
+    │   │   ├── mission_dsm-ptcloud.tif
+    │   │   ├── mission_dtm-ptcloud.tif
+    │   │   ├── mission_chm-ptcloud.tif
+    │   │   ├── mission_chm-mesh.tif
+    │   │   └── mission_points-copc.laz
     │   └── thumbnails/
-    │       ├── 01_mission_ortho-dtm-ptcloud.png
-    │       ├── 01_mission_dsm-ptcloud.png
-    │       ├── 01_mission_dtm-ptcloud.png
-    │       ├── 01_mission_chm-ptcloud.png
-    │       └── 01_mission_chm-mesh.png
+    │       ├── mission_ortho-dtm-ptcloud.png
+    │       ├── mission_dsm-ptcloud.png
+    │       ├── mission_dtm-ptcloud.png
+    │       ├── mission_chm-ptcloud.png
+    │       └── mission_chm-mesh.png
     │
     └── processed_02/
         ├── full/
         └── thumbnails/
 ```
 
-**Mission Naming Logic**:
-- Input: `01_benchmarking-greasewood` → Output: `benchmarking-greasewood/processed_01/`
-- Input: `02_benchmarking-greasewood` → Output: `benchmarking-greasewood/processed_02/`
-- Input: `benchmarking-greasewood` → Output: `benchmarking-greasewood/processed_01/`
+**Output Directory Logic**:
+The `processed_NN` directory number is determined by the `METASHAPE_CONFIG_ID` parameter:
+- `METASHAPE_CONFIG_ID='01'` → Output: `benchmarking-greasewood/processed_01/`
+- `METASHAPE_CONFIG_ID='02'` → Output: `benchmarking-greasewood/processed_02/`
+- `METASHAPE_CONFIG_ID` not set → Output: `benchmarking-greasewood/processed_01/` (default)
 
 ---
 
