@@ -91,7 +91,7 @@ def setup_working_directory():
 def download_photogrammetry_products():
     """Download photogrammetry products from S3 directory structure.
 
-    Downloads all files from S3 structure (run_folder/[config_NN]/imagery_products)
+    Downloads all files from S3 structure (run_folder/[photogrammetry_NN]/imagery_products)
     and filters by DATASET_NAME prefix to get files for the specified mission.
     Organizes files locally into a mission subdirectory for processing.
 
@@ -115,9 +115,9 @@ def download_photogrammetry_products():
 
     print(f"Processing mission: '{dataset_name}'")
 
-    # Build remote path with optional config_NN subfolder
+    # Build remote path with optional photogrammetry_NN subfolder
     if metashape_config_id:
-        remote_base_path = f":s3:{input_bucket}/{run_folder}/config_{metashape_config_id}"
+        remote_base_path = f":s3:{input_bucket}/{run_folder}/photogrammetry_{metashape_config_id}"
     else:
         remote_base_path = f":s3:{input_bucket}/{run_folder}"
     local_mission_dir = os.path.join(local_input_dir, dataset_name)

@@ -155,8 +155,8 @@ Database parameters (not currently functional):
 |-----------|-------------|
 | `CONFIG_LIST` | Path to text file listing paths to metashape config files (all paths relative to `/ofo-share-2/argo-data`) |
 | `RUN_FOLDER` | Name for the parent directory of the Metashape outputs (locally under `argo-data/argo-outputs` **and** at the top level of the S3 bucket). Example: `photogrammetry-outputs`. |
-| `METASHAPE_CONFIG_ID` | Two-digit configuration ID (e.g., `01`, `02`) used to organize outputs into `config_NN` subdirectories in S3 for raw products and `photogrammetry_NN` subdirectories for postprocessed products. If not specified, raw products are stored directly in `RUN_FOLDER` and postprocessed products in `photogrammetry_00`. |
-| `S3_BUCKET_PHOTOGRAMMETRY_OUTPUTS` | S3 bucket where raw Metashape products (orthomosaics, point clouds, etc.) are uploaded (typically `ofo-internal`). When `METASHAPE_CONFIG_ID` is set, products are uploaded to `{bucket}/{RUN_FOLDER}/config_{METASHAPE_CONFIG_ID}/`. |
+| `METASHAPE_CONFIG_ID` | Two-digit configuration ID (e.g., `01`, `02`) used to organize outputs into `photogrammetry_NN` subdirectories in S3 for both raw and postprocessed products. If not specified, raw products are stored directly in `RUN_FOLDER` and postprocessed products in `photogrammetry_00`. |
+| `S3_BUCKET_PHOTOGRAMMETRY_OUTPUTS` | S3 bucket where raw Metashape products (orthomosaics, point clouds, etc.) are uploaded (typically `ofo-internal`). When `METASHAPE_CONFIG_ID` is set, products are uploaded to `{bucket}/{RUN_FOLDER}/photogrammetry_{METASHAPE_CONFIG_ID}/`. |
 | `S3_BUCKET_POSTPROCESSED_OUTPUTS` | S3 bucket for final postprocessed outputs and where boundary files are stored (typically `ofo-public`) |
 | `OUTPUT_DIRECTORY` | Name of parent folder where postprocessed products are uploaded. Products are organized as `{OUTPUT_DIRECTORY}/{mission_name}/photogrammetry_{METASHAPE_CONFIG_ID}/`. |
 | `BOUNDARY_DIRECTORY` | Parent directory where mission boundary polygons reside (used to clip imagery) |

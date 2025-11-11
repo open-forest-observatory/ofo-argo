@@ -64,9 +64,9 @@ docker run --rm \
 
 *S3_BUCKET_INPUT_DATA* is the S3 bucket where existing Metashape products reside. Currently on 'ofo-internal'
 
-*RUN_FOLDER* is the parent directory in S3 where existing Metashape products reside. When combined with METASHAPE_CONFIG_ID, the full path becomes `{RUN_FOLDER}/config_{METASHAPE_CONFIG_ID}/`.
+*RUN_FOLDER* is the parent directory in S3 where existing Metashape products reside. When combined with METASHAPE_CONFIG_ID, the full path becomes `{RUN_FOLDER}/photogrammetry_{METASHAPE_CONFIG_ID}/`.
 
-*METASHAPE_CONFIG_ID* **optional** parameter specifying the two-digit (zero-padded) configuration ID. Used to construct the input path (`{RUN_FOLDER}/config_{METASHAPE_CONFIG_ID}/`) and output directory (`photogrammetry_{METASHAPE_CONFIG_ID}`). Must be a string (e.g., '01', '02'). If not specified, input is read from `{RUN_FOLDER}/` directly and output goes to `photogrammetry_00/`.
+*METASHAPE_CONFIG_ID* **optional** parameter specifying the two-digit (zero-padded) configuration ID. Used to construct the input path (`{RUN_FOLDER}/photogrammetry_{METASHAPE_CONFIG_ID}/`) and output directory (`photogrammetry_{METASHAPE_CONFIG_ID}`). Must be a string (e.g., '01', '02'). If not specified, input is read from `{RUN_FOLDER}/` directly and output goes to `photogrammetry_00/`.
 
 *S3_BUCKET_INPUT_BOUNDARY* is the bucket where the mission boundary polygons reside. These are used to clip imagery products. Currently in `ofo-public`
 

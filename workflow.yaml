@@ -201,9 +201,9 @@ spec:
             SRC="/data/argo-output/{{workflow.parameters.RUN_FOLDER}}/{{inputs.parameters.dataset-name}}/output/"
             SRC_parent="/data/argo-output/{{workflow.parameters.RUN_FOLDER}}/{{inputs.parameters.dataset-name}}"
 
-            # Build S3 destination path with optional config_NN subfolder
+            # Build S3 destination path with optional photogrammetry_NN subfolder
             if [ -n "{{workflow.parameters.METASHAPE_CONFIG_ID}}" ]; then
-              DST="s3:{{workflow.parameters.S3_BUCKET_PHOTOGRAMMETRY_OUTPUTS}}/{{workflow.parameters.RUN_FOLDER}}/config_{{workflow.parameters.METASHAPE_CONFIG_ID}}"
+              DST="s3:{{workflow.parameters.S3_BUCKET_PHOTOGRAMMETRY_OUTPUTS}}/{{workflow.parameters.RUN_FOLDER}}/photogrammetry_{{workflow.parameters.METASHAPE_CONFIG_ID}}"
             else
               DST="s3:{{workflow.parameters.S3_BUCKET_PHOTOGRAMMETRY_OUTPUTS}}/{{workflow.parameters.RUN_FOLDER}}"
             fi
