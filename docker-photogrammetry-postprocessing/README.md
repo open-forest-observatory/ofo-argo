@@ -9,7 +9,7 @@ The current version PROCESSES ONE MISSION AT A TIME. You cannot use this standal
 
 The image is based on GDAL (Geospatial Data Abstraction Library) and includes Python geospatial tools (rasterio, geopandas) and rclone for S3 operations.
 
-The docker image is located at `ghcr.io/open-forest-observatory/photogrammetry-postprocess:1.6` and is attached as a package to this repo.
+The docker image is located at `ghcr.io/open-forest-observatory/photogrammetry-postprocess` and is attached as a package to this repo.
 
 <br/>
 
