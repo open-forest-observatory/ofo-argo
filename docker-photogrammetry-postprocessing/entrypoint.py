@@ -34,12 +34,11 @@ def setup_working_directory():
     Creates all required base directories under WORKING_DIR:
     - input/: Base directory for downloaded photogrammetry products
     - boundary/: Base directory for mission boundary polygons
-    - output/full/: Directory for processed full-resolution COGs
-    - output/thumbnails/: Directory for generated thumbnails
+    - output/: Base directory for processed outputs (mission-specific subdirectories created during processing)
     - temp/: Reserved for temporary processing files
 
-    Mission-specific subdirectories (e.g., input/01_mission-name/) are created
-    on-the-fly by individual download functions.
+    Mission-specific subdirectories (e.g., input/01_mission-name/, output/01_mission-name/) are created
+    on-the-fly by individual download/processing functions.
 
     Returns:
         bool: True if all directories created successfully
@@ -70,8 +69,6 @@ def setup_working_directory():
         f"{working_dir}/input",
         f"{working_dir}/boundary",
         f"{working_dir}/output",
-        f"{working_dir}/output/full",
-        f"{working_dir}/output/thumbnails",
         f"{working_dir}/temp"
     ]
 
@@ -277,80 +274,60 @@ def upload_processed_products(mission_id):
     """
     output_bucket = os.environ.get('S3_BUCKET_OUTPUT')
     output_base_dir = os.environ.get('OUTPUT_DIRECTORY')
+    working_dir = os.environ.get('WORKING_DIR')
 
     # PHOTOGRAMMETRY_CONFIG_SUBFOLDER may be empty string (skip subfolder) or "photogrammetry_NN"
     # If empty, we inject it and strip the trailing slash to get clean paths
     photogrammetry_config_subfolder = os.environ.get('PHOTOGRAMMETRY_CONFIG_SUBFOLDER', '')
 
-    # Construct full remote path for status output - always inject subfolder, rstrip handles empty case
-    # Empty: "bucket/output/mission/" -> "bucket/output/mission"
+    # Construct local and remote paths
+    local_mission_dir = f"{working_dir}/output/{mission_id}"
+
+    # Build remote path with photogrammetry subfolder
+    # Empty: "bucket/output/mission" -> "bucket/output/mission"
     # Non-empty: "bucket/output/mission/photogrammetry_01" -> "bucket/output/mission/photogrammetry_01"
-    full_remote_path = f"{output_bucket}/{output_base_dir}/{mission_id}/{photogrammetry_config_subfolder}".rstrip('/')
-    print(f"Uploading to {full_remote_path}")
+    remote_base_path = f"{output_bucket}/{output_base_dir}/{mission_id}/{photogrammetry_config_subfolder}".rstrip('/')
+    remote_mission_path = f":s3:{remote_base_path}"
 
-    # Upload both full resolution and thumbnails to mission-specific directories
-    working_dir = os.environ.get('WORKING_DIR')
-    for subdir in ['full', 'thumbnails']:
-        local_path = f"{working_dir}/output/{subdir}"
-        # Remote path: <output_base>/<mission_id>/[photogrammetry_NN]/<subdir>/
-        # Build base path with photogrammetry subfolder, then append subdir
-        base_path = f":s3:{output_bucket}/{output_base_dir}/{mission_id}/{photogrammetry_config_subfolder}".rstrip('/')
-        remote_path = f"{base_path}/{subdir}"
+    print(f"Uploading to {remote_base_path}")
 
-        print(f"DEBUG: Constructed paths for {subdir}:")
-        print(f"  photogrammetry_config_subfolder='{photogrammetry_config_subfolder}'")
-        print(f"  base_path='{base_path}'")
-        print(f"  remote_path='{remote_path}'")
+    # Verify local mission directory exists
+    if not os.path.exists(local_mission_dir):
+        print(f"Error: Local mission output directory not found: {local_mission_dir}")
+        sys.exit(1)
 
-        # Only upload files that match this mission ID
-        if not os.path.exists(local_path):
-            print(f"DEBUG: Local path does not exist, skipping: {local_path}")
-            continue
+    # Count files to upload
+    full_dir = os.path.join(local_mission_dir, "full")
+    thumbnails_dir = os.path.join(local_mission_dir, "thumbnails")
+    full_count = len(os.listdir(full_dir)) if os.path.exists(full_dir) else 0
+    thumbnail_count = len(os.listdir(thumbnails_dir)) if os.path.exists(thumbnails_dir) else 0
 
-        files_to_upload = [
-            f for f in os.listdir(local_path)
-            if f.startswith(f"{mission_id}_")
-        ]
+    print(f"Uploading {full_count} full files and {thumbnail_count} thumbnails for mission {mission_id}")
 
-        if files_to_upload:
-            print(f"Uploading {len(files_to_upload)} {subdir} files for mission {mission_id}")
+    # Upload entire mission directory (includes full/ and thumbnails/ subdirectories)
+    cmd = [
+        'rclone', 'copy',
+        local_mission_dir,
+        remote_mission_path,
+        '--progress',
+        '--transfers', '8',
+        '--checkers', '8',
+        '--retries', '5',
+        '--retries-sleep', '15s'
+    ] + get_s3_flags()
 
-            # Copy files one by one to ensure proper naming
-            for filename in files_to_upload:
-                file_path = os.path.join(local_path, filename)
-                remote_file_path = f"{remote_path}/{filename}"
-
-                print(f"  DEBUG: Uploading {filename}")
-                print(f"    local:  {file_path}")
-                print(f"    remote: {remote_file_path}")
-
-                cmd = [
-                    'rclone', 'copyto',
-                    file_path,
-                    remote_file_path,
-                    '--progress',
-                    '--retries', '5',
-                    '--retries-sleep', '15s'
-                ] + get_s3_flags()
-
-                print(f"    rclone command: {' '.join(cmd[:4])}...")  # Show command without credentials
-
-                try:
-                    subprocess.run(cmd, check=True)
-                    print(f"    ✓ Upload successful")
-                except subprocess.CalledProcessError as e:
-                    print(f"    ✗ Warning: Failed to upload file: {filename}")
-                    print(f"      Error: {e}")
-        else:
-            print(f"DEBUG: No files to upload for {subdir} matching mission {mission_id}")
-
-    print(f"Upload completed for mission: {mission_id}")
+    try:
+        subprocess.run(cmd, check=True)
+        print(f"Upload completed for mission: {mission_id}")
+    except subprocess.CalledProcessError as e:
+        print(f"Error: Failed to upload mission {mission_id}: {e}")
+        sys.exit(1)
 
 
 def cleanup_working_directory(mission_id):
     """Remove temporary processing files for a specific mission.
 
-    Only deletes mission-specific directories and files to support parallel
+    Only deletes mission-specific directories to support parallel
     processing where multiple containers may share the same WORKING_DIR.
 
     Args:
@@ -371,23 +348,11 @@ def cleanup_working_directory(mission_id):
         shutil.rmtree(mission_boundary_dir)
         print(f"Removed: {mission_boundary_dir}")
 
-    # Delete mission-specific output files (full resolution)
-    full_output_dir = os.path.join(working_dir, 'output', 'full')
-    if os.path.exists(full_output_dir):
-        for filename in os.listdir(full_output_dir):
-            if filename.startswith(f"{mission_id}_"):
-                filepath = os.path.join(full_output_dir, filename)
-                os.remove(filepath)
-                print(f"Removed: {filepath}")
-
-    # Delete mission-specific output files (thumbnails)
-    thumbnails_output_dir = os.path.join(working_dir, 'output', 'thumbnails')
-    if os.path.exists(thumbnails_output_dir):
-        for filename in os.listdir(thumbnails_output_dir):
-            if filename.startswith(f"{mission_id}_"):
-                filepath = os.path.join(thumbnails_output_dir, filename)
-                os.remove(filepath)
-                print(f"Removed: {filepath}")
+    # Delete mission-specific output directory (includes full/ and thumbnails/)
+    mission_output_dir = os.path.join(working_dir, 'output', mission_id)
+    if os.path.exists(mission_output_dir):
+        shutil.rmtree(mission_output_dir)
+        print(f"Removed: {mission_output_dir}")
 
     print(f"Cleanup completed for mission: {mission_id}")
 

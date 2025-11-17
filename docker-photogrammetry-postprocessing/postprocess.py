@@ -253,9 +253,9 @@ def postprocess_photogrammetry_containerized(mission_id, boundary_file_path, pro
     if missing_products:
         raise FileNotFoundError(f"Product files not found: {', '.join(missing_products)}")
 
-    # Create output directories
+    # Create mission-specific output directories
     working_dir = os.environ.get('WORKING_DIR', '/tmp/processing')
-    postprocessed_path = f"{working_dir}/output"
+    postprocessed_path = f"{working_dir}/output/{mission_id}"
     create_dir(os.path.join(postprocessed_path, "full"))
     create_dir(os.path.join(postprocessed_path, "thumbnails"))
 
