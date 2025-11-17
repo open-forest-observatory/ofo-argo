@@ -5,16 +5,14 @@ Handles S3 downloads/uploads, mission detection, and orchestration.
 """
 
 import os
-import sys
-import subprocess
-from pathlib import Path
-import shutil
 import re
+import shutil
+import subprocess
+import sys
+from pathlib import Path
 
 # Import processing functions
 from postprocess import postprocess_photogrammetry_containerized
-
-
 
 
 def get_s3_flags():
