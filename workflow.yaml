@@ -6,6 +6,12 @@ spec:
   serviceAccountName: argo
   entrypoint: main
 
+  # Set imagePullPolicy for all containers in the workflow
+  podSpecPatch: |
+    containers:
+      - name: main
+        imagePullPolicy: Always
+
   # Ensure that by default, workflow pods are scheduled on non-GPU nodes. GPU tasks will explicitly
   # override this with their own affinity configuration.
   affinity:
@@ -169,7 +175,6 @@ spec:
       # Use docker automate-metashape to do photogrammetry
       script:
         image: ghcr.io/open-forest-observatory/automate-metashape:dy-error-exit-code
-        imagePullPolicy: Always
         volumeMounts:
           - name: data
             mountPath: /data
@@ -214,7 +219,6 @@ spec:
           - name: photogrammetry-config-subfolder
       container:
         image: rclone/rclone:latest
-        imagePullPolicy: Always
         volumeMounts:
           - name: data
             mountPath: /data
@@ -301,7 +305,6 @@ spec:
           - name: photogrammetry-config-subfolder
       container:
         image: ghcr.io/open-forest-observatory/photogrammetry-postprocessing:{{workflow.parameters.POSTPROCESSING_IMAGE_TAG}}
-        imagePullPolicy: Always
         volumeMounts:
           - name: data
             mountPath: /data
