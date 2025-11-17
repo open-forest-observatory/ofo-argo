@@ -33,7 +33,7 @@ jobs:
           python-version: 3.9
 
       - name: Run Isort
-        run: pip install isort==5.13.2 && isort ./ofo-argo-utils
+        run: pip install isort==5.13.2 && isort .
 
       - name: Push changes
         uses: stefanzweifel/git-auto-commit-action@v5
