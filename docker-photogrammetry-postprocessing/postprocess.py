@@ -5,19 +5,20 @@ Python conversion of 20_postprocess-photogrammetry-products.R
 """
 
 import os
-from pathlib import Path
 import shutil
+from pathlib import Path
+
+import geopandas as gpd
+import matplotlib
 import numpy as np
 import pandas as pd
-import geopandas as gpd
-from shapely.geometry import Point
 import rasterio
 from rasterio.mask import mask
-from rasterio.warp import reproject, Resampling, calculate_default_transform
-import matplotlib
+from rasterio.warp import Resampling, calculate_default_transform, reproject
+from shapely.geometry import Point
+
 matplotlib.use('Agg')  # Non-interactive backend
 import matplotlib.pyplot as plt
-
 
 # Utility functions
 
