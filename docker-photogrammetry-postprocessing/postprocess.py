@@ -224,7 +224,7 @@ def create_thumbnail(tif_filepath, output_path, max_dim=800):
     print(f"  Created thumbnail: {os.path.basename(output_path)}")
 
 
-def postprocess_photogrammetry_containerized(mission_prefix, boundary_file_path, product_file_paths):
+def postprocess_photogrammetry_containerized(mission_id, boundary_file_path, product_file_paths):
     """
     Main post-processing function for a single mission.
 
@@ -236,14 +236,14 @@ def postprocess_photogrammetry_containerized(mission_prefix, boundary_file_path,
     - Copies non-raster files
 
     Args:
-        mission_prefix: Mission identifier prefix
+        mission_id: Mission identifier
         boundary_file_path: Path to mission boundary polygon file
         product_file_paths: List of paths to photogrammetry product files
 
     Returns:
         True on success, raises exception on failure
     """
-    print(f"Starting post-processing for mission: {mission_prefix}")
+    print(f"Starting post-processing for mission: {mission_id}")
 
     # Validate inputs
     if not os.path.exists(boundary_file_path):
@@ -253,9 +253,9 @@ def postprocess_photogrammetry_containerized(mission_prefix, boundary_file_path,
     if missing_products:
         raise FileNotFoundError(f"Product files not found: {', '.join(missing_products)}")
 
-    # Create output directories
+    # Create mission-specific output directories
     working_dir = os.environ.get('WORKING_DIR', '/tmp/processing')
-    postprocessed_path = f"{working_dir}/output"
+    postprocessed_path = f"{working_dir}/output/{mission_id}"
     create_dir(os.path.join(postprocessed_path, "full"))
     create_dir(os.path.join(postprocessed_path, "thumbnails"))
 
@@ -290,7 +290,7 @@ def postprocess_photogrammetry_containerized(mission_prefix, boundary_file_path,
 
     # Create output filenames
     photogrammetry_output_files['postprocessed_filename'] = photogrammetry_output_files.apply(
-        lambda row: f"{mission_prefix}_{row['type']}.{row['extension']}", axis=1
+        lambda row: f"{mission_id}_{row['type']}.{row['extension']}", axis=1
     )
 
     print(f"Found {len(photogrammetry_output_files)} product files:")
@@ -349,7 +349,7 @@ def postprocess_photogrammetry_containerized(mission_prefix, boundary_file_path,
             })
 
             # Write CHM
-            chm_filename = f"{mission_prefix}_chm-ptcloud.tif"
+            chm_filename = f"{mission_id}_chm-ptcloud.tif"
             chm_filepath = os.path.join(postprocessed_path, "full", chm_filename)
 
             with rasterio.open(chm_filepath, 'w', **chm_profile) as dst:
@@ -378,7 +378,7 @@ def postprocess_photogrammetry_containerized(mission_prefix, boundary_file_path,
             })
 
             # Write CHM
-            chm_filename = f"{mission_prefix}_chm-mesh.tif"
+            chm_filename = f"{mission_id}_chm-mesh.tif"
             chm_filepath = os.path.join(postprocessed_path, "full", chm_filename)
 
             with rasterio.open(chm_filepath, 'w', **chm_profile) as dst:
@@ -431,7 +431,7 @@ def postprocess_photogrammetry_containerized(mission_prefix, boundary_file_path,
     full_files = os.listdir(os.path.join(postprocessed_path, "full"))
     thumbnail_files = os.listdir(os.path.join(postprocessed_path, "thumbnails"))
 
-    print(f"Post-processing completed for mission: {mission_prefix}")
+    print(f"Post-processing completed for mission: {mission_id}")
     print(f"Created {len(full_files)} full-resolution products and {len(thumbnail_files)} thumbnails")
 
     return True

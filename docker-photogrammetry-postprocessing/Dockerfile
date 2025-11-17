@@ -27,4 +27,5 @@ RUN pip3 install --no-cache-dir -r requirements.txt
 RUN chmod +x docker-entrypoint.sh
 RUN chmod +x entrypoint.py
 
+
 ENTRYPOINT ["./docker-entrypoint.sh"]

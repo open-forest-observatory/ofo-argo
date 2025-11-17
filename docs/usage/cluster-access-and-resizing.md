@@ -158,6 +158,20 @@ openstack coe nodegroup create ofocluster $NODEGROUP_NAME \
     --labels boot_volume_size=$BOOT_VOLUME_SIZE_GB
 ```
 
+Quick access to create a CPU nodegroup:
+
+```bash
+openstack coe nodegroup create ofocluster --labels boot_volume_size=80 cpu-group --flavor m3.large --node-count 2
+```
+
+Quick access to create a GPU nodegroup:
+
+```bash
+openstack coe nodegroup create ofocluster --labels boot_volume_size=80 gpu-group --flavor g3.xl --node-count 2
+```
+
+
+
 ### Drain nodes before downsizing or deleting
 
 When decreasing the number of nodes in a nodegroup, it is best practice to drain the Kubernetes pods

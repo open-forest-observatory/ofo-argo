@@ -112,7 +112,7 @@ git pull
 
 ## Apply the share configuration to the cluster
 
-There is a [template Kubernetes config file](../../setup/k8s/manila-cephfs-csi-config.yaml) that contains variables such as
+There is a [template Kubernetes config file](https://github.com/open-forest-observatory/ofo-argo/blob/main/setup/k8s/manila-cephfs-csi-config2.yaml) that contains variables such as
 `${MANILA_ACCESS_RULE_NAME}`. These variables will be substituted with the environment variables we
 prepared in the previous step. The following command substitutes the environment variables into the
 config file and applies it to the cluster. It's done in one step so we don't save this file (which
@@ -125,7 +125,7 @@ Note that the namespaces of the various resources are defined within the yaml, s
 kubectl create namespace argo
 
 # Substitute variables and apply configuration
-envsubst < setup/k8s/manila-cephfs-csi-config.yaml | kubectl apply -f -
+envsubst < setup/k8s/manila-cephfs-csi-config2.yaml | kubectl apply -f -
 
 # Verify resources were created
 kubectl describe secret -n ceph-csi-cephfs manila-share-secret
@@ -141,7 +141,7 @@ Deploy a test pod to verify that the PVC mount works correctly.
 
 ```bash
 # Deploy test pod
-kubectl apply -f setup/k8s/manila-test-pod.yaml
+kubectl apply -f setup/k8s/manila-test-pod2.yaml
 
 # Check pod status
 kubectl get pod -n argo manila-test-pod

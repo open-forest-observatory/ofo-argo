@@ -5,7 +5,9 @@ weight: 15
 
 # Using Argo on the OFO cluster
 
-This guide describes how to submit workflows to Argo and monitor them.
+This guide describes how to submit workflows to Argo and monitor them. This is a generic guide for any Argo workflow.
+
+For specific instructions on running the photogrammetry (automate-metashape) workflow, see the [Photogrammetry workflow guide](photogrammetry-workflow.md).
 
 ## Prerequisites
 
@@ -48,34 +50,23 @@ argo version
 ## Authenticate with the cluster
 
 Once after every reboot, you will need to re-set your `KUBECONFIG` environment variable so that
-`argo` and `kubectl` CLI tools can authenticate with the cluster. Simply run `export
-KUBECONFIG=~/.ofocluster/ofocluster.kubeconfig`.
-
-
-## Submit a workflow
+`argo` (and the underlying `kubectl`) CLI tools can authenticate with the cluster:
 
 ```bash
 source ~/venv/openstack/bin/activate
 export KUBECONFIG=~/.ofocluster/ofocluster.kubeconfig
-source ~/.ofocluster/app-cred-ofocluster-openrc.sh
 ```
 
-Simply run `argo submit -n argo /path/to/your/workflow.yaml --watch`, optionally adding parameters
+
+## Submit a workflow
+
+Simply run `argo submit -n argo /path/to/your/workflow.yaml`, optionally adding parameters
  by appending text in the format `-p PARAMETER_NAME=parameter_value`. The `parameter_value` can be
  an environment variable. For example:
 
 ```bash
-argo submit -n argo workflow.yaml --watch \
--p CONFIG_LIST=config_list.txt \
--p AGISOFT_FLS=$AGISOFT_FLS \
--p RUN_FOLDER=gillan_june27 \
--p DB_PASSWORD=<password> \
--p DB_HOST=<vm_ip_address> \
--p DB_NAME=<db_name> \
--p DB_USER=<user_name> \
--p S3_BUCKET=ofo-internal \
--p S3_PROVIDER=Other \
--p S3_ENDPOINT=https://js2.jetstream-cloud.org:8001
+argo submit -n argo workflow.yaml \
+-p PARAMETER_NAME=parameter_value \
 ```
 
 ## Observe and manage workflows through the Argo web UI
