@@ -293,10 +293,18 @@ def upload_processed_products(mission_id):
     for subdir in ['full', 'thumbnails']:
         local_path = f"{working_dir}/output/{subdir}"
         # Remote path: <output_base>/<mission_id>/[photogrammetry_NN]/<subdir>/
-        remote_path = f":s3:{output_bucket}/{output_base_dir}/{mission_id}/{photogrammetry_config_subfolder}/{subdir}".rstrip('/')
+        # Build base path with photogrammetry subfolder, then append subdir
+        base_path = f":s3:{output_bucket}/{output_base_dir}/{mission_id}/{photogrammetry_config_subfolder}".rstrip('/')
+        remote_path = f"{base_path}/{subdir}"
+
+        print(f"DEBUG: Constructed paths for {subdir}:")
+        print(f"  photogrammetry_config_subfolder='{photogrammetry_config_subfolder}'")
+        print(f"  base_path='{base_path}'")
+        print(f"  remote_path='{remote_path}'")
 
         # Only upload files that match this mission ID
         if not os.path.exists(local_path):
+            print(f"DEBUG: Local path does not exist, skipping: {local_path}")
             continue
 
         files_to_upload = [
@@ -312,6 +320,10 @@ def upload_processed_products(mission_id):
                 file_path = os.path.join(local_path, filename)
                 remote_file_path = f"{remote_path}/{filename}"
 
+                print(f"  DEBUG: Uploading {filename}")
+                print(f"    local:  {file_path}")
+                print(f"    remote: {remote_file_path}")
+
                 cmd = [
                     'rclone', 'copyto',
                     file_path,
@@ -321,10 +333,16 @@ def upload_processed_products(mission_id):
                     '--retries-sleep', '15s'
                 ] + get_s3_flags()
 
+                print(f"    rclone command: {' '.join(cmd[:4])}...")  # Show command without credentials
+
                 try:
                     subprocess.run(cmd, check=True)
+                    print(f"    ✓ Upload successful")
                 except subprocess.CalledProcessError as e:
-                    print(f"Warning: Failed to upload file: {filename}")
+                    print(f"    ✗ Warning: Failed to upload file: {filename}")
+                    print(f"      Error: {e}")
+        else:
+            print(f"DEBUG: No files to upload for {subdir} matching mission {mission_id}")
 
     print(f"Upload completed for mission: {mission_id}")
 
