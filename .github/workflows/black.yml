@@ -30,7 +30,7 @@ jobs:
         uses: psf/black@stable
         with:
           options: "--verbose"
-          src: "./ofo-argo-utils"
+          src: "."
           jupyter: false
 
       - name: Push changes
