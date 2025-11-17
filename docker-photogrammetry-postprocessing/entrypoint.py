@@ -100,7 +100,9 @@ def download_photogrammetry_products():
     """
     input_bucket = os.environ.get('S3_BUCKET_INPUT_DATA')
     run_folder = os.environ.get('RUN_FOLDER')
-    metashape_config_id = os.environ.get('METASHAPE_CONFIG_ID', '')
+    # PHOTOGRAMMETRY_CONFIG_SUBFOLDER may be empty string (skip subfolder) or "photogrammetry_NN"
+    # If empty, we inject it and strip the trailing slash to get clean paths
+    photogrammetry_config_subfolder = os.environ.get('PHOTOGRAMMETRY_CONFIG_SUBFOLDER', '')
     dataset_name = os.environ.get('DATASET_NAME')  # Required: mission to process
     working_dir = os.environ.get('WORKING_DIR')
     local_input_dir = f"{working_dir}/input"
@@ -115,11 +117,10 @@ def download_photogrammetry_products():
 
     print(f"Processing mission: '{dataset_name}'")
 
-    # Build remote path with optional photogrammetry_NN subfolder
-    if metashape_config_id:
-        remote_base_path = f":s3:{input_bucket}/{run_folder}/photogrammetry_{metashape_config_id}"
-    else:
-        remote_base_path = f":s3:{input_bucket}/{run_folder}"
+    # Build remote path - always inject subfolder, rstrip handles empty string case
+    # Empty: "bucket/run/" -> "bucket/run"
+    # Non-empty: "bucket/run/photogrammetry_01" -> "bucket/run/photogrammetry_01"
+    remote_base_path = f":s3:{input_bucket}/{run_folder}/{photogrammetry_config_subfolder}".rstrip('/')
     local_mission_dir = os.path.join(local_input_dir, dataset_name)
     # Create mission-specific subdirectory (base input/ directory already exists from setup)
     os.makedirs(local_mission_dir, exist_ok=True)
@@ -264,12 +265,12 @@ def detect_and_match_missions():
 def upload_processed_products(mission_id):
     """
     Upload processed products for a specific mission to S3 in mission-specific directories.
-    Uses METASHAPE_CONFIG_ID parameter to determine photogrammetry_NN directory number.
+    Uses PHOTOGRAMMETRY_CONFIG_SUBFOLDER parameter to organize outputs.
 
     Examples:
-        - METASHAPE_CONFIG_ID='01' -> benchmarking-greasewood/photogrammetry_01/
-        - METASHAPE_CONFIG_ID='02' -> benchmarking-greasewood/photogrammetry_02/
-        - METASHAPE_CONFIG_ID not set -> benchmarking-greasewood/photogrammetry_00/
+        - PHOTOGRAMMETRY_CONFIG_SUBFOLDER='photogrammetry_01' -> benchmarking-greasewood/photogrammetry_01/
+        - PHOTOGRAMMETRY_CONFIG_SUBFOLDER='photogrammetry_02' -> benchmarking-greasewood/photogrammetry_02/
+        - PHOTOGRAMMETRY_CONFIG_SUBFOLDER='' (empty) -> benchmarking-greasewood/
 
     Args:
         mission_id: Mission identifier
@@ -277,19 +278,22 @@ def upload_processed_products(mission_id):
     output_bucket = os.environ.get('S3_BUCKET_OUTPUT')
     output_base_dir = os.environ.get('OUTPUT_DIRECTORY')
 
-    # Get config ID from environment
-    metashape_config_id = os.environ.get('METASHAPE_CONFIG_ID', '00')
+    # PHOTOGRAMMETRY_CONFIG_SUBFOLDER may be empty string (skip subfolder) or "photogrammetry_NN"
+    # If empty, we inject it and strip the trailing slash to get clean paths
+    photogrammetry_config_subfolder = os.environ.get('PHOTOGRAMMETRY_CONFIG_SUBFOLDER', '')
 
-    # Construct full remote path for status output
-    full_remote_path = f"{output_bucket}/{output_base_dir}/{mission_id}/photogrammetry_{metashape_config_id}/"
+    # Construct full remote path for status output - always inject subfolder, rstrip handles empty case
+    # Empty: "bucket/output/mission/" -> "bucket/output/mission"
+    # Non-empty: "bucket/output/mission/photogrammetry_01" -> "bucket/output/mission/photogrammetry_01"
+    full_remote_path = f"{output_bucket}/{output_base_dir}/{mission_id}/{photogrammetry_config_subfolder}".rstrip('/')
     print(f"Uploading to {full_remote_path}")
 
-    # Upload both full resolution and thumbnails to mission-specific photogrammetry_NN directories
+    # Upload both full resolution and thumbnails to mission-specific directories
     working_dir = os.environ.get('WORKING_DIR')
     for subdir in ['full', 'thumbnails']:
         local_path = f"{working_dir}/output/{subdir}"
-        # Remote path: <output_base>/<mission_id>/photogrammetry_NN/<subdir>/
-        remote_path = f":s3:{output_bucket}/{output_base_dir}/{mission_id}/photogrammetry_{metashape_config_id}/{subdir}"
+        # Remote path: <output_base>/<mission_id>/[photogrammetry_NN]/<subdir>/
+        remote_path = f":s3:{output_bucket}/{output_base_dir}/{mission_id}/{photogrammetry_config_subfolder}/{subdir}".rstrip('/')
 
         # Only upload files that match this mission ID
         if not os.path.exists(local_path):

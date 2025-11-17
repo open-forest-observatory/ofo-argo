@@ -131,7 +131,7 @@ Once your cluster authentication is set up and your inputs are prepared, run:
 argo submit -n argo workflow.yaml \
 -p CONFIG_LIST=argo-input/config-lists/config_list.txt \
 -p RUN_FOLDER=gillan_june27 \
--p METASHAPE_CONFIG_ID=01 \
+-p PHOTOGRAMMETRY_CONFIG_ID=01 \
 -p S3_BUCKET_PHOTOGRAMMETRY_OUTPUTS=ofo-internal \
 -p S3_BUCKET_POSTPROCESSED_OUTPUTS=ofo-public \
 -p OUTPUT_DIRECTORY=jgillan_test \
@@ -155,10 +155,10 @@ Database parameters (not currently functional):
 |-----------|-------------|
 | `CONFIG_LIST` | Path to text file listing paths to metashape config files (all paths relative to `/ofo-share-2/argo-data`) |
 | `RUN_FOLDER` | Name for the parent directory of the Metashape outputs (locally under `argo-data/argo-outputs` **and** at the top level of the S3 bucket). Example: `photogrammetry-outputs`. |
-| `METASHAPE_CONFIG_ID` | Two-digit configuration ID (e.g., `01`, `02`) used to organize outputs into `photogrammetry_NN` subdirectories in S3 for both raw and postprocessed products. If not specified, raw products are stored directly in `RUN_FOLDER` and postprocessed products in `photogrammetry_00`. |
-| `S3_BUCKET_PHOTOGRAMMETRY_OUTPUTS` | S3 bucket where raw Metashape products (orthomosaics, point clouds, etc.) are uploaded (typically `ofo-internal`). When `METASHAPE_CONFIG_ID` is set, products are uploaded to `{bucket}/{RUN_FOLDER}/photogrammetry_{METASHAPE_CONFIG_ID}/`. |
+| `PHOTOGRAMMETRY_CONFIG_ID` | Two-digit configuration ID (e.g., `01`, `02`) used to organize outputs into `photogrammetry_NN` subdirectories in S3 for both raw and postprocessed products. If not specified, both raw and postprocessed products are stored directly in `RUN_FOLDER` (no `photogrammetry_NN` subfolder). |
+| `S3_BUCKET_PHOTOGRAMMETRY_OUTPUTS` | S3 bucket where raw Metashape products (orthomosaics, point clouds, etc.) are uploaded (typically `ofo-internal`). When `PHOTOGRAMMETRY_CONFIG_ID` is set, products are uploaded to `{bucket}/{RUN_FOLDER}/photogrammetry_{PHOTOGRAMMETRY_CONFIG_ID}/`. When not set, products go to `{bucket}/{RUN_FOLDER}/`. |
 | `S3_BUCKET_POSTPROCESSED_OUTPUTS` | S3 bucket for final postprocessed outputs and where boundary files are stored (typically `ofo-public`) |
-| `OUTPUT_DIRECTORY` | Name of parent folder where postprocessed products are uploaded. Products are organized as `{OUTPUT_DIRECTORY}/{mission_name}/photogrammetry_{METASHAPE_CONFIG_ID}/`. |
+| `OUTPUT_DIRECTORY` | Name of parent folder where postprocessed products are uploaded. When `PHOTOGRAMMETRY_CONFIG_ID` is set, products are organized as `{OUTPUT_DIRECTORY}/{mission_name}/photogrammetry_{PHOTOGRAMMETRY_CONFIG_ID}/`. When not set, products go to `{OUTPUT_DIRECTORY}/{mission_name}/`. |
 | `BOUNDARY_DIRECTORY` | Parent directory where mission boundary polygons reside (used to clip imagery) |
 | `WORKING_DIR` | Directory within container for downloading and postprocessing (typically `/tmp/processing` which downloads data to the processing computer; can be changed to a persistent volume) |
 | `POSTPROCESSING_IMAGE_TAG` | Docker image tag for the postprocessing container (default: `latest`). Use a specific branch name or tag to test development versions (e.g., `dy-manila`) |

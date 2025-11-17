@@ -43,7 +43,7 @@ docker run --rm \
   -e S3_SECRET_KEY=<your_secret_key> \
   -e S3_BUCKET_INPUT_DATA=ofo-internal \
   -e RUN_FOLDER=gillan_oct10 \
-  -e METASHAPE_CONFIG_ID=01 \
+  -e PHOTOGRAMMETRY_CONFIG_SUBFOLDER=photogrammetry_01 \
   -e S3_BUCKET_INPUT_BOUNDARY=ofo-public \
   -e INPUT_BOUNDARY_DIRECTORY=jgillan_test \
   -e S3_BUCKET_OUTPUT=ofo-public \
@@ -64,9 +64,9 @@ docker run --rm \
 
 *S3_BUCKET_INPUT_DATA* is the S3 bucket where existing Metashape products reside. Currently on 'ofo-internal'
 
-*RUN_FOLDER* is the parent directory in S3 where existing Metashape products reside. When combined with METASHAPE_CONFIG_ID, the full path becomes `{RUN_FOLDER}/photogrammetry_{METASHAPE_CONFIG_ID}/`.
+*RUN_FOLDER* is the parent directory in S3 where existing Metashape products reside. When combined with PHOTOGRAMMETRY_CONFIG_SUBFOLDER, the full path becomes `{RUN_FOLDER}/{PHOTOGRAMMETRY_CONFIG_SUBFOLDER}/`.
 
-*METASHAPE_CONFIG_ID* **optional** parameter specifying the two-digit (zero-padded) configuration ID. Used to construct the input path (`{RUN_FOLDER}/photogrammetry_{METASHAPE_CONFIG_ID}/`) and output directory (`photogrammetry_{METASHAPE_CONFIG_ID}`). Must be a string (e.g., '01', '02'). If not specified, input is read from `{RUN_FOLDER}/` directly and output goes to `photogrammetry_00/`.
+*PHOTOGRAMMETRY_CONFIG_SUBFOLDER* **optional** parameter specifying the photogrammetry configuration subfolder name (e.g., `photogrammetry_01`, `photogrammetry_02`). Used to construct the input path (`{RUN_FOLDER}/{PHOTOGRAMMETRY_CONFIG_SUBFOLDER}/`) and output directory (`{OUTPUT_DIRECTORY}/{mission_name}/{PHOTOGRAMMETRY_CONFIG_SUBFOLDER}/`). If not specified or set to empty string, products are read from and written to directories without the subfolder (e.g., `{RUN_FOLDER}/` and `{OUTPUT_DIRECTORY}/{mission_name}/`).
 
 *S3_BUCKET_INPUT_BOUNDARY* is the bucket where the mission boundary polygons reside. These are used to clip imagery products. Currently in `ofo-public`
 
@@ -74,7 +74,7 @@ docker run --rm \
 
 *S3_BUCKET_OUTPUT* is the bucket where the postprocessed products will be stored. 'ofo-public'
 
-*OUTPUT_DIRECTORY* is the parent directory where the postprocessed products will be stored. Products are organized as `{OUTPUT_DIRECTORY}/{mission_name}/photogrammetry_{METASHAPE_CONFIG_ID}/`.
+*OUTPUT_DIRECTORY* is the parent directory where the postprocessed products will be stored. Products are organized as `{OUTPUT_DIRECTORY}/{mission_name}/{PHOTOGRAMMETRY_CONFIG_SUBFOLDER}/` when the subfolder is specified, or `{OUTPUT_DIRECTORY}/{mission_name}/` when not specified.
 
 *DATASET_NAME* is the name of the dataset mission you want to process. This docker container will only process one dataset name.
 
@@ -206,8 +206,8 @@ When the container starts, it follows this three-phase execution sequence:
 │    │   (calls Phase 3)                                    │ │
 │    │                                                      │ │
 │    ├─> upload_processed_products(mission_id)              │ │
-│    │   ├─> Get METASHAPE_CONFIG_ID (defaults to '00')     │ │
-│    │   └─> Upload to S3:{mission_id}/processed_{config_id}/│ │
+│    │   ├─> Get PHOTOGRAMMETRY_CONFIG_SUBFOLDER (may be empty) │ │
+│    │   └─> Upload to S3:{mission_id}/{subfolder}/ (or skip subfolder if empty) │ │
 │    │                                                      │ │
 │    └─> cleanup_working_directory(mission_id)              │ │
 │        ├─> Delete $WORKING_DIR/input/{mission_id}/        │ │
@@ -298,7 +298,7 @@ The bash script performs initial validation and sets up the environment before h
 **Optional** (defaults applied):
 - `WORKING_DIR` → `/tmp/processing`
 - `OUTPUT_MAX_DIM` → `800`
-- `METASHAPE_CONFIG_ID` → `00`
+- `PHOTOGRAMMETRY_CONFIG_SUBFOLDER` → `""` (empty string, skips subfolder)
 - `S3_PROVIDER` → `Other`
 - `S3_BUCKET_OUTPUT` → `{S3_BUCKET_INPUT_DATA}`
 - `OUTPUT_DIRECTORY` → `processed`
@@ -351,15 +351,15 @@ Returns dict:
 Uploads processed outputs to mission-specific S3 directories.
 
 Process:
-1. Reads `METASHAPE_CONFIG_ID` environment variable (defaults to '00')
-2. Constructs remote path: `{mission_id}/photogrammetry_{metashape_config_id}/`
+1. Reads `PHOTOGRAMMETRY_CONFIG_SUBFOLDER` environment variable (defaults to empty string)
+2. Constructs remote path: `{mission_id}/{subfolder}/` (subfolder skipped if empty)
 3. Uploads files from `$WORKING_DIR/output/full/` and `thumbnails/`
 4. Only uploads files matching `{mission_id}_*` pattern
 
 Examples:
-- `METASHAPE_CONFIG_ID='00'` → `mission/photogrammetry_00/`
-- `METASHAPE_CONFIG_ID='01'` → `mission/photogrammetry_01/`
-- `METASHAPE_CONFIG_ID='02'` → `mission/photogrammetry_02/`
+- `PHOTOGRAMMETRY_CONFIG_SUBFOLDER=''` (empty) → `mission/`
+- `PHOTOGRAMMETRY_CONFIG_SUBFOLDER='photogrammetry_01'` → `mission/photogrammetry_01/`
+- `PHOTOGRAMMETRY_CONFIG_SUBFOLDER='photogrammetry_02'` → `mission/photogrammetry_02/`
 
 #### `cleanup_working_directory(mission_id)`
 **Parallel-safe cleanup** that only deletes mission-specific files.
@@ -512,7 +512,7 @@ S3:{S3_BUCKET_OUTPUT}/{OUTPUT_DIRECTORY}/
         └── thumbnails/
 ```
 
-The `photogrammetry_NN` directory number is determined by the `METASHAPE_CONFIG_ID` parameter.
+The `photogrammetry_NN` subfolder is determined by the `PHOTOGRAMMETRY_CONFIG_SUBFOLDER` parameter. If the parameter is empty or not set, products are stored directly under the mission name without a subfolder.
 
 ---
 
