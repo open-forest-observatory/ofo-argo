@@ -128,7 +128,7 @@ You can create your own config list file and name it whatever you want, placing 
 Once your cluster authentication is set up and your inputs are prepared, run:
 
 ```bash
-argo submit -n argo workflow.yaml \
+argo submit -n argo photogrammetry-workflow.yaml \
 -p CONFIG_LIST=argo-input/config-lists/config_list.txt \
 -p RUN_FOLDER=gillan_june27 \
 -p PHOTOGRAMMETRY_CONFIG_ID=01 \

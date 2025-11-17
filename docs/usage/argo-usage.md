@@ -65,7 +65,7 @@ Simply run `argo submit -n argo /path/to/your/workflow.yaml`, optionally adding 
  an environment variable. For example:
 
 ```bash
-argo submit -n argo workflow.yaml \
+argo submit -n argo photogrammetry-workflow.yaml \
 -p PARAMETER_NAME=parameter_value \
 ```
 

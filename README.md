@@ -26,7 +26,7 @@ The system uses [Kubernetes](https://kubernetes.io/docs/concepts/overview/) whic
 
 | File/Directory   | Purpose       |
 |  --- | ----  |
-| workflow.yaml | Main Argo Workflows configuration for the automated photogrammetry pipeline |
+| photogrammetry-workflow.yaml | Main Argo Workflows configuration for the automated photogrammetry pipeline |
 | docs/ | Documentation site source (published to GitHub Pages) |
 | mkdocs.yml | Configuration for the MkDocs documentation site |
 | docker-workflow-utils/ | Files defining utility docker containers called by the workflow (e.g. DB logging) |
