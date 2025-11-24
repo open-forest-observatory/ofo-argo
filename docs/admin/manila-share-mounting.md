@@ -144,11 +144,11 @@ Deploy a test pod to verify that the PVC mount works correctly.
 kubectl apply -f setup/k8s/manila-test-pod2.yaml
 
 # Check pod status
-kubectl get pod -n argo manila-test-pod
-kubectl describe pod -n argo manila-test-pod
+kubectl get pod -n argo manila-test-pod2
+kubectl describe pod -n argo manila-test-pod2
 
 # Once running, exec into the pod
-kubectl exec -n argo -it manila-test-pod -- /bin/sh
+kubectl exec -n argo -it manila-test-pod2 -- /bin/sh
 
 # Inside the pod, check the mount
 ls -la /mnt/cephfs
@@ -167,7 +167,7 @@ exit
 After verifying the mount works, delete the test pod:
 
 ```bash
-kubectl delete -n argo pod manila-test-pod
+kubectl delete -n argo pod manila-test-pod2
 ```
 
 ## Delete all resources (if needed)
@@ -175,9 +175,9 @@ kubectl delete -n argo pod manila-test-pod
 If you need to completely remove the Manila share mounting configuration:
 
 ```bash
-kubectl delete -n argo pod manila-test-pod
-kubectl delete -n argo pvc ceph-share-rw-pvc
-kubectl delete pv ceph-share-rw-pv
-kubectl delete -n ceph-csi-cephfs secret manila-share-secret
+kubectl delete -n argo pod manila-test-pod2
+kubectl delete -n argo pvc ceph-share-rw-pvc2
+kubectl delete pv ceph-share-rw-pv2
+kubectl delete -n ceph-csi-cephfs secret manila-share-secret2
 kubectl delete configmap -n ceph-csi-cephfs ceph-csi-config
 ```
