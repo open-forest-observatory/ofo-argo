@@ -256,7 +256,7 @@ This directory structure should already exist prior to running the Argo workflow
 
 **THE DB LOGGING IS CURRENTLY DISABLED AND IS BEING MIGRATED TO A HOSTED SOLUTION THROUGH SUPABASE**
 
-Argo run status is logged into a PostGIS DB. This is done through an additional docker container (hosted on GitHub Container Registry `ghcr.io/open-forest-observatory/ofo-argo-utils:latest`) that is included in the argo workflow. The files to make the docker image are in the folder `ofo-argo-utils`.
+Argo run status is logged into a PostGIS DB. This is done through an additional docker container (hosted on GitHub Container Registry `ghcr.io/open-forest-observatory/argo-workflow-utils:latest`) that is included in the argo workflow. The files to make the docker image are in the folder `argo-workflow-utils`.
 
 ### Info on the PostGIS DB
 

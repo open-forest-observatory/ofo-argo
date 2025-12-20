@@ -120,10 +120,10 @@ spec:
     # This reads each mission's config file, extracts the project name, and determines which
     # processing steps are enabled. It also determines GPU vs CPU node scheduling for GPU-capable steps.
     # Part of the step-based workflow implementation (Phase 3).
-    # Uses containerized preprocessing script from ofo-argo-utils.
+    # Uses containerized preprocessing script from argo-workflow-utils.
     - name: determine-datasets
       container:
-        image: ghcr.io/open-forest-observatory/ofo-argo-utils:latest
+        image: ghcr.io/open-forest-observatory/argo-workflow-utils:latest
         volumeMounts:
           - name: data
             mountPath: /data

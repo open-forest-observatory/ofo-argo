@@ -4,7 +4,7 @@ Docker container with utility scripts used by OFO Argo workflows.
 
 ## Container Image
 
-**Image:** `ghcr.io/open-forest-observatory/ofo-argo-utils:latest`
+**Image:** `ghcr.io/open-forest-observatory/argo-workflow-utils:latest`
 
 Built automatically via GitHub Actions and published to GitHub Container Registry.
 
@@ -38,7 +38,7 @@ python3 /app/determine_datasets.py argo-input/config-lists/missions.txt
 
 # In Argo workflow
 container:
-  image: ghcr.io/open-forest-observatory/ofo-argo-utils:latest
+  image: ghcr.io/open-forest-observatory/argo-workflow-utils:latest
   volumeMounts:
     - name: data
       mountPath: /data
@@ -87,14 +87,14 @@ See `requirements.txt`:
 
 ```bash
 cd docker-workflow-utils
-docker build -t ofo-argo-utils:local .
+docker build -t argo-workflow-utils:local .
 ```
 
 ### Testing Locally
 
 ```bash
 # Test determine_datasets.py
-docker run --rm -v /path/to/data:/data ofo-argo-utils:local \
+docker run --rm -v /path/to/data:/data argo-workflow-utils:local \
   python3 /app/determine_datasets.py argo-input/config-lists/test.txt
 ```
 
