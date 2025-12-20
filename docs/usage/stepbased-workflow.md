@@ -122,21 +122,21 @@ Metashape processing parameters are specified in configuration YAML files which 
 
 Every dataset to be processed needs to have its own standalone configuration file.
 
-**Naming convention:** Config files should be named to match the naming convention `<config_id>_<datasetname>.yml`. For example:
+<!-- **Naming convention:** Config files should be named to match the naming convention `<config_id>_<datasetname>.yml`. For example:
 
 - `01_benchmarking-greasewood.yml`
-- `02_benchmarking-greasewood.yml`
+- `02_benchmarking-greasewood.yml` -->
 
 **Required config structure:**
 
 ```yaml
 # Global project settings
 project:
-  project_name: "mission_001"
+  project_name: "my_project_name"
   photo_path: "/data/argo-input/datasets/mission_001"
   photo_path_secondary: ""  # Optional: path to secondary photos
   project_crs: "EPSG::32610"
-  # Note: project_path and output_path are overridden by Argo
+  # Note: project_path and output_path (needed when running outside Argo) are handled by Argo.
 
 # Step configurations (each with enabled flag)
 add_photos:
@@ -178,9 +178,10 @@ build_orthomosaic:
   # ... orthomosaic parameters
 ```
 
-**Setting the `photo_path`:** Within the `project:` section, you must specify `photo_path` which is the location of the drone imagery dataset. When running via Argo workflows, this path refers to the location **inside the docker container**.
-
-For example, if your drone images were uploaded to `/ofo-share/argo-data/argo-input/datasets/dataset_1`, then the `photo_path` should be written as:
+**Setting the `photo_path`:** Within the `project:` section, you must specify `photo_path` which is
+the location of the drone imagery dataset. When running via Argo workflows, this path refers to the
+location **inside the docker container**. For example, if your drone images are at
+`/ofo-share/argo-data/argo-input/datasets/dataset_1`, then the `photo_path` should be written as:
 
 ```yaml
 project:
@@ -198,7 +199,8 @@ The `build_depth_maps` step always runs on GPU nodes (no config option) as it al
 **Parameters handled by Argo:** The `project_path`, `output_path`, and `project_name` configuration parameters are handled automatically by the Argo workflow:
 
 - `project_path` and `output_path` are determined via CLI arguments passed to the automate-metashape container, derived from the `RUN_FOLDER` workflow parameter
-- `project_name` is extracted from `project.project_name` in the config file and passed via CLI to ensure unique project names per mission
+- `project_name` is extracted from `project.project_name` in the config file (or from the filename
+  of the config file if missing in the config) and passed by Argo via CLI to each step to ensure consistent project names per mission
 
 Any values specified for `project_path` and `output_path` in the config.yml will be overridden by Argo CLI arguments.
 
@@ -266,6 +268,7 @@ Database parameters (not currently functional):
 | `DB_*` | Database parameters for logging Argo status (not currently functional; credentials in [OFO credentials document](https://docs.google.com/document/d/155AP0P3jkVa-yT53a-QLp7vBAfjRa78gdST1Dfb4fls/edit?tab=t.0)) |
 
 **Secrets configuration:**
+
 - **S3 credentials**: S3 access credentials, provider type, and endpoint URL are configured via the `s3-credentials` Kubernetes secret
 - **Agisoft license**: Metashape floating license server address is configured via the
   `agisoft-license` Kubernetes secret
@@ -321,11 +324,25 @@ When processing multiple missions, the Argo UI shows all missions side-by-side. 
 
 #### Understanding Step Names
 
-Task names in the Argo UI follow the pattern `process-datasets-N.<step-name>`:
+Task names in the Argo UI follow the pattern `<project-name>.<step-name>`:
 
-- `process-datasets-0.setup` - Setup step for first mission (index 0)
-- `process-datasets-0.match-photos-gpu` - Match photos on GPU for first mission
-- `process-datasets-1.build-depth-maps` - Build depth maps for second mission (index 1)
+- `benchmarking-greasewood.setup` - Setup step for mission "benchmarking-greasewood"
+- `benchmarking-greasewood.match-photos-gpu` - Match photos on GPU for mission "benchmarking-greasewood"
+- `benchmarking-emerald.build-depth-maps` - Build depth maps for mission "benchmarking-emerald"
+
+!!! note "Task Name Sanitization"
+    Project names displayed in Argo task names are automatically sanitized to be DNS-1123 compliant (lowercase, alphanumeric + hyphens/dots only). For example:
+
+    - `Benchmarking_Greasewood` → `benchmarking-greasewood`
+    - `My Project Name` → `my-project-name`
+
+    **Important:** This sanitization **only affects the Argo UI task names**. The original project name is preserved for:
+
+    - Output file paths and directories
+    - The `--project-name` argument passed to automate-metashape
+    - All processing and logging
+
+    This ensures readable task names in the Argo UI without affecting your output files.
 
 GPU-capable steps show either `-gpu` or `-cpu` suffix depending on config.
 
@@ -344,13 +361,13 @@ argo list
 argo logs <workflow-name> -c determine-datasets
 
 # Get logs for a specific mission's step
-# Format: process-datasets-<N>.<step-name>
-argo logs <workflow-name> -c process-datasets-0.setup
-argo logs <workflow-name> -c process-datasets-0.match-photos-gpu
-argo logs <workflow-name> -c process-datasets-1.build-depth-maps
+# Format: <project-name>.<step-name>
+argo logs <workflow-name> -c benchmarking-greasewood.setup
+argo logs <workflow-name> -c benchmarking-greasewood.match-photos-gpu
+argo logs <workflow-name> -c benchmarking-emerald.build-depth-maps
 
 # Follow logs in real-time
-argo logs <workflow-name> -c process-datasets-0.setup -f
+argo logs <workflow-name> -c benchmarking-greasewood.setup -f
 ```
 
 ## Workflow outputs

@@ -65,7 +65,7 @@ spec:
             template: compute-photogrammetry-config-subfolder
           - name: determine-datasets
             template: determine-datasets
-        - - name: process-datasets
+        - - name: {{item.project_name_sanitized}}
             template: process-dataset-workflow
             arguments:
               parameters:

@@ -15,6 +15,7 @@ Output:
 
 import json
 import os
+import re
 import sys
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -59,6 +60,43 @@ def str_to_bool(val: Any) -> bool:
     return bool(val)
 
 
+def sanitize_dns1123(name: str) -> str:
+    """
+    Sanitize a name to be DNS-1123 compliant for Kubernetes.
+
+    DNS-1123 requirements:
+    - Lowercase alphanumeric characters, hyphens, and dots only
+    - Must start and end with an alphanumeric character (a-z, 0-9)
+    - Must not start or end with a hyphen or dot
+    - Max length of 253 characters
+
+    Args:
+        name: Original name to sanitize
+
+    Returns:
+        DNS-1123 compliant name
+    """
+    # Convert to lowercase
+    sanitized = name.lower()
+
+    # Replace invalid characters (anything not alphanumeric, hyphen, or dot) with hyphen
+    sanitized = re.sub(r'[^a-z0-9.-]', '-', sanitized)
+
+    # Collapse multiple consecutive hyphens into one
+    sanitized = re.sub(r'-+', '-', sanitized)
+
+    # Remove leading/trailing hyphens or dots
+    sanitized = sanitized.strip('-.')
+
+    # Truncate to max 253 characters
+    sanitized = sanitized[:253]
+
+    # Ensure we didn't create a trailing hyphen/dot after truncation
+    sanitized = sanitized.rstrip('-.')
+
+    return sanitized
+
+
 def process_config_file(config_path: str, data_root: str = "/data") -> Dict[str, Any]:
     """
     Process a single mission config file and extract mission parameters.
@@ -82,9 +120,14 @@ def process_config_file(config_path: str, data_root: str = "/data") -> Dict[str,
         base_with_ext = os.path.basename(config_path)
         project_name = os.path.splitext(base_with_ext)[0]
 
+    # Create DNS-1123 compliant name for Kubernetes task names (Argo UI display only)
+    # The original project_name is preserved for file paths and processing
+    project_name_sanitized = sanitize_dns1123(project_name)
+
     # Apply translation logic from implementation plan
     mission = {
         "project_name": project_name,
+        "project_name_sanitized": project_name_sanitized,
         "config": config_path,
 
         # Step enabled flags (setup and finalize always run, so not included)
