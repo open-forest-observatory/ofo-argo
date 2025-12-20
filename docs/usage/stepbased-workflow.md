@@ -116,7 +116,7 @@ Replace `<vm.ip.address>` with the IP address of a cluster node that has the sha
     - Separate `match_photos` and `align_cameras` sections (not combined `alignPhotos`)
     - Separate `build_dem` and `build_orthomosaic` sections
 
-    See the [Phase 2 config example](https://github.com/open-forest-observatory/automate-metashape/blob/main/config/config-base.yml) for the full structure.
+    See the [Phase 2 config example](https://github.com/open-forest-observatory/automate-metashape/blob/main/config/config-example.yml) for the full structure.
 
 Metashape processing parameters are specified in configuration YAML files which need to be located at `/ofo-share/argo-data/argo-input/configs/`.
 
