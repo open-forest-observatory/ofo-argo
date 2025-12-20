@@ -119,7 +119,6 @@ spec:
     # Preprocess step: Read config files and generate mission parameters with enabled flags
     # This reads each mission's config file, extracts the project name, and determines which
     # processing steps are enabled. It also determines GPU vs CPU node scheduling for GPU-capable steps.
-    # Part of the step-based workflow implementation (Phase 3).
     # Uses containerized preprocessing script from argo-workflow-utils.
     - name: determine-datasets
       container:
@@ -388,8 +387,8 @@ spec:
             --step "{{inputs.parameters.step}}"
         resources:
           requests:
-            cpu: "4"
-            memory: "16Gi"
+            cpu: "32"
+            memory: "100Gi"
         env:
           - name: AGISOFT_FLS
             valueFrom:
@@ -425,6 +424,8 @@ spec:
         resources:
           requests:
             nvidia.com/gpu: 1
+            cpu: "32"
+            memory: "100Gi"
           limits:
             nvidia.com/gpu: 1
         env:
