@@ -23,9 +23,9 @@ This guide describes how to run the OFO **step-based photogrammetry workflow**, 
 
 Before running the workflow, ensure you have:
 
-1. [Installed and set up the `openstack` and `kubectl` utilities](cluster-access-and-resizing.md)
-1. [Installed the Argo CLI](argo-usage.md)
-1. Added the appropriate type and number of nodes to the cluster (cluster-access-and-resizing.md#cluster-resizing)
+1. [Installed and set up](cluster-access-and-resizing.md) the `openstack` and `kubectl` utilities
+1. [Installed](argo-usage.md) the Argo CLI
+1. [Added](cluster-access-and-resizing.md#cluster-resizing) the appropriate type and number of nodes to the cluster
 1. Set up your `kubectl` authentication env var (part of instructions for adding nodes). Quick reference:
 
 ```
@@ -72,14 +72,14 @@ Before running the workflow, you need to prepare three types of inputs on the cl
 2. Metashape configuration files
 3. A config list file specifying which configs to process
 
-All inputs must be placed in `/ofo-share-2/argo-data/`.
+All inputs must be placed in `/ofo-share/argo-data/`.
 
 #### Directory structure
 
-Here is a schematic of the `/ofo-share-2/argo-data` directory:
+Here is a schematic of the `/ofo-share/argo-data` directory:
 
 ```bash
-/ofo-share-2/argo-data/
+/ofo-share/argo-data/
 ├── argo-input/
    ├── datasets/
    │   ├──dataset_1/
@@ -96,12 +96,12 @@ Here is a schematic of the `/ofo-share-2/argo-data` directory:
 
 #### Add drone imagery datasets
 
-To add new drone imagery datasets to be processed using Argo, transfer files from your local machine (or the cloud) to the `/ofo-share-2` volume. Put the drone imagery projects to be processed in their own directory in `/ofo-share-2/argo-data/argo-input/datasets`.
+To add new drone imagery datasets to be processed using Argo, transfer files from your local machine (or the cloud) to the `/ofo-share` volume. Put the drone imagery projects to be processed in their own directory in `/ofo-share/argo-data/argo-input/datasets`.
 
 One data transfer method is the `scp` command-line tool:
 
 ```bash
-scp -r <local/directory/drone_image_dataset/> exouser@<vm.ip.address>:/ofo-share-2/argo-data/argo-input/datasets
+scp -r <local/directory/drone_image_dataset/> exouser@<vm.ip.address>:/ofo-share/argo-data/argo-input/datasets
 ```
 
 Replace `<vm.ip.address>` with the IP address of a cluster node that has the share mounted.
@@ -118,7 +118,7 @@ Replace `<vm.ip.address>` with the IP address of a cluster node that has the sha
 
     See the [Phase 2 config example](https://github.com/open-forest-observatory/automate-metashape/blob/main/config/config-base.yml) for the full structure.
 
-Metashape processing parameters are specified in configuration YAML files which need to be located at `/ofo-share-2/argo-data/argo-input/configs/`.
+Metashape processing parameters are specified in configuration YAML files which need to be located at `/ofo-share/argo-data/argo-input/configs/`.
 
 Every dataset to be processed needs to have its own standalone configuration file.
 
@@ -180,7 +180,7 @@ build_orthomosaic:
 
 **Setting the `photo_path`:** Within the `project:` section, you must specify `photo_path` which is the location of the drone imagery dataset. When running via Argo workflows, this path refers to the location **inside the docker container**.
 
-For example, if your drone images were uploaded to `/ofo-share-2/argo-data/argo-input/datasets/dataset_1`, then the `photo_path` should be written as:
+For example, if your drone images were uploaded to `/ofo-share/argo-data/argo-input/datasets/dataset_1`, then the `photo_path` should be written as:
 
 ```yaml
 project:
@@ -204,7 +204,7 @@ Any values specified for `project_path` and `output_path` in the config.yml will
 
 #### Create a config list file
 
-We use a text file, for example `config_list.txt`, to tell the Argo workflow which config files should be processed in the current run. This text file should list the paths to each config.yml file you want to process (relative to `/ofo-share-2/argo-data`), one config file path per line.
+We use a text file, for example `config_list.txt`, to tell the Argo workflow which config files should be processed in the current run. This text file should list the paths to each config.yml file you want to process (relative to `/ofo-share/argo-data`), one config file path per line.
 
 For example:
 
@@ -217,7 +217,7 @@ argo-input/configs/02_benchmarking-emerald-subset.yml
 
 This allows you to organize your config files in subdirectories or different locations. The dataset name will be automatically derived from the config filename (e.g., `argo-input/configs/dataset-name.yml` becomes dataset `dataset-name`).
 
-You can create your own config list file and name it whatever you want, placing it anywhere within `/ofo-share-2/argo-data/`. Then specify the path to it (relative to `/ofo-share-2/argo-data`) using the `CONFIG_LIST` parameter when submitting the workflow.
+You can create your own config list file and name it whatever you want, placing it anywhere within `/ofo-share/argo-data/`. Then specify the path to it (relative to `/ofo-share/argo-data`) using the `CONFIG_LIST` parameter when submitting the workflow.
 
 
 ## Submit the workflow
@@ -254,7 +254,7 @@ Database parameters (not currently functional):
 
 | Parameter | Description |
 |-----------|-------------|
-| `CONFIG_LIST` | Path to text file listing paths to metashape config files (all paths relative to `/ofo-share-2/argo-data`) |
+| `CONFIG_LIST` | Path to text file listing paths to metashape config files (all paths relative to `/ofo-share/argo-data`) |
 | `RUN_FOLDER` | Name for the parent directory of the Metashape outputs (locally under `argo-data/argo-outputs` **and** at the top level of the S3 bucket). Example: `photogrammetry-outputs`. |
 | `PHOTOGRAMMETRY_CONFIG_ID` | Two-digit configuration ID (e.g., `01`, `02`) used to organize outputs into `photogrammetry_NN` subdirectories in S3 for both raw and postprocessed products. If not specified, both raw and postprocessed products are stored directly in `RUN_FOLDER` (no `photogrammetry_NN` subfolder). |
 | `S3_BUCKET_PHOTOGRAMMETRY_OUTPUTS` | S3 bucket where raw Metashape products (orthomosaics, point clouds, etc.) are uploaded (typically `ofo-internal`). When `PHOTOGRAMMETRY_CONFIG_ID` is set, products are uploaded to `{bucket}/{RUN_FOLDER}/photogrammetry_{PHOTOGRAMMETRY_CONFIG_ID}/`. When not set, products go to `{bucket}/{RUN_FOLDER}/`. |
@@ -449,7 +449,7 @@ argo logs <workflow-name> -c determine-datasets
 
 1. Check `setup` step logs for errors
 2. Verify `project_path` is correctly set
-3. Ensure shared storage (`/ofo-share-2`) is mounted correctly
+3. Ensure shared storage (`/ofo-share`) is mounted correctly
 4. Verify `project.project_name` is set in config file
 
 ### Config file parsing errors in preprocessing
@@ -468,7 +468,7 @@ argo logs <workflow-name> -c determine-datasets
 argo logs <workflow-name> -c determine-datasets
 
 # Manually validate config YAML
-python3 -c "import yaml; yaml.safe_load(open('/ofo-share-2/argo-data/argo-input/configs/mission.yml'))"
+python3 -c "import yaml; yaml.safe_load(open('/ofo-share/argo-data/argo-input/configs/mission.yml'))"
 ```
 
 ### Out of memory errors
