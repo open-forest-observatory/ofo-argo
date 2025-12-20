@@ -237,7 +237,8 @@ argo submit -n argo photogrammetry-workflow-stepbased.yaml \
   -p OUTPUT_DIRECTORY=jgillan_test \
   -p BOUNDARY_DIRECTORY=jgillan_test \
   -p WORKING_DIR=/argo-output/temp-working-dir \
-  -p POSTPROCESSING_IMAGE_TAG=latest
+  -p POSTPROCESSING_IMAGE_TAG=latest \
+  -p UTILS_IMAGE_TAG=latest
 ```
 
 !!! note "Workflow File"
@@ -265,6 +266,7 @@ Database parameters (not currently functional):
 | `BOUNDARY_DIRECTORY` | Parent directory where mission boundary polygons reside (used to clip imagery) |
 | `WORKING_DIR` | Directory within container for downloading and postprocessing (typically `/tmp/processing` which downloads data to the processing computer; can be changed to a persistent volume) |
 | `POSTPROCESSING_IMAGE_TAG` | Docker image tag for the postprocessing container (default: `latest`). Use a specific branch name or tag to test development versions (e.g., `dy-manila`) |
+| `UTILS_IMAGE_TAG` | Docker image tag for the argo-workflow-utils container (default: `latest`). Use a specific branch name or tag to test development versions (e.g., `dy-manila`) |
 | `DB_*` | Database parameters for logging Argo status (not currently functional; credentials in [OFO credentials document](https://docs.google.com/document/d/155AP0P3jkVa-yT53a-QLp7vBAfjRa78gdST1Dfb4fls/edit?tab=t.0)) |
 
 **Secrets configuration:**

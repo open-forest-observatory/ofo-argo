@@ -49,6 +49,8 @@ spec:
       # Docker image tag for postprocessing container
       - name: POSTPROCESSING_IMAGE_TAG
         value: "latest"
+      - name: UTILS_IMAGE_TAG
+        value: "latest"
 
   # Defining where to read raw drone imagery data and write out imagery products to `/ofo-share`
   volumes:
@@ -122,7 +124,7 @@ spec:
     # Uses containerized preprocessing script from argo-workflow-utils.
     - name: determine-datasets
       container:
-        image: ghcr.io/open-forest-observatory/argo-workflow-utils:latest
+        image: ghcr.io/open-forest-observatory/argo-workflow-utils:{{workflow.parameters.UTILS_IMAGE_TAG}}
         volumeMounts:
           - name: data
             mountPath: /data
@@ -406,7 +408,7 @@ spec:
       # Disable workflow-level non-GPU affinity; let GPU resource request handle node selection
       affinity: {}
       script:
-        image: ghcr.io/open-forest-observatory/automate-metashape
+        image: ghcr.io/open-forest-observatory/automate-metashape:latest
         volumeMounts:
           - name: data
             mountPath: /data
