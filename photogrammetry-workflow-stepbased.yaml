@@ -359,7 +359,7 @@ spec:
           - name: config-file
           - name: step
       script:
-        image: ghcr.io/open-forest-observatory/automate-metashape:dy-error-exit-code
+        image: ghcr.io/open-forest-observatory/automate-metashape:latest
         volumeMounts:
           - name: data
             mountPath: /data
@@ -407,7 +407,7 @@ spec:
       # Disable workflow-level non-GPU affinity; let GPU resource request handle node selection
       affinity: {}
       script:
-        image: ghcr.io/open-forest-observatory/automate-metashape:dy-error-exit-code
+        image: ghcr.io/open-forest-observatory/automate-metashape
         volumeMounts:
           - name: data
             mountPath: /data
