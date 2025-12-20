@@ -69,7 +69,7 @@ spec:
             template: process-dataset-workflow
             arguments:
               parameters:
-                - name: dataset-name
+                - name: project-name
                   value: "{{item.project_name}}"
                 - name: config-file
                   value: "{{item.config}}"
@@ -133,7 +133,7 @@ spec:
     - name: process-dataset-workflow
       inputs:
         parameters:
-          - name: dataset-name
+          - name: project-name
           - name: config-file
           - name: photogrammetry-config-subfolder
           # Step enabled flags
@@ -155,8 +155,8 @@ spec:
             template: metashape-cpu-step
             arguments:
               parameters:
-                - name: dataset-name
-                  value: "{{inputs.parameters.dataset-name}}"
+                - name: project-name
+                  value: "{{inputs.parameters.project-name}}"
                 - name: config-file
                   value: "{{inputs.parameters.config-file}}"
                 - name: step
@@ -169,8 +169,8 @@ spec:
             template: metashape-gpu-step
             arguments:
               parameters:
-                - name: dataset-name
-                  value: "{{inputs.parameters.dataset-name}}"
+                - name: project-name
+                  value: "{{inputs.parameters.project-name}}"
                 - name: config-file
                   value: "{{inputs.parameters.config-file}}"
                 - name: step
@@ -182,8 +182,8 @@ spec:
             template: metashape-cpu-step
             arguments:
               parameters:
-                - name: dataset-name
-                  value: "{{inputs.parameters.dataset-name}}"
+                - name: project-name
+                  value: "{{inputs.parameters.project-name}}"
                 - name: config-file
                   value: "{{inputs.parameters.config-file}}"
                 - name: step
@@ -196,8 +196,8 @@ spec:
             template: metashape-cpu-step
             arguments:
               parameters:
-                - name: dataset-name
-                  value: "{{inputs.parameters.dataset-name}}"
+                - name: project-name
+                  value: "{{inputs.parameters.project-name}}"
                 - name: config-file
                   value: "{{inputs.parameters.config-file}}"
                 - name: step
@@ -210,8 +210,8 @@ spec:
             template: metashape-gpu-step
             arguments:
               parameters:
-                - name: dataset-name
-                  value: "{{inputs.parameters.dataset-name}}"
+                - name: project-name
+                  value: "{{inputs.parameters.project-name}}"
                 - name: config-file
                   value: "{{inputs.parameters.config-file}}"
                 - name: step
@@ -224,8 +224,8 @@ spec:
             template: metashape-cpu-step
             arguments:
               parameters:
-                - name: dataset-name
-                  value: "{{inputs.parameters.dataset-name}}"
+                - name: project-name
+                  value: "{{inputs.parameters.project-name}}"
                 - name: config-file
                   value: "{{inputs.parameters.config-file}}"
                 - name: step
@@ -238,8 +238,8 @@ spec:
             template: metashape-gpu-step
             arguments:
               parameters:
-                - name: dataset-name
-                  value: "{{inputs.parameters.dataset-name}}"
+                - name: project-name
+                  value: "{{inputs.parameters.project-name}}"
                 - name: config-file
                   value: "{{inputs.parameters.config-file}}"
                 - name: step
@@ -251,8 +251,8 @@ spec:
             template: metashape-cpu-step
             arguments:
               parameters:
-                - name: dataset-name
-                  value: "{{inputs.parameters.dataset-name}}"
+                - name: project-name
+                  value: "{{inputs.parameters.project-name}}"
                 - name: config-file
                   value: "{{inputs.parameters.config-file}}"
                 - name: step
@@ -265,8 +265,8 @@ spec:
             template: metashape-cpu-step
             arguments:
               parameters:
-                - name: dataset-name
-                  value: "{{inputs.parameters.dataset-name}}"
+                - name: project-name
+                  value: "{{inputs.parameters.project-name}}"
                 - name: config-file
                   value: "{{inputs.parameters.config-file}}"
                 - name: step
@@ -279,8 +279,8 @@ spec:
             template: metashape-gpu-step
             arguments:
               parameters:
-                - name: dataset-name
-                  value: "{{inputs.parameters.dataset-name}}"
+                - name: project-name
+                  value: "{{inputs.parameters.project-name}}"
                 - name: config-file
                   value: "{{inputs.parameters.config-file}}"
                 - name: step
@@ -292,8 +292,8 @@ spec:
             template: metashape-cpu-step
             arguments:
               parameters:
-                - name: dataset-name
-                  value: "{{inputs.parameters.dataset-name}}"
+                - name: project-name
+                  value: "{{inputs.parameters.project-name}}"
                 - name: config-file
                   value: "{{inputs.parameters.config-file}}"
                 - name: step
@@ -306,8 +306,8 @@ spec:
             template: metashape-cpu-step
             arguments:
               parameters:
-                - name: dataset-name
-                  value: "{{inputs.parameters.dataset-name}}"
+                - name: project-name
+                  value: "{{inputs.parameters.project-name}}"
                 - name: config-file
                   value: "{{inputs.parameters.config-file}}"
                 - name: step
@@ -319,8 +319,8 @@ spec:
             template: metashape-cpu-step
             arguments:
               parameters:
-                - name: dataset-name
-                  value: "{{inputs.parameters.dataset-name}}"
+                - name: project-name
+                  value: "{{inputs.parameters.project-name}}"
                 - name: config-file
                   value: "{{inputs.parameters.config-file}}"
                 - name: step
@@ -332,8 +332,8 @@ spec:
             template: rclone-upload-template
             arguments:
               parameters:
-                - name: dataset-name
-                  value: "{{inputs.parameters.dataset-name}}"
+                - name: project-name
+                  value: "{{inputs.parameters.project-name}}"
                 - name: photogrammetry-config-subfolder
                   value: "{{inputs.parameters.photogrammetry-config-subfolder}}"
 
@@ -343,8 +343,8 @@ spec:
             template: postprocessing-template
             arguments:
               parameters:
-                - name: dataset-name
-                  value: "{{inputs.parameters.dataset-name}}"
+                - name: project-name
+                  value: "{{inputs.parameters.project-name}}"
                 - name: photogrammetry-config-subfolder
                   value: "{{inputs.parameters.photogrammetry-config-subfolder}}"
 
@@ -354,7 +354,7 @@ spec:
     - name: metashape-cpu-step
       inputs:
         parameters:
-          - name: dataset-name
+          - name: project-name
           - name: config-file
           - name: step
       script:
@@ -368,7 +368,7 @@ spec:
 
           # For setup step, clean up any leftover products from a previous incomplete run
           if [ "{{inputs.parameters.step}}" = "setup" ]; then
-            DATASET_DIR="/data/argo-output/{{workflow.parameters.RUN_FOLDER}}/{{inputs.parameters.dataset-name}}"
+            DATASET_DIR="/data/argo-output/{{workflow.parameters.RUN_FOLDER}}/{{inputs.parameters.project-name}}"
             if [ -d "$DATASET_DIR" ]; then
               echo "[cleanup] Removing leftover data from previous run: $DATASET_DIR"
               rm -rf "$DATASET_DIR"
@@ -381,9 +381,9 @@ spec:
           # Run the Metashape step
           python3 /app/python/metashape_workflow.py \
             --config-file "/data/{{inputs.parameters.config-file}}" \
-            --project-path "/data/argo-output/{{workflow.parameters.RUN_FOLDER}}/{{inputs.parameters.dataset-name}}/project" \
-            --output-path "/data/argo-output/{{workflow.parameters.RUN_FOLDER}}/{{inputs.parameters.dataset-name}}/output" \
-            --project-name "{{inputs.parameters.dataset-name}}" \
+            --project-path "/data/argo-output/{{workflow.parameters.RUN_FOLDER}}/{{inputs.parameters.project-name}}/project" \
+            --output-path "/data/argo-output/{{workflow.parameters.RUN_FOLDER}}/{{inputs.parameters.project-name}}/output" \
+            --project-name "{{inputs.parameters.project-name}}" \
             --step "{{inputs.parameters.step}}"
         resources:
           requests:
@@ -400,7 +400,7 @@ spec:
     - name: metashape-gpu-step
       inputs:
         parameters:
-          - name: dataset-name
+          - name: project-name
           - name: config-file
           - name: step
       # Disable workflow-level non-GPU affinity; let GPU resource request handle node selection
@@ -417,9 +417,9 @@ spec:
           # Run the Metashape step
           python3 /app/python/metashape_workflow.py \
             --config-file "/data/{{inputs.parameters.config-file}}" \
-            --project-path "/data/argo-output/{{workflow.parameters.RUN_FOLDER}}/{{inputs.parameters.dataset-name}}/project" \
-            --output-path "/data/argo-output/{{workflow.parameters.RUN_FOLDER}}/{{inputs.parameters.dataset-name}}/output" \
-            --project-name "{{inputs.parameters.dataset-name}}" \
+            --project-path "/data/argo-output/{{workflow.parameters.RUN_FOLDER}}/{{inputs.parameters.project-name}}/project" \
+            --output-path "/data/argo-output/{{workflow.parameters.RUN_FOLDER}}/{{inputs.parameters.project-name}}/output" \
+            --project-name "{{inputs.parameters.project-name}}" \
             --step "{{inputs.parameters.step}}"
         resources:
           requests:
@@ -439,7 +439,7 @@ spec:
     - name: rclone-upload-template
       inputs:
         parameters:
-          - name: dataset-name
+          - name: project-name
           - name: photogrammetry-config-subfolder
       container:
         image: rclone/rclone:latest
@@ -450,8 +450,8 @@ spec:
         args:
           - |
             set -euo pipefail
-            SRC="/data/argo-output/{{workflow.parameters.RUN_FOLDER}}/{{inputs.parameters.dataset-name}}/output/"
-            SRC_parent="/data/argo-output/{{workflow.parameters.RUN_FOLDER}}/{{inputs.parameters.dataset-name}}"
+            SRC="/data/argo-output/{{workflow.parameters.RUN_FOLDER}}/{{inputs.parameters.project-name}}/output/"
+            SRC_parent="/data/argo-output/{{workflow.parameters.RUN_FOLDER}}/{{inputs.parameters.project-name}}"
 
             # Build S3 destination path with optional photogrammetry config subfolder
             if [ -n "{{inputs.parameters.photogrammetry-config-subfolder}}" ]; then
@@ -472,7 +472,7 @@ spec:
 
             # Check if upload was successful
             if [ $? -eq 0 ]; then
-              echo "[rclone] Upload successful for {{inputs.parameters.dataset-name}}"
+              echo "[rclone] Upload successful for {{inputs.parameters.project-name}}"
 
               # Clean up local files after successful upload
               echo "[cleanup] Removing local files after successful upload..."
@@ -483,12 +483,12 @@ spec:
                 echo "[cleanup] Source directory not found: $SRC_parent"
               fi
             else
-              echo "[rclone] Upload failed for {{inputs.parameters.dataset-name}}"
+              echo "[rclone] Upload failed for {{inputs.parameters.project-name}}"
               echo "[cleanup] Keeping local files due to upload failure"
               exit 1
             fi
 
-            echo "[rclone] Upload and cleanup completed for {{inputs.parameters.dataset-name}}"
+            echo "[rclone] Upload and cleanup completed for {{inputs.parameters.project-name}}"
 
         resources:
           requests:
@@ -525,7 +525,7 @@ spec:
     - name: postprocessing-template
       inputs:
         parameters:
-          - name: dataset-name
+          - name: project-name
           - name: photogrammetry-config-subfolder
       container:
         image: ghcr.io/open-forest-observatory/photogrammetry-postprocessing:{{workflow.parameters.POSTPROCESSING_IMAGE_TAG}}
@@ -560,7 +560,7 @@ spec:
           - name: PHOTOGRAMMETRY_CONFIG_SUBFOLDER
             value: "{{inputs.parameters.photogrammetry-config-subfolder}}"
           - name: DATASET_NAME
-            value: "{{inputs.parameters.dataset-name}}"
+            value: "{{inputs.parameters.project-name}}"
           - name: S3_BUCKET_INPUT_BOUNDARY
             value: "{{workflow.parameters.S3_BUCKET_POSTPROCESSED_OUTPUTS}}"
           - name: INPUT_BOUNDARY_DIRECTORY
