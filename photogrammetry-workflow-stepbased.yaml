@@ -1,0 +1,581 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Workflow
+metadata:
+  generateName: automate-metashape-workflow-
+spec:
+  serviceAccountName: argo
+  entrypoint: main
+
+  # Set imagePullPolicy for all containers in the workflow
+  podSpecPatch: |
+    containers:
+      - name: main
+        imagePullPolicy: Always
+
+  # Ensure that by default, workflow pods are scheduled on non-GPU nodes. GPU tasks will explicitly
+  # override this with their own affinity configuration.
+  affinity:
+    nodeAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        nodeSelectorTerms:
+          - matchExpressions:
+              - key: nvidia.com/gpu.present
+                operator: DoesNotExist
+
+  # A list of input parameters available to the workflow at runtime. 
+  # These parameters can be referenced throughout the workflow templates using {{workflow.parameters.<name>}}
+  arguments:
+    parameters:
+      - name: CONFIG_LIST
+        value: "argo-input/config-lists/config_list.txt"
+      - name: RUN_FOLDER
+        value: "default-run"
+      - name: PHOTOGRAMMETRY_CONFIG_ID
+        value: "NONE"
+      # S3 / rclone upload parameters
+      - name: S3_BUCKET_PHOTOGRAMMETRY_OUTPUTS
+        value: ""
+      # Post-processing parameters
+      - name: S3_BUCKET_POSTPROCESSED_OUTPUTS
+        value: "ofo-public"
+      - name: OUTPUT_DIRECTORY
+        value: ""
+      - name: BOUNDARY_DIRECTORY
+        value: ""
+      - name: WORKING_DIR
+        value: "/tmp/processing"
+      # - name: OUTPUT_MAX_DIM
+      #   value: "800"
+      # Docker image tag for postprocessing container
+      - name: POSTPROCESSING_IMAGE_TAG
+        value: "latest"
+
+  # Defining where to read raw drone imagery data and write out imagery products to `/ofo-share`
+  volumes:
+    - name: data
+      persistentVolumeClaim:
+        claimName: ceph-share-rw-pvc2
+
+  templates:
+    # the 'main' template defines the order of high-level steps to be completed in the workflow.
+    # the 'process-datasets' step has a looping directive (withParam) which goes through each dataset name and processes it.
+    - name: main
+      steps:
+        - - name: compute-photogrammetry-config-subfolder
+            template: compute-photogrammetry-config-subfolder
+          - name: determine-datasets
+            template: determine-datasets
+        - - name: process-datasets
+            template: process-dataset-workflow
+            arguments:
+              parameters:
+                - name: dataset-name
+                  value: "{{item.project_name}}"
+                - name: config-file
+                  value: "{{item.config}}"
+                - name: photogrammetry-config-subfolder
+                  value: "{{steps.compute-photogrammetry-config-subfolder.outputs.result}}"
+                # Step enabled flags
+                - name: match_photos_enabled
+                  value: "{{item.match_photos_enabled}}"
+                - name: match_photos_use_gpu
+                  value: "{{item.match_photos_use_gpu}}"
+                - name: align_cameras_enabled
+                  value: "{{item.align_cameras_enabled}}"
+                - name: build_depth_maps_enabled
+                  value: "{{item.build_depth_maps_enabled}}"
+                - name: build_point_cloud_enabled
+                  value: "{{item.build_point_cloud_enabled}}"
+                - name: build_mesh_enabled
+                  value: "{{item.build_mesh_enabled}}"
+                - name: build_mesh_use_gpu
+                  value: "{{item.build_mesh_use_gpu}}"
+                - name: build_dem_orthomosaic_enabled
+                  value: "{{item.build_dem_orthomosaic_enabled}}"
+                - name: match_photos_secondary_enabled
+                  value: "{{item.match_photos_secondary_enabled}}"
+                - name: match_photos_secondary_use_gpu
+                  value: "{{item.match_photos_secondary_use_gpu}}"
+                - name: align_cameras_secondary_enabled
+                  value: "{{item.align_cameras_secondary_enabled}}"
+            withParam: "{{steps.determine-datasets.outputs.result}}"
+
+    ## Here we define what the main steps actually do
+
+    # Compute the photogrammetry config subfolder name based on PHOTOGRAMMETRY_CONFIG_ID
+    # If PHOTOGRAMMETRY_CONFIG_ID is non-empty and not "NONE", returns "photogrammetry_<ID>", otherwise returns empty string
+    - name: compute-photogrammetry-config-subfolder
+      script:
+        image: python:3.9
+        command: ["python3"]
+        source: |
+          import sys
+          config_id = "{{workflow.parameters.PHOTOGRAMMETRY_CONFIG_ID}}"
+          if config_id and config_id != "NONE":
+              print(f"photogrammetry_{config_id}", end='')
+          else:
+              print("", end='')
+
+    # Preprocess step: Read config files and generate mission parameters with enabled flags
+    # This reads each mission's config file, extracts the project name, and determines which
+    # processing steps are enabled. It also determines GPU vs CPU node scheduling for GPU-capable steps.
+    # Part of the step-based workflow implementation (Phase 3).
+    # Uses containerized preprocessing script from ofo-argo-utils.
+    - name: determine-datasets
+      container:
+        image: ghcr.io/open-forest-observatory/ofo-argo-utils:latest
+        volumeMounts:
+          - name: data
+            mountPath: /data
+        command: ["python3"]
+        args: ["/app/determine_datasets.py", "{{workflow.parameters.CONFIG_LIST}}"]
+
+    # Multi-step photogrammetry workflow with conditional GPU/CPU execution
+    - name: process-dataset-workflow
+      inputs:
+        parameters:
+          - name: dataset-name
+          - name: config-file
+          - name: photogrammetry-config-subfolder
+          # Step enabled flags
+          - name: match_photos_enabled
+          - name: match_photos_use_gpu
+          - name: align_cameras_enabled
+          - name: build_depth_maps_enabled
+          - name: build_point_cloud_enabled
+          - name: build_mesh_enabled
+          - name: build_mesh_use_gpu
+          - name: build_dem_orthomosaic_enabled
+          - name: match_photos_secondary_enabled
+          - name: match_photos_secondary_use_gpu
+          - name: align_cameras_secondary_enabled
+      dag:
+        tasks:
+          # Step 1: Setup (always runs, CPU only)
+          - name: setup
+            template: metashape-cpu-step
+            arguments:
+              parameters:
+                - name: dataset-name
+                  value: "{{inputs.parameters.dataset-name}}"
+                - name: config-file
+                  value: "{{inputs.parameters.config-file}}"
+                - name: step
+                  value: "setup"
+
+          # Step 2: Match Photos (conditional, GPU or CPU based on config)
+          - name: match-photos-gpu
+            depends: "setup.Succeeded"
+            when: "{{inputs.parameters.match_photos_enabled}} == 'true' && {{inputs.parameters.match_photos_use_gpu}} == 'true'"
+            template: metashape-gpu-step
+            arguments:
+              parameters:
+                - name: dataset-name
+                  value: "{{inputs.parameters.dataset-name}}"
+                - name: config-file
+                  value: "{{inputs.parameters.config-file}}"
+                - name: step
+                  value: "match_photos"
+
+          - name: match-photos-cpu
+            depends: "setup.Succeeded"
+            when: "{{inputs.parameters.match_photos_enabled}} == 'true' && {{inputs.parameters.match_photos_use_gpu}} == 'false'"
+            template: metashape-cpu-step
+            arguments:
+              parameters:
+                - name: dataset-name
+                  value: "{{inputs.parameters.dataset-name}}"
+                - name: config-file
+                  value: "{{inputs.parameters.config-file}}"
+                - name: step
+                  value: "match_photos"
+
+          # Step 3: Align Cameras (conditional, CPU only)
+          - name: align-cameras
+            depends: "match-photos-gpu.Succeeded || match-photos-gpu.Skipped || match-photos-cpu.Succeeded || match-photos-cpu.Skipped"
+            when: "{{inputs.parameters.align_cameras_enabled}} == 'true'"
+            template: metashape-cpu-step
+            arguments:
+              parameters:
+                - name: dataset-name
+                  value: "{{inputs.parameters.dataset-name}}"
+                - name: config-file
+                  value: "{{inputs.parameters.config-file}}"
+                - name: step
+                  value: "align_cameras"
+
+          # Step 4: Build Depth Maps (conditional, GPU only)
+          - name: build-depth-maps
+            depends: "align-cameras.Succeeded || align-cameras.Skipped"
+            when: "{{inputs.parameters.build_depth_maps_enabled}} == 'true'"
+            template: metashape-gpu-step
+            arguments:
+              parameters:
+                - name: dataset-name
+                  value: "{{inputs.parameters.dataset-name}}"
+                - name: config-file
+                  value: "{{inputs.parameters.config-file}}"
+                - name: step
+                  value: "build_depth_maps"
+
+          # Step 5: Build Point Cloud (conditional, CPU only)
+          - name: build-point-cloud
+            depends: "build-depth-maps.Succeeded || build-depth-maps.Skipped"
+            when: "{{inputs.parameters.build_point_cloud_enabled}} == 'true'"
+            template: metashape-cpu-step
+            arguments:
+              parameters:
+                - name: dataset-name
+                  value: "{{inputs.parameters.dataset-name}}"
+                - name: config-file
+                  value: "{{inputs.parameters.config-file}}"
+                - name: step
+                  value: "build_point_cloud"
+
+          # Step 6: Build Mesh (conditional, GPU or CPU based on config)
+          - name: build-mesh-gpu
+            depends: "build-point-cloud.Succeeded || build-point-cloud.Skipped"
+            when: "{{inputs.parameters.build_mesh_enabled}} == 'true' && {{inputs.parameters.build_mesh_use_gpu}} == 'true'"
+            template: metashape-gpu-step
+            arguments:
+              parameters:
+                - name: dataset-name
+                  value: "{{inputs.parameters.dataset-name}}"
+                - name: config-file
+                  value: "{{inputs.parameters.config-file}}"
+                - name: step
+                  value: "build_mesh"
+
+          - name: build-mesh-cpu
+            depends: "build-point-cloud.Succeeded || build-point-cloud.Skipped"
+            when: "{{inputs.parameters.build_mesh_enabled}} == 'true' && {{inputs.parameters.build_mesh_use_gpu}} == 'false'"
+            template: metashape-cpu-step
+            arguments:
+              parameters:
+                - name: dataset-name
+                  value: "{{inputs.parameters.dataset-name}}"
+                - name: config-file
+                  value: "{{inputs.parameters.config-file}}"
+                - name: step
+                  value: "build_mesh"
+
+          # Step 7: Build DEM/Orthomosaic (conditional, CPU only)
+          - name: build-dem-orthomosaic
+            depends: "(build-point-cloud.Succeeded || build-point-cloud.Skipped) && (build-mesh-gpu.Succeeded || build-mesh-gpu.Skipped || build-mesh-cpu.Succeeded || build-mesh-cpu.Skipped)"
+            when: "{{inputs.parameters.build_dem_orthomosaic_enabled}} == 'true'"
+            template: metashape-cpu-step
+            arguments:
+              parameters:
+                - name: dataset-name
+                  value: "{{inputs.parameters.dataset-name}}"
+                - name: config-file
+                  value: "{{inputs.parameters.config-file}}"
+                - name: step
+                  value: "build_dem_orthomosaic"
+
+          # Step 8: Match Photos Secondary (conditional, GPU or CPU based on config)
+          - name: match-photos-secondary-gpu
+            depends: "build-dem-orthomosaic.Succeeded || build-dem-orthomosaic.Skipped"
+            when: "{{inputs.parameters.match_photos_secondary_enabled}} == 'true' && {{inputs.parameters.match_photos_secondary_use_gpu}} == 'true'"
+            template: metashape-gpu-step
+            arguments:
+              parameters:
+                - name: dataset-name
+                  value: "{{inputs.parameters.dataset-name}}"
+                - name: config-file
+                  value: "{{inputs.parameters.config-file}}"
+                - name: step
+                  value: "match_photos_secondary"
+
+          - name: match-photos-secondary-cpu
+            depends: "build-dem-orthomosaic.Succeeded || build-dem-orthomosaic.Skipped"
+            when: "{{inputs.parameters.match_photos_secondary_enabled}} == 'true' && {{inputs.parameters.match_photos_secondary_use_gpu}} == 'false'"
+            template: metashape-cpu-step
+            arguments:
+              parameters:
+                - name: dataset-name
+                  value: "{{inputs.parameters.dataset-name}}"
+                - name: config-file
+                  value: "{{inputs.parameters.config-file}}"
+                - name: step
+                  value: "match_photos_secondary"
+
+          # Step 9: Align Cameras Secondary (conditional, CPU only)
+          - name: align-cameras-secondary
+            depends: "match-photos-secondary-gpu.Succeeded || match-photos-secondary-gpu.Skipped || match-photos-secondary-cpu.Succeeded || match-photos-secondary-cpu.Skipped"
+            when: "{{inputs.parameters.align_cameras_secondary_enabled}} == 'true'"
+            template: metashape-cpu-step
+            arguments:
+              parameters:
+                - name: dataset-name
+                  value: "{{inputs.parameters.dataset-name}}"
+                - name: config-file
+                  value: "{{inputs.parameters.config-file}}"
+                - name: step
+                  value: "align_cameras_secondary"
+
+          # Step 10: Finalize (always runs, CPU only)
+          - name: finalize
+            depends: "(build-dem-orthomosaic.Succeeded || build-dem-orthomosaic.Skipped) && (align-cameras-secondary.Succeeded || align-cameras-secondary.Skipped)"
+            template: metashape-cpu-step
+            arguments:
+              parameters:
+                - name: dataset-name
+                  value: "{{inputs.parameters.dataset-name}}"
+                - name: config-file
+                  value: "{{inputs.parameters.config-file}}"
+                - name: step
+                  value: "finalize"
+
+          # Upload task (runs after finalize completes)
+          - name: rclone-upload-task
+            depends: "finalize.Succeeded"
+            template: rclone-upload-template
+            arguments:
+              parameters:
+                - name: dataset-name
+                  value: "{{inputs.parameters.dataset-name}}"
+                - name: photogrammetry-config-subfolder
+                  value: "{{inputs.parameters.photogrammetry-config-subfolder}}"
+
+          # Post-processing task (runs after upload completes)
+          - name: postprocessing-task
+            depends: "rclone-upload-task.Succeeded"
+            template: postprocessing-template
+            arguments:
+              parameters:
+                - name: dataset-name
+                  value: "{{inputs.parameters.dataset-name}}"
+                - name: photogrammetry-config-subfolder
+                  value: "{{inputs.parameters.photogrammetry-config-subfolder}}"
+
+    ## Here we define what each step does in 'process-dataset-workflow' step
+
+    # CPU step template for Metashape processing
+    - name: metashape-cpu-step
+      inputs:
+        parameters:
+          - name: dataset-name
+          - name: config-file
+          - name: step
+      script:
+        image: ghcr.io/open-forest-observatory/automate-metashape:dy-error-exit-code
+        volumeMounts:
+          - name: data
+            mountPath: /data
+        command: ["/bin/sh"]
+        source: |
+          set -e
+
+          # For setup step, clean up any leftover products from a previous incomplete run
+          if [ "{{inputs.parameters.step}}" = "setup" ]; then
+            DATASET_DIR="/data/argo-output/{{workflow.parameters.RUN_FOLDER}}/{{inputs.parameters.dataset-name}}"
+            if [ -d "$DATASET_DIR" ]; then
+              echo "[cleanup] Removing leftover data from previous run: $DATASET_DIR"
+              rm -rf "$DATASET_DIR"
+              echo "[cleanup] Successfully removed: $DATASET_DIR"
+            else
+              echo "[cleanup] No previous data found at: $DATASET_DIR"
+            fi
+          fi
+
+          # Run the Metashape step
+          python3 /app/python/metashape_workflow.py \
+            --config-file "/data/{{inputs.parameters.config-file}}" \
+            --project-path "/data/argo-output/{{workflow.parameters.RUN_FOLDER}}/{{inputs.parameters.dataset-name}}/project" \
+            --output-path "/data/argo-output/{{workflow.parameters.RUN_FOLDER}}/{{inputs.parameters.dataset-name}}/output" \
+            --project-name "{{inputs.parameters.dataset-name}}" \
+            --step "{{inputs.parameters.step}}"
+        resources:
+          requests:
+            cpu: "4"
+            memory: "16Gi"
+        env:
+          - name: AGISOFT_FLS
+            valueFrom:
+              secretKeyRef:
+                name: agisoft-license
+                key: license_server
+
+    # GPU step template for Metashape processing
+    - name: metashape-gpu-step
+      inputs:
+        parameters:
+          - name: dataset-name
+          - name: config-file
+          - name: step
+      # Disable workflow-level non-GPU affinity; let GPU resource request handle node selection
+      affinity: {}
+      script:
+        image: ghcr.io/open-forest-observatory/automate-metashape:dy-error-exit-code
+        volumeMounts:
+          - name: data
+            mountPath: /data
+        command: ["/bin/sh"]
+        source: |
+          set -e
+
+          # Run the Metashape step
+          python3 /app/python/metashape_workflow.py \
+            --config-file "/data/{{inputs.parameters.config-file}}" \
+            --project-path "/data/argo-output/{{workflow.parameters.RUN_FOLDER}}/{{inputs.parameters.dataset-name}}/project" \
+            --output-path "/data/argo-output/{{workflow.parameters.RUN_FOLDER}}/{{inputs.parameters.dataset-name}}/output" \
+            --project-name "{{inputs.parameters.dataset-name}}" \
+            --step "{{inputs.parameters.step}}"
+        resources:
+          requests:
+            nvidia.com/gpu: 1
+          limits:
+            nvidia.com/gpu: 1
+        env:
+          - name: AGISOFT_FLS
+            valueFrom:
+              secretKeyRef:
+                name: agisoft-license
+                key: license_server
+
+    # --------- RCLONE UPLOAD (Docker image) ---------
+    - name: rclone-upload-template
+      inputs:
+        parameters:
+          - name: dataset-name
+          - name: photogrammetry-config-subfolder
+      container:
+        image: rclone/rclone:latest
+        volumeMounts:
+          - name: data
+            mountPath: /data
+        command: ["/bin/sh", "-lc"]
+        args:
+          - |
+            set -euo pipefail
+            SRC="/data/argo-output/{{workflow.parameters.RUN_FOLDER}}/{{inputs.parameters.dataset-name}}/output/"
+            SRC_parent="/data/argo-output/{{workflow.parameters.RUN_FOLDER}}/{{inputs.parameters.dataset-name}}"
+
+            # Build S3 destination path with optional photogrammetry config subfolder
+            if [ -n "{{inputs.parameters.photogrammetry-config-subfolder}}" ]; then
+              DST="s3:{{workflow.parameters.S3_BUCKET_PHOTOGRAMMETRY_OUTPUTS}}/{{workflow.parameters.RUN_FOLDER}}/{{inputs.parameters.photogrammetry-config-subfolder}}"
+            else
+              DST="s3:{{workflow.parameters.S3_BUCKET_PHOTOGRAMMETRY_OUTPUTS}}/{{workflow.parameters.RUN_FOLDER}}"
+            fi
+
+            echo "[rclone] Uploading $SRC -> $DST"
+
+            # Note that the rclone S3 credentials are provided via environment variables set in the
+            # workflow spec below. This is an  alternative to using a rclone config file or passing
+            # command-line flags to rclone.
+            rclone copy "$SRC" "$DST" \
+              --transfers 8 --checkers 8 --retries 5 --retries-sleep=15s \
+              --s3-upload-cutoff 200Mi --s3-chunk-size 100Mi --s3-upload-concurrency 4 \
+              --stats 15s --stats-log-level NOTICE
+
+            # Check if upload was successful
+            if [ $? -eq 0 ]; then
+              echo "[rclone] Upload successful for {{inputs.parameters.dataset-name}}"
+
+              # Clean up local files after successful upload
+              echo "[cleanup] Removing local files after successful upload..."
+              if [ -d "$SRC_parent" ]; then
+                rm -rf "$SRC_parent"
+                echo "[cleanup] Successfully removed: $SRC_parent"
+              else
+                echo "[cleanup] Source directory not found: $SRC_parent"
+              fi
+            else
+              echo "[rclone] Upload failed for {{inputs.parameters.dataset-name}}"
+              echo "[cleanup] Keeping local files due to upload failure"
+              exit 1
+            fi
+
+            echo "[rclone] Upload and cleanup completed for {{inputs.parameters.dataset-name}}"
+
+        resources:
+          requests:
+            cpu: "100m"
+            memory: "256Mi"
+          limits:
+            memory: "1Gi"
+        env:
+          # Env vars to tell rclone how to connect to S3
+          - name: RCLONE_CONFIG_S3_TYPE
+            value: "s3"
+          - name: RCLONE_CONFIG_S3_PROVIDER
+            valueFrom:
+              secretKeyRef:
+                name: s3-credentials
+                key: provider
+          - name: RCLONE_CONFIG_S3_ENDPOINT
+            valueFrom:
+              secretKeyRef:
+                name: s3-credentials
+                key: endpoint
+          - name: RCLONE_CONFIG_S3_ACCESS_KEY_ID
+            valueFrom:
+              secretKeyRef:
+                name: s3-credentials
+                key: access_key
+          - name: RCLONE_CONFIG_S3_SECRET_ACCESS_KEY
+            valueFrom:
+              secretKeyRef:
+                name: s3-credentials
+                key: secret_key
+
+    #--------- POST-PROCESSING (Python Docker image) ---------
+    - name: postprocessing-template
+      inputs:
+        parameters:
+          - name: dataset-name
+          - name: photogrammetry-config-subfolder
+      container:
+        image: ghcr.io/open-forest-observatory/photogrammetry-postprocessing:{{workflow.parameters.POSTPROCESSING_IMAGE_TAG}}
+        volumeMounts:
+          - name: data
+            mountPath: /data
+        env:
+          - name: S3_PROVIDER
+            valueFrom:
+              secretKeyRef:
+                name: s3-credentials
+                key: provider
+          - name: S3_ENDPOINT
+            valueFrom:
+              secretKeyRef:
+                name: s3-credentials
+                key: endpoint
+          - name: S3_ACCESS_KEY
+            valueFrom:
+              secretKeyRef:
+                name: s3-credentials
+                key: access_key
+          - name: S3_SECRET_KEY
+            valueFrom:
+              secretKeyRef:
+                name: s3-credentials
+                key: secret_key
+          - name: S3_BUCKET_INPUT_DATA
+            value: "{{workflow.parameters.S3_BUCKET_PHOTOGRAMMETRY_OUTPUTS}}"
+          - name: RUN_FOLDER
+            value: "{{workflow.parameters.RUN_FOLDER}}"
+          - name: PHOTOGRAMMETRY_CONFIG_SUBFOLDER
+            value: "{{inputs.parameters.photogrammetry-config-subfolder}}"
+          - name: DATASET_NAME
+            value: "{{inputs.parameters.dataset-name}}"
+          - name: S3_BUCKET_INPUT_BOUNDARY
+            value: "{{workflow.parameters.S3_BUCKET_POSTPROCESSED_OUTPUTS}}"
+          - name: INPUT_BOUNDARY_DIRECTORY
+            value: "{{workflow.parameters.BOUNDARY_DIRECTORY}}"
+          - name: S3_BUCKET_OUTPUT
+            value: "{{workflow.parameters.S3_BUCKET_POSTPROCESSED_OUTPUTS}}"
+          - name: OUTPUT_DIRECTORY
+            value: "{{workflow.parameters.OUTPUT_DIRECTORY}}"
+          #- name: OUTPUT_MAX_DIM
+            #value: "{{workflow.parameters.OUTPUT_MAX_DIM}}"
+          - name: WORKING_DIR
+            value: "{{workflow.parameters.WORKING_DIR}}"
+        resources:
+          requests:
+            cpu: "1"
+            memory: "4Gi"
+          limits:
+            cpu: "4"
+            memory: "16Gi"

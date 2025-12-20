@@ -3,9 +3,21 @@ title: Running the photogrammetry workflow
 weight: 20
 ---
 
-# Running the photogrammetry workflow
+# Running the photogrammetry workflow (original monolithic version)
 
-This guide describes how to run the OFO photogrammetry workflow, which processes drone imagery using [automate-metashape](https://github.com/open-forest-observatory/automate-metashape) and performs post-processing steps.
+!!! warning "Step-Based Workflow Recommended"
+    A new **[step-based workflow](stepbased-workflow.md)** with optimized resource allocation is now available and **recommended for all new processing**.
+
+    **Benefits of step-based workflow:**
+
+    - 💰 60-80% reduction in GPU costs
+    - 📊 Individual step monitoring and debugging
+    - 🔧 Configurable GPU vs CPU scheduling
+    - ⚡ Disabled steps are completely skipped (no resource allocation)
+
+    **This page documents the original monolithic workflow for reference only.**
+
+This guide describes how to run the original OFO photogrammetry workflow, which processes drone imagery using [automate-metashape](https://github.com/open-forest-observatory/automate-metashape) in a single monolithic container and performs post-processing steps.
 
 ## Prerequisites
 

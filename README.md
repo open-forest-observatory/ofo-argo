@@ -22,17 +22,33 @@ The system uses [Kubernetes](https://kubernetes.io/docs/concepts/overview/) whic
 - **Manila shared storage**: Provides working data storage to the nodes
 - **S3 storage**: Stores the inputs/outputs of each step
 
+### Step-Based Workflow (Recommended)
+
+The **step-based workflow** (`photogrammetry-workflow-stepbased.yaml`) provides optimized resource utilization by splitting Metashape processing into individual steps:
+
+- 🎯 **GPU steps** (match_photos, build_depth_maps, build_mesh) run on expensive GPU nodes only when needed
+- 💻 **CPU steps** (align_cameras, build_point_cloud, build_dem_orthomosaic, etc.) run on cheaper CPU nodes
+- ⚡ **Disabled steps** are completely skipped (no pod creation, no resource allocation)
+- 📊 **Fine-grained monitoring** - Track progress of each step in the Argo UI
+- 🔧 **Flexible GPU usage** - Configure whether GPU-capable steps use GPU or CPU nodes
+
+**Documentation:**
+- 📖 [Complete Guide](https://open-forest-observatory.github.io/ofo-argo/usage/stepbased-workflow/) - Full usage instructions, troubleshooting, and advanced topics
+- ⚡ [Quick Reference](https://open-forest-observatory.github.io/ofo-argo/usage/stepbased-quick-reference/) - Command cheat sheet and common patterns
+
 ## Files & Directories In this Repository
 
 | File/Directory   | Purpose       |
 |  --- | ----  |
-| photogrammetry-workflow.yaml | Main Argo Workflows configuration for the automated photogrammetry pipeline |
-| docs/ | Documentation site source (published to GitHub Pages) |
+| photogrammetry-workflow.yaml | Original Argo Workflows configuration (monolithic, kept as reference) |
+| photogrammetry-workflow-stepbased.yaml | **Step-based workflow** - Individual step execution with optimized CPU/GPU allocation |
+| docs/ | Documentation site source (published to [GitHub Pages](https://open-forest-observatory.github.io/ofo-argo/)) |
 | mkdocs.yml | Configuration for the MkDocs documentation site |
-| docker-workflow-utils/ | Files defining utility docker containers called by the workflow (e.g. DB logging) |
+| docker-workflow-utils/ | Utility docker container for workflow scripts (preprocessing, DB logging) |
 | docker-photogrammetry-postprocessing/ | Files defining custom docker containers performing core workflow tasks (e.g. postprocessing) |
 | setup/ | Kubernetes and Argo setup configurations (described in [admin docs](https://open-forest-observatory.github.io/ofo-argo/admin)) |
 | test-workflows/ | Test workflow definitions for development and validation |
+| implementation-plans/ | Technical implementation plans for workflow development |
 
 ## Getting Started
 
