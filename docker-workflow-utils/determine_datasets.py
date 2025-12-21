@@ -107,11 +107,28 @@ def process_config_file(config_path: str, data_root: str = "/data") -> Dict[str,
 
     Returns:
         Dictionary of mission parameters with enabled flags
+
+    Raises:
+        ValueError: If config file uses Phase 1 format (not compatible with step-based workflow)
     """
     # Load config file
     full_config_path = Path(data_root) / config_path
     with open(full_config_path, "r") as cf:
         config = yaml.safe_load(cf)
+
+    # Validate that this is a Phase 2 config
+    # Phase 1 configs have 'alignPhotos' section, Phase 2 has separate 'match_photos' and 'align_cameras'
+    if 'alignPhotos' in config:
+        raise ValueError(
+            f"Config file '{config_path}' uses Phase 1 format which is not compatible with the step-based workflow.\n"
+            f"The step-based workflow requires Phase 2 config structure with:\n"
+            f"  - Separate 'match_photos' and 'align_cameras' sections (not combined 'alignPhotos')\n"
+            f"  - Each operation as a top-level section with 'enabled' flag\n"
+            f"  - Global settings under 'project:' section\n"
+            f"Please update your config to Phase 2 format.\n"
+            f"See example: https://github.com/open-forest-observatory/automate-metashape/blob/main/config/config-example.yml\n"
+            f"Or use the original monolithic workflow (photogrammetry-workflow.yaml) for Phase 1 configs."
+        )
 
     # Extract project name (used as mission identifier)
     project_name = get_nested(config, ['project', 'project_name'])
@@ -131,33 +148,30 @@ def process_config_file(config_path: str, data_root: str = "/data") -> Dict[str,
         "config": config_path,
 
         # Step enabled flags (setup and finalize always run, so not included)
-        "match_photos_enabled": str(get_nested(config, ['match_photos', 'enabled'], False)).lower(),
-        "match_photos_use_gpu": str(get_nested(config, ['match_photos', 'gpu_enabled'], True)).lower(),
+        # Use actual Python booleans (not strings) so they serialize to JSON true/false
+        "match_photos_enabled": str_to_bool(get_nested(config, ['match_photos', 'enabled'], False)),
+        "match_photos_use_gpu": str_to_bool(get_nested(config, ['match_photos', 'gpu_enabled'], True)),
 
-        "align_cameras_enabled": str(get_nested(config, ['align_cameras', 'enabled'], False)).lower(),
+        "align_cameras_enabled": str_to_bool(get_nested(config, ['align_cameras', 'enabled'], False)),
 
-        "build_depth_maps_enabled": str(get_nested(config, ['build_depth_maps', 'enabled'], False)).lower(),
+        "build_depth_maps_enabled": str_to_bool(get_nested(config, ['build_depth_maps', 'enabled'], False)),
 
-        "build_point_cloud_enabled": str(get_nested(config, ['build_point_cloud', 'enabled'], False)).lower(),
+        "build_point_cloud_enabled": str_to_bool(get_nested(config, ['build_point_cloud', 'enabled'], False)),
 
-        "build_mesh_enabled": str(get_nested(config, ['build_mesh', 'enabled'], False)).lower(),
-        "build_mesh_use_gpu": str(get_nested(config, ['build_mesh', 'gpu_enabled'], True)).lower(),
+        "build_mesh_enabled": str_to_bool(get_nested(config, ['build_mesh', 'enabled'], False)),
+        "build_mesh_use_gpu": str_to_bool(get_nested(config, ['build_mesh', 'gpu_enabled'], True)),
 
         # build_dem_orthomosaic runs if either DEM or orthomosaic is enabled
-        "build_dem_orthomosaic_enabled": str(
-            get_nested(config, ['build_dem', 'enabled'], False) or
-            get_nested(config, ['build_orthomosaic', 'enabled'], False)
-        ).lower(),
+        "build_dem_orthomosaic_enabled": (
+            str_to_bool(get_nested(config, ['build_dem', 'enabled'], False)) or
+            str_to_bool(get_nested(config, ['build_orthomosaic', 'enabled'], False))
+        ),
 
         # Secondary photo processing runs if photo_path_secondary is non-empty
-        "match_photos_secondary_enabled": str(
-            bool(get_nested(config, ['project', 'photo_path_secondary'], ""))
-        ).lower(),
-        "match_photos_secondary_use_gpu": str(get_nested(config, ['match_photos', 'gpu_enabled'], True)).lower(),
+        "match_photos_secondary_enabled": bool(get_nested(config, ['project', 'photo_path_secondary'], "")),
+        "match_photos_secondary_use_gpu": str_to_bool(get_nested(config, ['match_photos', 'gpu_enabled'], True)),
 
-        "align_cameras_secondary_enabled": str(
-            bool(get_nested(config, ['project', 'photo_path_secondary'], ""))
-        ).lower(),
+        "align_cameras_secondary_enabled": bool(get_nested(config, ['project', 'photo_path_secondary'], "")),
     }
 
     return mission

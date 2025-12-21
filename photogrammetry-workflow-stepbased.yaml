@@ -67,7 +67,7 @@ spec:
             template: compute-photogrammetry-config-subfolder
           - name: determine-datasets
             template: determine-datasets
-        - - name: {{item.project_name_sanitized}}
+        - - name: process-datasets
             template: process-dataset-workflow
             arguments:
               parameters:
@@ -167,7 +167,7 @@ spec:
           # Step 2: Match Photos (conditional, GPU or CPU based on config)
           - name: match-photos-gpu
             depends: "setup.Succeeded"
-            when: "{{inputs.parameters.match_photos_enabled}} == 'true' && {{inputs.parameters.match_photos_use_gpu}} == 'true'"
+            when: "{{inputs.parameters.match_photos_enabled}} == true && {{inputs.parameters.match_photos_use_gpu}} == true"
             template: metashape-gpu-step
             arguments:
               parameters:
@@ -180,7 +180,7 @@ spec:
 
           - name: match-photos-cpu
             depends: "setup.Succeeded"
-            when: "{{inputs.parameters.match_photos_enabled}} == 'true' && {{inputs.parameters.match_photos_use_gpu}} == 'false'"
+            when: "{{inputs.parameters.match_photos_enabled}} == true && {{inputs.parameters.match_photos_use_gpu}} == false"
             template: metashape-cpu-step
             arguments:
               parameters:
@@ -194,7 +194,7 @@ spec:
           # Step 3: Align Cameras (conditional, CPU only)
           - name: align-cameras
             depends: "match-photos-gpu.Succeeded || match-photos-gpu.Skipped || match-photos-cpu.Succeeded || match-photos-cpu.Skipped"
-            when: "{{inputs.parameters.align_cameras_enabled}} == 'true'"
+            when: "{{inputs.parameters.align_cameras_enabled}} == true"
             template: metashape-cpu-step
             arguments:
               parameters:
@@ -208,7 +208,7 @@ spec:
           # Step 4: Build Depth Maps (conditional, GPU only)
           - name: build-depth-maps
             depends: "align-cameras.Succeeded || align-cameras.Skipped"
-            when: "{{inputs.parameters.build_depth_maps_enabled}} == 'true'"
+            when: "{{inputs.parameters.build_depth_maps_enabled}} == true"
             template: metashape-gpu-step
             arguments:
               parameters:
@@ -222,7 +222,7 @@ spec:
           # Step 5: Build Point Cloud (conditional, CPU only)
           - name: build-point-cloud
             depends: "build-depth-maps.Succeeded || build-depth-maps.Skipped"
-            when: "{{inputs.parameters.build_point_cloud_enabled}} == 'true'"
+            when: "{{inputs.parameters.build_point_cloud_enabled}} == true"
             template: metashape-cpu-step
             arguments:
               parameters:
@@ -236,7 +236,7 @@ spec:
           # Step 6: Build Mesh (conditional, GPU or CPU based on config)
           - name: build-mesh-gpu
             depends: "build-point-cloud.Succeeded || build-point-cloud.Skipped"
-            when: "{{inputs.parameters.build_mesh_enabled}} == 'true' && {{inputs.parameters.build_mesh_use_gpu}} == 'true'"
+            when: "{{inputs.parameters.build_mesh_enabled}} == true && {{inputs.parameters.build_mesh_use_gpu}} == true"
             template: metashape-gpu-step
             arguments:
               parameters:
@@ -249,7 +249,7 @@ spec:
 
           - name: build-mesh-cpu
             depends: "build-point-cloud.Succeeded || build-point-cloud.Skipped"
-            when: "{{inputs.parameters.build_mesh_enabled}} == 'true' && {{inputs.parameters.build_mesh_use_gpu}} == 'false'"
+            when: "{{inputs.parameters.build_mesh_enabled}} == true && {{inputs.parameters.build_mesh_use_gpu}} == false"
             template: metashape-cpu-step
             arguments:
               parameters:
@@ -263,7 +263,7 @@ spec:
           # Step 7: Build DEM/Orthomosaic (conditional, CPU only)
           - name: build-dem-orthomosaic
             depends: "(build-point-cloud.Succeeded || build-point-cloud.Skipped) && (build-mesh-gpu.Succeeded || build-mesh-gpu.Skipped || build-mesh-cpu.Succeeded || build-mesh-cpu.Skipped)"
-            when: "{{inputs.parameters.build_dem_orthomosaic_enabled}} == 'true'"
+            when: "{{inputs.parameters.build_dem_orthomosaic_enabled}} == true"
             template: metashape-cpu-step
             arguments:
               parameters:
@@ -277,7 +277,7 @@ spec:
           # Step 8: Match Photos Secondary (conditional, GPU or CPU based on config)
           - name: match-photos-secondary-gpu
             depends: "build-dem-orthomosaic.Succeeded || build-dem-orthomosaic.Skipped"
-            when: "{{inputs.parameters.match_photos_secondary_enabled}} == 'true' && {{inputs.parameters.match_photos_secondary_use_gpu}} == 'true'"
+            when: "{{inputs.parameters.match_photos_secondary_enabled}} == true && {{inputs.parameters.match_photos_secondary_use_gpu}} == true"
             template: metashape-gpu-step
             arguments:
               parameters:
@@ -290,7 +290,7 @@ spec:
 
           - name: match-photos-secondary-cpu
             depends: "build-dem-orthomosaic.Succeeded || build-dem-orthomosaic.Skipped"
-            when: "{{inputs.parameters.match_photos_secondary_enabled}} == 'true' && {{inputs.parameters.match_photos_secondary_use_gpu}} == 'false'"
+            when: "{{inputs.parameters.match_photos_secondary_enabled}} == true && {{inputs.parameters.match_photos_secondary_use_gpu}} == false"
             template: metashape-cpu-step
             arguments:
               parameters:
@@ -304,7 +304,7 @@ spec:
           # Step 9: Align Cameras Secondary (conditional, CPU only)
           - name: align-cameras-secondary
             depends: "match-photos-secondary-gpu.Succeeded || match-photos-secondary-gpu.Skipped || match-photos-secondary-cpu.Succeeded || match-photos-secondary-cpu.Skipped"
-            when: "{{inputs.parameters.align_cameras_secondary_enabled}} == 'true'"
+            when: "{{inputs.parameters.align_cameras_secondary_enabled}} == true"
             template: metashape-cpu-step
             arguments:
               parameters:
@@ -389,7 +389,7 @@ spec:
             --step "{{inputs.parameters.step}}"
         resources:
           requests:
-            cpu: "32"
+            cpu: "17"
             memory: "100Gi"
         env:
           - name: AGISOFT_FLS
@@ -426,7 +426,7 @@ spec:
         resources:
           requests:
             nvidia.com/gpu: 1
-            cpu: "32"
+            cpu: "17"
             memory: "100Gi"
           limits:
             nvidia.com/gpu: 1
