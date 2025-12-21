@@ -1,3 +1,10 @@
+"""
+Database logging utilities for Argo workflows.
+
+Note: The database schema uses column name 'dataset_name' for backward compatibility,
+but this column stores project names (from PROJECT_NAME environment variable).
+"""
+
 import argparse
 import json
 import os
@@ -23,14 +30,20 @@ def get_db_connection():
 
 
 def log_datasets_initial(datasets, workflow_id):
+    """Log initial project entries to database.
+
+    Args:
+        datasets: List of project names (not dataset names - column name is legacy)
+        workflow_id: Argo workflow ID
+    """
     conn = get_db_connection()
     try:
         cursor = conn.cursor()
         for dataset in datasets:
             cursor.execute(
                 """
-                INSERT INTO automate_metashape (dataset_name, workflow_id, status) 
-                VALUES (%s, %s, %s) 
+                INSERT INTO automate_metashape (dataset_name, workflow_id, status)
+                VALUES (%s, %s, %s)
                 ON CONFLICT (dataset_name, workflow_id) DO NOTHING
                 """,
                 (dataset, workflow_id, "queued"),
@@ -45,13 +58,19 @@ def log_datasets_initial(datasets, workflow_id):
 
 
 def log_dataset_start(dataset, workflow_id):
+    """Log project processing start.
+
+    Args:
+        dataset: Project name (not dataset name - column name is legacy)
+        workflow_id: Argo workflow ID
+    """
     conn = get_db_connection()
     try:
         cursor = conn.cursor()
         cursor.execute(
             """
-            UPDATE automate_metashape 
-            SET status = 'processing', start_time = CURRENT_TIMESTAMP 
+            UPDATE automate_metashape
+            SET status = 'processing', start_time = CURRENT_TIMESTAMP
             WHERE dataset_name = %s AND workflow_id = %s
             """,
             (dataset, workflow_id),
@@ -66,6 +85,13 @@ def log_dataset_start(dataset, workflow_id):
 
 
 def log_dataset_completion(dataset, workflow_id, success):
+    """Log project processing completion.
+
+    Args:
+        dataset: Project name (not dataset name - column name is legacy)
+        workflow_id: Argo workflow ID
+        success: Boolean indicating success or failure
+    """
     conn = get_db_connection()
     status = "completed" if success else "failed"
 
@@ -73,8 +99,8 @@ def log_dataset_completion(dataset, workflow_id, success):
         cursor = conn.cursor()
         cursor.execute(
             """
-            UPDATE automate_metashape 
-            SET status = %s, finish_time = CURRENT_TIMESTAMP 
+            UPDATE automate_metashape
+            SET status = %s, finish_time = CURRENT_TIMESTAMP
             WHERE dataset_name = %s AND workflow_id = %s
             """,
             (status, dataset, workflow_id),

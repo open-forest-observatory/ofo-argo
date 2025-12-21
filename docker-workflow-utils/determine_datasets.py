@@ -97,13 +97,12 @@ def sanitize_dns1123(name: str) -> str:
     return sanitized
 
 
-def process_config_file(config_path: str, data_root: str = "/data") -> Dict[str, Any]:
+def process_config_file(config_path: str) -> Dict[str, Any]:
     """
     Process a single mission config file and extract mission parameters.
 
     Args:
-        config_path: Path to config file (relative to data_root)
-        data_root: Root directory where data is mounted (default: /data)
+        config_path: Absolute path to config file
 
     Returns:
         Dictionary of mission parameters with enabled flags
@@ -111,9 +110,8 @@ def process_config_file(config_path: str, data_root: str = "/data") -> Dict[str,
     Raises:
         ValueError: If config file uses Phase 1 format (not compatible with step-based workflow)
     """
-    # Load config file
-    full_config_path = Path(data_root) / config_path
-    with open(full_config_path, "r") as cf:
+    # Load config file (expecting absolute path)
+    with open(config_path, "r") as cf:
         config = yaml.safe_load(cf)
 
     # Validate that this is a Phase 2 config
@@ -177,26 +175,24 @@ def process_config_file(config_path: str, data_root: str = "/data") -> Dict[str,
     return mission
 
 
-def main(config_list_path: str, data_root: str = "/data") -> None:
+def main(config_list_path: str) -> None:
     """
     Main entry point for preprocessing script.
 
     Args:
-        config_list_path: Path to text file listing config files (relative to data_root)
-        data_root: Root directory where data is mounted (default: /data)
+        config_list_path: Absolute path to text file listing config files (each line should be an absolute path)
     """
     missions: List[Dict[str, Any]] = []
 
-    # Read config list file
-    full_list_path = Path(data_root) / config_list_path
-    with open(full_list_path, "r") as f:
+    # Read config list file (expecting absolute path)
+    with open(config_list_path, "r") as f:
         for line in f:
             config_path = line.strip()
             if not config_path:
                 continue
 
             try:
-                mission = process_config_file(config_path, data_root)
+                mission = process_config_file(config_path)
                 missions.append(mission)
             except Exception as e:
                 print(f"Error processing config {config_path}: {e}", file=sys.stderr)
@@ -209,7 +205,7 @@ def main(config_list_path: str, data_root: str = "/data") -> None:
 if __name__ == "__main__":
     if len(sys.argv) != 2:
         print("Usage: determine_datasets.py <config_list_path>", file=sys.stderr)
-        print("  config_list_path: Path to text file listing config files (relative to /data)", file=sys.stderr)
+        print("  config_list_path: Absolute path to text file listing config files (each line should be an absolute path)", file=sys.stderr)
         sys.exit(1)
 
     config_list_path = sys.argv[1]

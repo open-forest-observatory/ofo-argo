@@ -22,13 +22,15 @@ spec:
               - key: nvidia.com/gpu.present
                 operator: DoesNotExist
 
-  # A list of input parameters available to the workflow at runtime. 
+  # A list of input parameters available to the workflow at runtime.
   # These parameters can be referenced throughout the workflow templates using {{workflow.parameters.<name>}}
   arguments:
     parameters:
       - name: CONFIG_LIST
-        value: "argo-input/config-lists/config_list.txt"
-      - name: RUN_FOLDER
+        value: "/data/argo-input/config-lists/config_list.txt"
+      - name: TEMP_WORKING_DIR
+        value: "/data/argo-output/temp-dir"
+      - name: S3_PHOTOGRAMMETRY_DIR
         value: "default-run"
       - name: PHOTOGRAMMETRY_CONFIG_ID
         value: "NONE"
@@ -38,12 +40,10 @@ spec:
       # Post-processing parameters
       - name: S3_BUCKET_POSTPROCESSED_OUTPUTS
         value: "ofo-public"
-      - name: OUTPUT_DIRECTORY
+      - name: S3_POSTPROCESSED_DIR
         value: ""
       - name: BOUNDARY_DIRECTORY
         value: ""
-      - name: WORKING_DIR
-        value: "/tmp/processing"
       # - name: OUTPUT_MAX_DIM
       #   value: "800"
       # Docker image tag for postprocessing container
@@ -60,15 +60,15 @@ spec:
 
   templates:
     # the 'main' template defines the order of high-level steps to be completed in the workflow.
-    # the 'process-datasets' step has a looping directive (withParam) which goes through each dataset name and processes it.
+    # the 'process-projects' step has a looping directive (withParam) which goes through each project and processes it.
     - name: main
       steps:
         - - name: compute-photogrammetry-config-subfolder
             template: compute-photogrammetry-config-subfolder
-          - name: determine-datasets
-            template: determine-datasets
-        - - name: process-datasets
-            template: process-dataset-workflow
+          - name: determine-projects
+            template: determine-projects
+        - - name: process-projects
+            template: process-project-workflow
             arguments:
               parameters:
                 - name: project-name
@@ -100,7 +100,7 @@ spec:
                   value: "{{item.match_photos_secondary_use_gpu}}"
                 - name: align_cameras_secondary_enabled
                   value: "{{item.align_cameras_secondary_enabled}}"
-            withParam: "{{steps.determine-datasets.outputs.result}}"
+            withParam: "{{steps.determine-projects.outputs.result}}"
 
     ## Here we define what the main steps actually do
 
@@ -122,7 +122,7 @@ spec:
     # This reads each mission's config file, extracts the project name, and determines which
     # processing steps are enabled. It also determines GPU vs CPU node scheduling for GPU-capable steps.
     # Uses containerized preprocessing script from argo-workflow-utils.
-    - name: determine-datasets
+    - name: determine-projects
       container:
         image: ghcr.io/open-forest-observatory/argo-workflow-utils:{{workflow.parameters.UTILS_IMAGE_TAG}}
         volumeMounts:
@@ -132,7 +132,7 @@ spec:
         args: ["/app/determine_datasets.py", "{{workflow.parameters.CONFIG_LIST}}"]
 
     # Multi-step photogrammetry workflow with conditional GPU/CPU execution
-    - name: process-dataset-workflow
+    - name: process-project-workflow
       inputs:
         parameters:
           - name: project-name
@@ -350,7 +350,7 @@ spec:
                 - name: photogrammetry-config-subfolder
                   value: "{{inputs.parameters.photogrammetry-config-subfolder}}"
 
-    ## Here we define what each step does in 'process-dataset-workflow' step
+    ## Here we define what each step does in 'process-project-workflow' step
 
     # CPU step template for Metashape processing
     - name: metashape-cpu-step
@@ -370,21 +370,21 @@ spec:
 
           # For setup step, clean up any leftover products from a previous incomplete run
           if [ "{{inputs.parameters.step}}" = "setup" ]; then
-            DATASET_DIR="/data/argo-output/{{workflow.parameters.RUN_FOLDER}}/{{inputs.parameters.project-name}}"
-            if [ -d "$DATASET_DIR" ]; then
-              echo "[cleanup] Removing leftover data from previous run: $DATASET_DIR"
-              rm -rf "$DATASET_DIR"
-              echo "[cleanup] Successfully removed: $DATASET_DIR"
+            PROJECT_DIR="{{workflow.parameters.TEMP_WORKING_DIR}}/photogrammetry/{{inputs.parameters.project-name}}"
+            if [ -d "$PROJECT_DIR" ]; then
+              echo "[cleanup] Removing leftover data from previous run: $PROJECT_DIR"
+              rm -rf "$PROJECT_DIR"
+              echo "[cleanup] Successfully removed: $PROJECT_DIR"
             else
-              echo "[cleanup] No previous data found at: $DATASET_DIR"
+              echo "[cleanup] No previous data found at: $PROJECT_DIR"
             fi
           fi
 
           # Run the Metashape step
           python3 /app/python/metashape_workflow.py \
-            --config-file "/data/{{inputs.parameters.config-file}}" \
-            --project-path "/data/argo-output/{{workflow.parameters.RUN_FOLDER}}/{{inputs.parameters.project-name}}/project" \
-            --output-path "/data/argo-output/{{workflow.parameters.RUN_FOLDER}}/{{inputs.parameters.project-name}}/output" \
+            --config-file "{{inputs.parameters.config-file}}" \
+            --project-path "{{workflow.parameters.TEMP_WORKING_DIR}}/photogrammetry/{{inputs.parameters.project-name}}/project" \
+            --output-path "{{workflow.parameters.TEMP_WORKING_DIR}}/photogrammetry/{{inputs.parameters.project-name}}/output" \
             --project-name "{{inputs.parameters.project-name}}" \
             --step "{{inputs.parameters.step}}"
         resources:
@@ -418,9 +418,9 @@ spec:
 
           # Run the Metashape step
           python3 /app/python/metashape_workflow.py \
-            --config-file "/data/{{inputs.parameters.config-file}}" \
-            --project-path "/data/argo-output/{{workflow.parameters.RUN_FOLDER}}/{{inputs.parameters.project-name}}/project" \
-            --output-path "/data/argo-output/{{workflow.parameters.RUN_FOLDER}}/{{inputs.parameters.project-name}}/output" \
+            --config-file "{{inputs.parameters.config-file}}" \
+            --project-path "{{workflow.parameters.TEMP_WORKING_DIR}}/photogrammetry/{{inputs.parameters.project-name}}/project" \
+            --output-path "{{workflow.parameters.TEMP_WORKING_DIR}}/photogrammetry/{{inputs.parameters.project-name}}/output" \
             --project-name "{{inputs.parameters.project-name}}" \
             --step "{{inputs.parameters.step}}"
         resources:
@@ -452,14 +452,14 @@ spec:
         args:
           - |
             set -euo pipefail
-            SRC="/data/argo-output/{{workflow.parameters.RUN_FOLDER}}/{{inputs.parameters.project-name}}/output/"
-            SRC_parent="/data/argo-output/{{workflow.parameters.RUN_FOLDER}}/{{inputs.parameters.project-name}}"
+            SRC="{{workflow.parameters.TEMP_WORKING_DIR}}/photogrammetry/{{inputs.parameters.project-name}}/output/"
+            SRC_parent="{{workflow.parameters.TEMP_WORKING_DIR}}/photogrammetry/{{inputs.parameters.project-name}}"
 
             # Build S3 destination path with optional photogrammetry config subfolder
             if [ -n "{{inputs.parameters.photogrammetry-config-subfolder}}" ]; then
-              DST="s3:{{workflow.parameters.S3_BUCKET_PHOTOGRAMMETRY_OUTPUTS}}/{{workflow.parameters.RUN_FOLDER}}/{{inputs.parameters.photogrammetry-config-subfolder}}"
+              DST="s3:{{workflow.parameters.S3_BUCKET_PHOTOGRAMMETRY_OUTPUTS}}/{{workflow.parameters.S3_PHOTOGRAMMETRY_DIR}}/{{inputs.parameters.photogrammetry-config-subfolder}}"
             else
-              DST="s3:{{workflow.parameters.S3_BUCKET_PHOTOGRAMMETRY_OUTPUTS}}/{{workflow.parameters.RUN_FOLDER}}"
+              DST="s3:{{workflow.parameters.S3_BUCKET_PHOTOGRAMMETRY_OUTPUTS}}/{{workflow.parameters.S3_PHOTOGRAMMETRY_DIR}}"
             fi
 
             echo "[rclone] Uploading $SRC -> $DST"
@@ -555,26 +555,26 @@ spec:
               secretKeyRef:
                 name: s3-credentials
                 key: secret_key
-          - name: S3_BUCKET_INPUT_DATA
+          - name: S3_BUCKET_PHOTOGRAMMETRY_OUTPUTS
             value: "{{workflow.parameters.S3_BUCKET_PHOTOGRAMMETRY_OUTPUTS}}"
-          - name: RUN_FOLDER
-            value: "{{workflow.parameters.RUN_FOLDER}}"
+          - name: S3_PHOTOGRAMMETRY_DIR
+            value: "{{workflow.parameters.S3_PHOTOGRAMMETRY_DIR}}"
           - name: PHOTOGRAMMETRY_CONFIG_SUBFOLDER
             value: "{{inputs.parameters.photogrammetry-config-subfolder}}"
-          - name: DATASET_NAME
+          - name: PROJECT_NAME
             value: "{{inputs.parameters.project-name}}"
           - name: S3_BUCKET_INPUT_BOUNDARY
             value: "{{workflow.parameters.S3_BUCKET_POSTPROCESSED_OUTPUTS}}"
           - name: INPUT_BOUNDARY_DIRECTORY
             value: "{{workflow.parameters.BOUNDARY_DIRECTORY}}"
-          - name: S3_BUCKET_OUTPUT
+          - name: S3_BUCKET_POSTPROCESSED_OUTPUTS
             value: "{{workflow.parameters.S3_BUCKET_POSTPROCESSED_OUTPUTS}}"
-          - name: OUTPUT_DIRECTORY
-            value: "{{workflow.parameters.OUTPUT_DIRECTORY}}"
+          - name: S3_POSTPROCESSED_DIR
+            value: "{{workflow.parameters.S3_POSTPROCESSED_DIR}}"
           #- name: OUTPUT_MAX_DIM
             #value: "{{workflow.parameters.OUTPUT_MAX_DIM}}"
-          - name: WORKING_DIR
-            value: "{{workflow.parameters.WORKING_DIR}}"
+          - name: TEMP_WORKING_DIR_POSTPROCESSING
+            value: "{{workflow.parameters.TEMP_WORKING_DIR}}/postprocessing"
         resources:
           requests:
             cpu: "1"

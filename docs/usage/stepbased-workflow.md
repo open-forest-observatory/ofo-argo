@@ -89,14 +89,14 @@ Here is a schematic of the `/ofo-share/argo-data` directory:
    │       ├── image_01.jpg
    │       └── image_02.jpg
    ├── configs/
-   │   ├──config_dataset_1.yml
-   │   └──config_dataset_2.yml
+   │   ├──config_project_1.yml
+   │   └──config_project_2.yml
    └── config_list.txt
 ```
 
 #### Add drone imagery datasets
 
-To add new drone imagery datasets to be processed using Argo, transfer files from your local machine (or the cloud) to the `/ofo-share` volume. Put the drone imagery projects to be processed in their own directory in `/ofo-share/argo-data/argo-input/datasets`.
+To add new drone imagery datasets to be processed using Argo, transfer files from your local machine (or the cloud) to the `/ofo-share` volume. Put the drone imagery datasets to be processed in their own directory in `/ofo-share/argo-data/argo-input/datasets`.
 
 One data transfer method is the `scp` command-line tool:
 
@@ -120,7 +120,7 @@ Replace `<vm.ip.address>` with the IP address of a cluster node that has the sha
 
 Metashape processing parameters are specified in configuration YAML files which need to be located at `/ofo-share/argo-data/argo-input/configs/`.
 
-Every dataset to be processed needs to have its own standalone configuration file.
+Every project to be processed needs to have its own standalone configuration file.
 
 <!-- **Naming convention:** Config files should be named to match the naming convention `<config_id>_<datasetname>.yml`. For example:
 
@@ -217,7 +217,7 @@ argo-input/configs/01_benchmarking-emerald-subset.yml
 argo-input/configs/02_benchmarking-emerald-subset.yml
 ```
 
-This allows you to organize your config files in subdirectories or different locations. The dataset name will be automatically derived from the config filename (e.g., `argo-input/configs/dataset-name.yml` becomes dataset `dataset-name`).
+This allows you to organize your config files in subdirectories or different locations. The project name will be automatically derived from the config filename (e.g., `argo-input/configs/project-name.yml` becomes project `project-name`).
 
 You can create your own config list file and name it whatever you want, placing it anywhere within `/ofo-share/argo-data/`. Then specify the path to it (relative to `/ofo-share/argo-data`) using the `CONFIG_LIST` parameter when submitting the workflow.
 
@@ -229,14 +229,14 @@ Once your cluster authentication is set up and your inputs are prepared, run:
 ```bash
 argo submit -n argo photogrammetry-workflow-stepbased.yaml \
   --name "my-run-$(date +%Y%m%d)" \
-  -p CONFIG_LIST=argo-input/config-lists/config_list.txt \
-  -p RUN_FOLDER=gillan_june27 \
+  -p CONFIG_LIST=/data/argo-input/config-lists/config_list.txt \
+  -p TEMP_WORKING_DIR=/data/argo-output/temp-runs/gillan_june27 \
+  -p S3_PHOTOGRAMMETRY_DIR=gillan_june27 \
   -p PHOTOGRAMMETRY_CONFIG_ID=01 \
   -p S3_BUCKET_PHOTOGRAMMETRY_OUTPUTS=ofo-internal \
+  -p S3_POSTPROCESSED_DIR=jgillan_test \
   -p S3_BUCKET_POSTPROCESSED_OUTPUTS=ofo-public \
-  -p OUTPUT_DIRECTORY=jgillan_test \
   -p BOUNDARY_DIRECTORY=jgillan_test \
-  -p WORKING_DIR=/argo-output/temp-working-dir \
   -p POSTPROCESSING_IMAGE_TAG=latest \
   -p UTILS_IMAGE_TAG=latest
 ```
@@ -257,14 +257,14 @@ Database parameters (not currently functional):
 
 | Parameter | Description |
 |-----------|-------------|
-| `CONFIG_LIST` | Path to text file listing paths to metashape config files (all paths relative to `/ofo-share/argo-data`) |
-| `RUN_FOLDER` | Name for the parent directory of the Metashape outputs (locally under `argo-data/argo-outputs` **and** at the top level of the S3 bucket). Example: `photogrammetry-outputs`. |
-| `PHOTOGRAMMETRY_CONFIG_ID` | Two-digit configuration ID (e.g., `01`, `02`) used to organize outputs into `photogrammetry_NN` subdirectories in S3 for both raw and postprocessed products. If not specified, both raw and postprocessed products are stored directly in `RUN_FOLDER` (no `photogrammetry_NN` subfolder). |
-| `S3_BUCKET_PHOTOGRAMMETRY_OUTPUTS` | S3 bucket where raw Metashape products (orthomosaics, point clouds, etc.) are uploaded (typically `ofo-internal`). When `PHOTOGRAMMETRY_CONFIG_ID` is set, products are uploaded to `{bucket}/{RUN_FOLDER}/photogrammetry_{PHOTOGRAMMETRY_CONFIG_ID}/`. When not set, products go to `{bucket}/{RUN_FOLDER}/`. |
+| `CONFIG_LIST` | **Absolute path** to text file listing metashape config file paths (each line should be an absolute path starting with `/data/`). Example: `/data/argo-input/config-lists/config_list.txt` |
+| `TEMP_WORKING_DIR` | **Absolute path** for temporary workflow files (both photogrammetry and postprocessing). Workflow creates `photogrammetry/` and `postprocessing/` subdirectories automatically. All files are deleted after successful S3 upload. Example: `/data/argo-output/temp-runs/gillan_june27` |
+| `S3_PHOTOGRAMMETRY_DIR` | S3 directory name for raw Metashape outputs. When `PHOTOGRAMMETRY_CONFIG_ID` is set, products upload to `{bucket}/{S3_PHOTOGRAMMETRY_DIR}/photogrammetry_{PHOTOGRAMMETRY_CONFIG_ID}/`. When not set, products go to `{bucket}/{S3_PHOTOGRAMMETRY_DIR}/`. Example: `gillan_june27` |
+| `PHOTOGRAMMETRY_CONFIG_ID` | Two-digit configuration ID (e.g., `01`, `02`) used to organize outputs into `photogrammetry_NN` subdirectories in S3 for both raw and postprocessed products. If not specified or set to `NONE`, both raw and postprocessed products are stored without the `photogrammetry_NN` subfolder. |
+| `S3_BUCKET_PHOTOGRAMMETRY_OUTPUTS` | S3 bucket where raw Metashape products (orthomosaics, point clouds, etc.) are uploaded (typically `ofo-internal`). |
+| `S3_POSTPROCESSED_DIR` | S3 directory name for postprocessed outputs. When `PHOTOGRAMMETRY_CONFIG_ID` is set, products are organized as `{S3_POSTPROCESSED_DIR}/{mission_name}/photogrammetry_{PHOTOGRAMMETRY_CONFIG_ID}/`. When not set, products go to `{S3_POSTPROCESSED_DIR}/{mission_name}/`. Example: `jgillan_test` |
 | `S3_BUCKET_POSTPROCESSED_OUTPUTS` | S3 bucket for final postprocessed outputs and where boundary files are stored (typically `ofo-public`) |
-| `OUTPUT_DIRECTORY` | Name of parent folder where postprocessed products are uploaded. When `PHOTOGRAMMETRY_CONFIG_ID` is set, products are organized as `{OUTPUT_DIRECTORY}/{mission_name}/photogrammetry_{PHOTOGRAMMETRY_CONFIG_ID}/`. When not set, products go to `{OUTPUT_DIRECTORY}/{mission_name}/`. |
-| `BOUNDARY_DIRECTORY` | Parent directory where mission boundary polygons reside (used to clip imagery) |
-| `WORKING_DIR` | Directory within container for downloading and postprocessing (typically `/tmp/processing` which downloads data to the processing computer; can be changed to a persistent volume) |
+| `BOUNDARY_DIRECTORY` | Parent directory in S3 where mission boundary polygons reside (used to clip imagery). Example: `jgillan_test` |
 | `POSTPROCESSING_IMAGE_TAG` | Docker image tag for the postprocessing container (default: `latest`). Use a specific branch name or tag to test development versions (e.g., `dy-manila`) |
 | `UTILS_IMAGE_TAG` | Docker image tag for the argo-workflow-utils container (default: `latest`). Use a specific branch name or tag to test development versions (e.g., `dy-manila`) |
 | `DB_*` | Database parameters for logging Argo status (not currently functional; credentials in [OFO credentials document](https://docs.google.com/document/d/155AP0P3jkVa-yT53a-QLp7vBAfjRa78gdST1Dfb4fls/edit?tab=t.0)) |
@@ -326,25 +326,18 @@ When processing multiple missions, the Argo UI shows all missions side-by-side. 
 
 #### Understanding Step Names
 
-Task names in the Argo UI follow the pattern `<project-name>.<step-name>`:
+Task names in the Argo UI follow the pattern `process-datasets-N.<step-name>`:
 
-- `benchmarking-greasewood.setup` - Setup step for mission "benchmarking-greasewood"
-- `benchmarking-greasewood.match-photos-gpu` - Match photos on GPU for mission "benchmarking-greasewood"
-- `benchmarking-emerald.build-depth-maps` - Build depth maps for mission "benchmarking-emerald"
+- `process-datasets-0.setup` - Setup step for first mission (index 0)
+- `process-datasets-0.match-photos-gpu` - Match photos on GPU for first mission
+- `process-datasets-1.build-depth-maps` - Build depth maps for second mission (index 1)
 
-!!! note "Task Name Sanitization"
-    Project names displayed in Argo task names are automatically sanitized to be DNS-1123 compliant (lowercase, alphanumeric + hyphens/dots only). For example:
+!!! tip "Finding Your Mission"
+    To identify which mission corresponds to which index:
 
-    - `Benchmarking_Greasewood` → `benchmarking-greasewood`
-    - `My Project Name` → `my-project-name`
-
-    **Important:** This sanitization **only affects the Argo UI task names**. The original project name is preserved for:
-
-    - Output file paths and directories
-    - The `--project-name` argument passed to automate-metashape
-    - All processing and logging
-
-    This ensures readable task names in the Argo UI without affecting your output files.
+    1. Check the `determine-datasets` step logs to see the order of missions in the JSON output
+    2. Click on any task (e.g., `process-datasets-0.setup`) and view the parameters to see the `project-name` value
+    3. The project name appears in all file paths, logs, and processing outputs
 
 GPU-capable steps show either `-gpu` or `-cpu` suffix depending on config.
 
@@ -363,13 +356,13 @@ argo list
 argo logs <workflow-name> -c determine-datasets
 
 # Get logs for a specific mission's step
-# Format: <project-name>.<step-name>
-argo logs <workflow-name> -c benchmarking-greasewood.setup
-argo logs <workflow-name> -c benchmarking-greasewood.match-photos-gpu
-argo logs <workflow-name> -c benchmarking-emerald.build-depth-maps
+# Format: process-datasets-<N>.<step-name>
+argo logs <workflow-name> -c process-datasets-0.setup
+argo logs <workflow-name> -c process-datasets-0.match-photos-gpu
+argo logs <workflow-name> -c process-datasets-1.build-depth-maps
 
 # Follow logs in real-time
-argo logs <workflow-name> -c benchmarking-greasewood.setup -f
+argo logs <workflow-name> -c process-datasets-0.setup -f
 ```
 
 ## Workflow outputs
@@ -586,7 +579,7 @@ Currently, the PostGIS server stores the following keys in the `automate_metasha
 | **Column**   | **Type** | **Description**  |
 |  --- | ----  | --- |
 |id | integer | unique identifier for each call of automate-metashape (not run) |
-|dataset_name | character varying(100) | dataset running for the individual call of automate-metashape |
+|dataset_name | character varying(100) | project running for the individual call of automate-metashape (column name is legacy) |
 | workflow_id | character varying(100) | identifier for run of ofo-argo |
 | status | character varying(50)  | either queued, processing, failed or completed, based on current and final status of automate-metashape |
 | start_time | timestamp without time zone | start time of automate-metashape run |
