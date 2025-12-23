@@ -206,20 +206,25 @@ Any values specified for `project_path` and `output_path` in the config.yml will
 
 #### Create a config list file
 
-We use a text file, for example `config_list.txt`, to tell the Argo workflow which config files should be processed in the current run. This text file should list the paths to each config.yml file you want to process (relative to `/ofo-share/argo-data`), one config file path per line.
+We use a text file, for example `config_list.txt`, to tell the Argo workflow which config files
+should be processed in the current run. This text file should list the paths to each config.yml file
+you want to process within the container (for example, use `/data/XYZ` to specity the path `/ofo-share/argo-data/XYZ`), one config file path per line.
 
 For example:
 
 ```
-argo-input/configs/01_benchmarking-greasewood.yml
-argo-input/configs/02_benchmarking-greasewood.yml
-argo-input/configs/01_benchmarking-emerald-subset.yml
-argo-input/configs/02_benchmarking-emerald-subset.yml
+/data/argo-input/configs/01_benchmarking-greasewood.yml
+/data/argo-input/configs/02_benchmarking-greasewood.yml
+/data/argo-input/configs/01_benchmarking-emerald-subset.yml
+/data/argo-input/configs/02_benchmarking-emerald-subset.yml
 ```
 
-This allows you to organize your config files in subdirectories or different locations. The project name will be automatically derived from the config filename (e.g., `argo-input/configs/project-name.yml` becomes project `project-name`).
+This allows you to organize your config files in subdirectories or different locations. The project name will be automatically derived from the config filename (e.g., `/data/argo-input/configs/project-name.yml` becomes project `project-name`).
 
-You can create your own config list file and name it whatever you want, placing it anywhere within `/ofo-share/argo-data/`. Then specify the path to it (relative to `/ofo-share/argo-data`) using the `CONFIG_LIST` parameter when submitting the workflow.
+You can create your own config list file and name it whatever you want, placing it anywhere within
+`/ofo-share/argo-data/`. Then specify the path to it within the container (using `/data/XYZ` to
+refer to `/ofo-share/argo-data/XYZ`) using the
+`CONFIG_LIST` parameter when submitting the workflow.
 
 
 ## Submit the workflow
