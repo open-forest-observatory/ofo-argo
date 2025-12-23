@@ -183,6 +183,19 @@ NODEGROUP_NAME=cpu-group
 kubectl get nodes -l capi.stackhpc.com/node-group=$NODEGROUP_NAME -o name | xargs -I {} kubectl drain {} --ignore-daemonsets --delete-emptydir-data
 ```
 
+To drain only a specific number of nodes (prioritizing the least utilitzed), sort by utilization and add `head` to limit the
+selection:
+
+```bash
+NODEGROUP_NAME=cpu-group
+NUM_TO_DRAIN=2
+kubectl get nodes -l capi.stackhpc.com/node-group=$NODEGROUP_NAME \
+  --sort-by='.status.allocatable.cpu' -o name | \
+  head -n $NUM_TO_DRAIN | \
+  xargs -I {} kubectl drain {} --ignore-daemonsets --delete-emptydir-data
+```
+It will print the IDs of the nodes, which you can then explicitly delete (see below)
+
 ### Resize a nodegroup
 
 Change the number of nodes in an existing nodegroup:
@@ -191,6 +204,37 @@ Change the number of nodes in an existing nodegroup:
 NODEGROUP_NAME=cpu-group
 N_WORKER=2
 openstack coe cluster resize ofocluster --nodegroup $NODEGROUP_NAME $N_WORKER
+```
+
+If you want to delete specific nodes of the nodegroup (recommended if you have drained some nodes,
+so that you only delete the drained ones and not ones with running processes), get their IDs. Here
+is a snippet to get the pods running on each cordoned node (either in process or draining, or
+draining completed):
+```bash
+for node in $(kubectl get nodes -l capi.stackhpc.com/node-group=$NODEGROUP_NAME \
+  --field-selector spec.unschedulable=true -o name | cut -d/ -f2); do
+  echo "=== $node ==="
+  kubectl get pods -A --field-selector spec.nodeName=$node | grep -v DaemonSet
+done
+```
+
+To get a list of fully drained nodes for pasting into a `delete` command, run:
+
+```bash
+for node in $(kubectl get nodes -l capi.stackhpc.com/node-group=$NODEGROUP_NAME \
+  --field-selector spec.unschedulable=true -o name | cut -d/ -f2); do
+  pod_count=$(kubectl get pods -A --field-selector spec.nodeName=$node --no-headers 2>/dev/null | grep -v -E 'kube-system|calico|flannel' | wc -l)
+  if [ "$pod_count" -eq 0 ]; then
+    echo -n "$node "
+  fi
+done
+echo
+```
+
+Once you know which nodes you need to delete, delete them with:
+
+```bash
+openstack server delete <server-id-1> <server-id-2>
 ```
 
 ### Delete a nodegroup
