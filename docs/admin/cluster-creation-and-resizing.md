@@ -139,11 +139,10 @@ BOOT_VOLUME_SIZE_GB=80
 # Number of instances
 N_MASTER=1  # Needs to be odd
 N_WORKER=1
-
-# Min and max number of worker nodes (if using autoscaling)
-AUTOSCALE=false
 N_WORKER_MIN=1
-N_WORKER_MAX=5
+N_WORKER_MAX=1 # Prevent autoscaling of the default worker; only scale nodegroups (easier to delete later)
+AUTOSCALE=true # Even though we are not autoscaling the default worker, this also controls autoscaling of future nodegroups
+
 
 # Network configuration
 NETWORK_ID=$(openstack network show --format value -c id auto_allocated_network)
@@ -165,6 +164,41 @@ openstack coe cluster create \
     --fixed-subnet "${SUBNET_ID}" \
     "ofocluster"
 ```
+
+NETWORK_ID=$(openstack network show --format value -c id auto_allocated_network)
+SUBNET_ID=$(openstack subnet show --format value -c id auto_allocated_subnet_v4)
+KEYPAIR=my-openstack-keypair-name
+TEMPLATE="kubernetes-1-33-jammy"
+
+openstack coe cluster create \
+    --cluster-template $TEMPLATE \
+    --master-count 1 --node-count 1 \
+    --master-flavor m3.small --flavor m3.small \
+    --merge-labels \
+    --labels auto_scaling_enabled=true \
+    --labels min_node_count=1 \
+    --labels boot_volume_size=80 \
+    --keypair $KEYPAIR \
+    --fixed-network "${NETWORK_ID}" \
+    --fixed-subnet "${SUBNET_ID}" \
+    "ofocluster7"
+
+  openstack coe cluster create \
+      --cluster-template $TEMPLATE \
+      --master-count 1 --node-count 1 \
+      --master-flavor m3.small --flavor m3.small \
+      --merge-labels \
+      --labels auto_scaling_enabled=true \
+      --labels boot_volume_size=80 \
+      --labels min_node_count=1 \
+      --labels max_node_count=50 \
+      --keypair $KEYPAIR \
+      --fixed-network "${NETWORK_ID}" \
+      --fixed-subnet "${SUBNET_ID}" \
+      "ofocluster8"
+
+
+TEMP NOTE: may need to add max_node_count=50 then override back to 0 for the default worker
 
 ### Check cluster status (optional)
 
@@ -199,6 +233,15 @@ mv -i config ~/.ofocluster/ofocluster.kubeconfig
 # Set KUBECONFIG environment variable
 export KUBECONFIG=~/.ofocluster/ofocluster.kubeconfig
 ```
+
+## Create the Argo namespace
+
+We will install various resources into this namespace in this guide and subsequent ones.
+
+```bash
+kubectl create namespace argo
+```
+
 
 ## Create Kubernetes secrets
 
@@ -294,54 +337,9 @@ Resize the cluster by adding or removing nodes from the original worker group (n
 openstack coe cluster resize "ofocluster" 4
 ```
 
-### Add a new nodegroup
+### Add, resize, or delete nodegroups
 
-To add a new nodegroup, first specify its parameters and then use OpenStack to create it:
-
-```bash
-# Set nodegroup parameters
-NODEGROUP_NAME=cpu-group  # or gpu-group
-FLAVOR=m3.quad  # or "g3.medium" for GPU
-N_WORKER=1
-AUTOSCALE=false
-N_WORKER_MIN=1
-N_WORKER_MAX=5
-BOOT_VOLUME_SIZE_GB=80
-
-# Create the nodegroup
-openstack coe nodegroup create ofocluster $NODEGROUP_NAME \
-    --flavor $FLAVOR \
-    --node-count $N_WORKER \
-    --labels auto_scaling_enabled=$AUTOSCALE \
-    --labels min_node_count=$N_WORKER_MIN \
-    --labels max_node_count=$N_WORKER_MAX \
-    --labels boot_volume_size=$BOOT_VOLUME_SIZE_GB
-```
-
-### Drain nodes before downsizing or deleting
-
-When decreasing the number of nodes in a nodegroup, it's best practice to drain the Kubernetes pods from them first. Since we don't know which nodes OpenStack will delete when reducing the size, we have to drain the whole nodegroup. This is also what you'd do when deleting a nodegroup entirely.
-
-```bash
-NODEGROUP_NAME=cpu-group
-kubectl get nodes -l capi.stackhpc.com/node-group=$NODEGROUP_NAME -o name | xargs -I {} kubectl drain {} --ignore-daemonsets --delete-emptydir-data
-```
-
-### Resize a nodegroup
-
-Change the number of nodes in an existing nodegroup:
-
-```bash
-N_WORKER=2
-NODEGROUP_NAME=cpu-group
-openstack coe cluster resize ofocluster --nodegroup $NODEGROUP_NAME $N_WORKER
-```
-
-### Delete a nodegroup
-
-```bash
-openstack coe nodegroup delete ofocluster $NODEGROUP_NAME
-```
+For nodegroup management, see the corresponding [user guide](../usage/cluster-access-and-resizing.md).
 
 ### Delete the cluster
 

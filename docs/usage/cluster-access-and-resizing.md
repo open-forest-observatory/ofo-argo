@@ -141,20 +141,14 @@ To add a new nodegroup, first specify its parameters and then use OpenStack to c
 ```bash
 # Set nodegroup parameters
 NODEGROUP_NAME=cpu-group  # or gpu-group, or whatever is meaningful to you
-FLAVOR=m3.quad  # or "g3.medium" etc for GPU
-N_WORKER=1
-AUTOSCALE=false
+FLAVOR=m3.small  # or "g3.medium" etc for GPU
 N_WORKER_MIN=1 # Only relevant for autoscale
 N_WORKER_MAX=5 # Only relevant for autoscale
 BOOT_VOLUME_SIZE_GB=80
 
 # Create the nodegroup
-openstack coe nodegroup create ofocluster $NODEGROUP_NAME \
+openstack coe nodegroup create ofocluster5 $NODEGROUP_NAME \
     --flavor $FLAVOR \
-    --node-count $N_WORKER \
-    --labels auto_scaling_enabled=$AUTOSCALE \
-    --labels min_node_count=$N_WORKER_MIN \
-    --labels max_node_count=$N_WORKER_MAX \
     --labels boot_volume_size=$BOOT_VOLUME_SIZE_GB
 ```
 

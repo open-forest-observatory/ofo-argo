@@ -67,8 +67,8 @@ Based on the share name and access rule name, query OpenStack to look up the nec
 
 ```bash
 # Set your Manila share and access rule names
-MANILA_SHARE_NAME=dytest3
-export MANILA_ACCESS_RULE_NAME=dytest3-rw
+MANILA_SHARE_NAME=ofo-share-02
+export MANILA_ACCESS_RULE_NAME=ofo-share-02-rw
 
 # Extract Manila monitors (json-formatted list)
 export MANILA_MONITORS_JSON=$(openstack share export location list "$MANILA_SHARE_NAME" -f json | jq -r '.[0].Path | split(":/")[0] | split(",") | map("\"" + . + "\"") | join(",")')
@@ -121,9 +121,6 @@ contains secrets) to disk.
 Note that the namespaces of the various resources are defined within the yaml, so `-n` does not have to be used here. If namespaces ever need to change, update the config yaml.
 
 ```bash
-# Create the namespace for the PVC and Argo application
-kubectl create namespace argo
-
 # Substitute variables and apply configuration
 envsubst < setup/k8s/manila-cephfs-csi-config2.yaml | kubectl apply -f -
 
