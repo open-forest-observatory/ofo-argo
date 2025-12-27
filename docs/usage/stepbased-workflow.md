@@ -289,7 +289,7 @@ Database parameters (not currently functional):
 | `BOUNDARY_DIRECTORY` | Parent directory in S3 where mission boundary polygons reside (used to clip imagery). Example: `jgillan_test` |
 | `POSTPROCESSING_IMAGE_TAG` | Docker image tag for the postprocessing container (default: `latest`). Use a specific branch name or tag to test development versions (e.g., `dy-manila`) |
 | `UTILS_IMAGE_TAG` | Docker image tag for the argo-workflow-utils container (default: `latest`). Use a specific branch name or tag to test development versions (e.g., `dy-manila`) |
-| `MAX_PARALLEL_PROJECTS` | Maximum number of projects to process concurrently (default: `0` = unlimited). Set to a positive integer (e.g., `5`) to limit how many projects from the config list run in parallel. Useful for controlling resource usage on the cluster. |
+| `MAX_PARALLEL_PROJECTS` | Maximum number of projects to process concurrently (default: `0` = unlimited). Set to a positive integer (e.g., `5`) to limit how many projects from the config list run in parallel. For details see parallelism discussion above. |
 | `DB_*` | Database parameters for logging Argo status (not currently functional; credentials in [OFO credentials document](https://docs.google.com/document/d/155AP0P3jkVa-yT53a-QLp7vBAfjRa78gdST1Dfb4fls/edit?tab=t.0)) |
 
 **Secrets configuration:**
