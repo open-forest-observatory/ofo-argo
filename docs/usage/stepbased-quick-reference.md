@@ -29,7 +29,8 @@ argo submit photogrammetry-workflow-stepbased.yaml \
   -p S3_BUCKET_POSTPROCESSED_OUTPUTS="ofo-public" \
   -p OUTPUT_DIRECTORY="processed-outputs/december-2024" \
   -p BOUNDARY_DIRECTORY="boundaries" \
-  -p POSTPROCESSING_IMAGE_TAG="latest"
+  -p POSTPROCESSING_IMAGE_TAG="latest" \
+  -p MAX_PARALLEL_PROJECTS=5
 ```
 
 ## Monitor Workflows
@@ -162,6 +163,28 @@ cat /data/argo-input/config-lists/my_missions.txt
 
 # Validate YAML syntax
 python3 -c "import yaml; yaml.safe_load(open('/data/argo-input/configs/mission_001.yml'))"
+```
+
+## Controlling Parallelism
+
+### Limit Concurrent Projects
+```bash
+# Process at most 3 projects at a time
+argo submit photogrammetry-workflow-stepbased.yaml \
+  --name "limited-parallelism-run" \
+  -p CONFIG_LIST="argo-input/config-lists/many_missions.txt" \
+  -p RUN_FOLDER="batch-run" \
+  -p MAX_PARALLEL_PROJECTS=3
+```
+
+### Unlimited Parallelism (Default)
+```bash
+# Process all projects concurrently (default behavior)
+argo submit photogrammetry-workflow-stepbased.yaml \
+  --name "full-parallelism-run" \
+  -p CONFIG_LIST="argo-input/config-lists/missions.txt" \
+  -p RUN_FOLDER="batch-run" \
+  -p MAX_PARALLEL_PROJECTS=0
 ```
 
 ## Common Workflow Patterns

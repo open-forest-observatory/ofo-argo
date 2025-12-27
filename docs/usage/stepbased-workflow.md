@@ -64,7 +64,7 @@ The step-based workflow executes **10 separate Metashape processing steps** as i
 
 ## Setup
 
-### 1. Prepare inputs
+### Prepare inputs
 
 Before running the workflow, you need to prepare three types of inputs on the cluster's shared storage:
 
@@ -226,6 +226,22 @@ You can create your own config list file and name it whatever you want, placing 
 refer to `/ofo-share/argo-data/XYZ`) using the
 `CONFIG_LIST` parameter when submitting the workflow.
 
+### Determine the maximum number of projects to process in parallel
+
+When tasked with parallelizing across multiple multi-step DAGs, Argo prioritizes breadth first. So
+when it has a choice, it will start on a new DAG rather than starting the next step of an existing
+DAG. This is unfortunately not customizable, and it is undesirable because the workflow involves
+storing in-process files (including raw imagery, metashape project, outputs) locally during
+processing. Our shared storage does not have the space to store all files locally at the same time.
+So we need to restrict the number of parallel DAGs (metashape projects) it will attempt to run (a
+template-level attribute it calls 'parallelism'). The workflow is set up to control this via a
+workflow parameter that can be passed on the command line with `argo submit` called
+`MAX_PARALLEL_PROJECTS`. It makes sense to set this at or slightly below the max number of nodes
+availble for processing (or more specifically, the max number of pods that can be hosted on the
+available nodes). So if you're using an auto-scaling cluster with a max of 8 nodes, probably set
+`MAX_PARALLEL_PROJECTS` somewhere between 5 and 8. Set to `0` (default) for unrestricted
+parallelism.
+
 
 ## Submit the workflow
 
@@ -243,7 +259,8 @@ argo submit -n argo photogrammetry-workflow-stepbased.yaml \
   -p S3_BUCKET_POSTPROCESSED_OUTPUTS=ofo-public \
   -p BOUNDARY_DIRECTORY=jgillan_test \
   -p POSTPROCESSING_IMAGE_TAG=latest \
-  -p UTILS_IMAGE_TAG=latest
+  -p UTILS_IMAGE_TAG=latest \
+  -p MAX_PARALLEL_PROJECTS=5
 ```
 
 !!! note "Workflow File"
@@ -272,6 +289,7 @@ Database parameters (not currently functional):
 | `BOUNDARY_DIRECTORY` | Parent directory in S3 where mission boundary polygons reside (used to clip imagery). Example: `jgillan_test` |
 | `POSTPROCESSING_IMAGE_TAG` | Docker image tag for the postprocessing container (default: `latest`). Use a specific branch name or tag to test development versions (e.g., `dy-manila`) |
 | `UTILS_IMAGE_TAG` | Docker image tag for the argo-workflow-utils container (default: `latest`). Use a specific branch name or tag to test development versions (e.g., `dy-manila`) |
+| `MAX_PARALLEL_PROJECTS` | Maximum number of projects to process concurrently (default: `0` = unlimited). Set to a positive integer (e.g., `5`) to limit how many projects from the config list run in parallel. Useful for controlling resource usage on the cluster. |
 | `DB_*` | Database parameters for logging Argo status (not currently functional; credentials in [OFO credentials document](https://docs.google.com/document/d/155AP0P3jkVa-yT53a-QLp7vBAfjRa78gdST1Dfb4fls/edit?tab=t.0)) |
 
 **Secrets configuration:**
