@@ -55,7 +55,8 @@ helm repo update
 kubectl create namespace ceph-csi-cephfs
 
 # Install Ceph CSI driver
-helm install --namespace "ceph-csi-cephfs" "ceph-csi-cephfs" ceph-csi/ceph-csi-cephfs
+helm install --namespace "ceph-csi-cephfs" "ceph-csi-cephfs" ceph-csi/ceph-csi-cephfs \
+  --set provisioner.replicaCount=2 # Reduced from default of 3 so autoscaler doesn't keep nodegroups scaled up with 2 nodes (one replica goes on default-worker and one on a nodegroup)
 
 # Check installation status
 helm status --namespace "ceph-csi-cephfs" "ceph-csi-cephfs"

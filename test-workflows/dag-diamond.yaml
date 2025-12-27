@@ -1,52 +1,168 @@
 # Test workflow: single start → two parallel branches → single finish
-# Used to verify DAG execution and parallel task scheduling
+# Used to verify DAG execution, parallel task scheduling, and input/output passing
+# This workflow demonstrates:
+#   - Random value generation and passing between steps
+#   - stdout and stderr output for logging verification
+#   - Parameter outputs from templates
+#   - Input/output chaining in DAG tasks
 apiVersion: argoproj.io/v1alpha1
 kind: Workflow
 metadata:
   generateName: dag-test-
 spec:
   entrypoint: main
-  serviceAccountName: default # Optional line; if omitted, default is inferred
+  serviceAccountName: default
   templates:
   - name: main
     dag:
       tasks:
       - name: start
-        template: echo
-        arguments:
-          parameters:
-          - name: message
-            value: "Starting workflow"
-      
+        template: generate-random
+
       - name: parallel-a
-        template: echo
+        template: process-value
         arguments:
           parameters:
-          - name: message
-            value: "Parallel branch A"
+          - name: input-value
+            value: "{{tasks.start.outputs.parameters.random-value}}"
+          - name: branch-name
+            value: "A"
         dependencies: [start]
-      
+
       - name: parallel-b
-        template: echo
+        template: process-value
         arguments:
           parameters:
-          - name: message
-            value: "Parallel branch B"
+          - name: input-value
+            value: "{{tasks.start.outputs.parameters.random-value}}"
+          - name: branch-name
+            value: "B"
         dependencies: [start]
-      
+
       - name: finish
-        template: echo
+        template: summarize
         arguments:
           parameters:
-          - name: message
-            value: "All done!"
+          - name: original-value
+            value: "{{tasks.start.outputs.parameters.random-value}}"
+          - name: result-a
+            value: "{{tasks.parallel-a.outputs.parameters.processed-value}}"
+          - name: result-b
+            value: "{{tasks.parallel-b.outputs.parameters.processed-value}}"
         dependencies: [parallel-a, parallel-b]
-  
-  - name: echo
-    inputs:
+
+  # Template: Generate a random value and output it
+  - name: generate-random
+    outputs:
       parameters:
-      - name: message
+      - name: random-value
+        valueFrom:
+          path: /tmp/random-value.txt
     container:
       image: alpine:latest
       command: [sh, -c]
-      args: ["echo '{{inputs.parameters.message}}' && sleep 5"]
+      args:
+      - |
+        echo "[STDOUT] === START STEP ==="
+        echo "[STDERR] Generating random value..." >&2
+
+        # Generate random hex string
+        RANDOM_VAL=$(cat /dev/urandom | tr -dc 'a-f0-9' | head -c 8)
+
+        echo "[STDOUT] Generated random value: ${RANDOM_VAL}"
+        echo "[STDERR] Writing to output file..." >&2
+
+        # Write to output file for Argo to capture
+        echo "${RANDOM_VAL}" > /tmp/random-value.txt
+
+        echo "[STDOUT] Random value saved to output parameter"
+        echo "[STDERR] Start step complete" >&2
+
+  # Template: Process an input value and produce a new output
+  - name: process-value
+    inputs:
+      parameters:
+      - name: input-value
+      - name: branch-name
+    outputs:
+      parameters:
+      - name: processed-value
+        valueFrom:
+          path: /tmp/processed-value.txt
+    container:
+      image: alpine:latest
+      command: [sh, -c]
+      args:
+      - |
+        echo "[STDOUT] === PARALLEL BRANCH {{inputs.parameters.branch-name}} ==="
+        echo "[STDERR] Branch {{inputs.parameters.branch-name}} starting..." >&2
+
+        INPUT="{{inputs.parameters.input-value}}"
+        echo "[STDOUT] Received input value: ${INPUT}"
+        echo "[STDERR] Processing input..." >&2
+
+        # Generate branch-specific random suffix
+        SUFFIX=$(cat /dev/urandom | tr -dc 'A-Z0-9' | head -c 4)
+        PROCESSED="${INPUT}-{{inputs.parameters.branch-name}}-${SUFFIX}"
+
+        echo "[STDOUT] Generated suffix: ${SUFFIX}"
+        echo "[STDOUT] Processed value: ${PROCESSED}"
+        echo "[STDERR] Writing processed value to output..." >&2
+
+        # Write processed value to output
+        echo "${PROCESSED}" > /tmp/processed-value.txt
+
+        # Simulate some work
+        echo "[STDERR] Simulating work (sleeping 3s)..." >&2
+        sleep 3
+
+        echo "[STDOUT] Branch {{inputs.parameters.branch-name}} complete"
+        echo "[STDERR] Branch {{inputs.parameters.branch-name}} finished successfully" >&2
+
+  # Template: Summarize all results
+  - name: summarize
+    inputs:
+      parameters:
+      - name: original-value
+      - name: result-a
+      - name: result-b
+    container:
+      image: alpine:latest
+      command: [sh, -c]
+      args:
+      - |
+        echo "[STDOUT] === FINISH STEP ==="
+        echo "[STDERR] Collecting results from all branches..." >&2
+
+        echo "[STDOUT] ----------------------------------------"
+        echo "[STDOUT] WORKFLOW SUMMARY"
+        echo "[STDOUT] ----------------------------------------"
+        echo "[STDOUT] Original random value: {{inputs.parameters.original-value}}"
+        echo "[STDOUT] Result from Branch A:  {{inputs.parameters.result-a}}"
+        echo "[STDOUT] Result from Branch B:  {{inputs.parameters.result-b}}"
+        echo "[STDOUT] ----------------------------------------"
+
+        echo "[STDERR] Validating results..." >&2
+
+        # Verify that branch results contain the original value
+        ORIG="{{inputs.parameters.original-value}}"
+        RESULT_A="{{inputs.parameters.result-a}}"
+        RESULT_B="{{inputs.parameters.result-b}}"
+
+        echo "[STDERR] Checking Branch A result contains original value..." >&2
+        if echo "${RESULT_A}" | grep -q "${ORIG}"; then
+          echo "[STDOUT] PASS: Branch A result contains original value"
+        else
+          echo "[STDERR] FAIL: Branch A result does not contain original value!" >&2
+        fi
+
+        echo "[STDERR] Checking Branch B result contains original value..." >&2
+        if echo "${RESULT_B}" | grep -q "${ORIG}"; then
+          echo "[STDOUT] PASS: Branch B result contains original value"
+        else
+          echo "[STDERR] FAIL: Branch B result does not contain original value!" >&2
+        fi
+
+        echo "[STDOUT] ----------------------------------------"
+        echo "[STDOUT] Workflow completed successfully!"
+        echo "[STDERR] All validations complete" >&2

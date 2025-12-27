@@ -39,7 +39,7 @@ git pull
 The Argo CLI is a wrapper around `kubectl` that simplifies communication with Argo on the cluster.
 
 ```bash
-ARGO_WORKFLOWS_VERSION="v3.7.2"
+ARGO_WORKFLOWS_VERSION="v3.7.6"
 ARGO_OS="linux"
 
 # Download the binary
@@ -66,7 +66,7 @@ Create the Argo namespace and install Argo components:
 # Create namespace
 kubectl create namespace argo
 
-# Install Argo workflows
+# Install Argo workflows on cluster
 kubectl apply -n argo -f https://github.com/argoproj/argo-workflows/releases/download/${ARGO_WORKFLOWS_VERSION}/install.yaml
 ```
 
@@ -94,6 +94,72 @@ kubectl auth can-i create workflowtaskresults.argoproj.io -n argo --as=system:se
 kubectl describe role argo-role -n argo
 kubectl describe role executor -n argo
 ```
+
+## Configure workflow controller: Delete completed pods, and use S3 for artifact and log storage
+
+Argo Workflows can store workflow logs and artifacts in S3-compatible object storage. Also, it can
+be configured to delete pods once they are done running (whether successful or unsuccessful). Given
+we are storing pod logs in S3 (we don't require the pod to be in existence in order for Arto to access its logs
+through kubernetes), there is no reason to keep pods around after they finish running. This section
+configures Argo to use JS2 (Jetstream2) object storage for logs and to remove workflow pods that
+have completed running. All of this is in support of configuring workflows to preferentially
+schedule pods on nodes that have other running pods on them (to minimize the chances of being
+evicted from an underutilized node that is being deleted by the autoscaler).
+
+### Prerequisites
+
+The S3 credentials secret must exist in the `argo` namespace. This secret should contain:
+- `access_key`: Your S3 access key
+- `secret_key`: Your S3 secret key
+
+To verify the secret exists:
+
+```bash
+kubectl get secret s3-credentials -n argo
+```
+
+If it doesn't exist, create it (replacing placeholders with your actual credentials):
+
+```bash
+kubectl create secret generic s3-credentials -n argo \
+  --from-literal=access_key='YOUR_ACCESS_KEY' \
+  --from-literal=secret_key='YOUR_SECRET_KEY' \
+  --from-literal=endpoint='https://js2.jetstream-cloud.org:8001' \
+  --from-literal=provider='Other'
+```
+
+### Apply the workflow controller configuration
+
+The workflow controller configmap tells Argo where to store artifacts and logs. Apply it:
+
+```bash
+kubectl apply -f setup/argo/workflow-controller-configmap.yaml
+```
+
+This configures:
+- **Bucket**: `ofo-internal`
+- **Path prefix**: `argo-logs-artifacts/`
+- **Log archiving**: Enabled (workflow logs are stored in S3)
+- **Key format**: `argo-logs-artifacts/{workflow-name}/{pod-name}`
+
+### Restart the workflow controller
+
+The workflow controller needs to be restarted to pick up the new configuration:
+
+```bash
+kubectl rollout restart deployment workflow-controller -n argo
+kubectl rollout status deployment workflow-controller -n argo
+```
+
+### Verify the configuration
+
+Check that the configmap was applied correctly:
+
+```bash
+kubectl get configmap workflow-controller-configmap -n argo -o yaml
+```
+
+You should see the `artifactRepository` section with the S3 configuration.
 
 ## Test the installation
 
@@ -128,7 +194,7 @@ kubectl get svc argo-server -n argo
 # Install cert-manager
 kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/v1.13.0/cert-manager.yaml
 
-# Wait for cert-manager to be ready (takes ~1 minute)
+# Wait for cert-manager to be ready (takes 5-60 seconds)
 kubectl wait --for=condition=available --timeout=300s deployment/cert-manager -n cert-manager
 kubectl wait --for=condition=available --timeout=300s deployment/cert-manager-webhook -n cert-manager
 kubectl wait --for=condition=available --timeout=300s deployment/cert-manager-cainjector -n cert-manager
@@ -151,11 +217,9 @@ kubectl get svc -n ingress-nginx ingress-nginx-controller -w
 Go to your DNS provider (GoDaddy, Cloudflare, Route53, etc.) and create:
 
 - **Type**: A
-- **Name**: argo (or your preferred subdomain)
+- **Name**: argo (or your preferred subdomain) (in Netlify DNS, replace the `@` with `argo`)
 - **Value**: `<IP from previous step>`
 - **TTL**: 300 (or auto/default)
-
-A "non-authoritative answer" from DNS queries is OK.
 
 ### Create Let's Encrypt cluster issuer
 
@@ -169,12 +233,13 @@ kubectl apply -f setup/argo/clusterissuer-letsencrypt.yaml
 kubectl apply -f setup/argo/ingress-argo.yaml
 ```
 
-Wait 5-10 minutes for DNS records to propagate, then verify:
+Wait 1-10 minutes for DNS records to propagate, then verify:
 
 ```bash
 nslookup argo.focal-lab.org
-# Should return the ingress controller IP
 ```
+
+This should return the ingress controller IP. A "non-authoritative answer" from DNS queries is OK.
 
 ### Request and wait for certificate
 

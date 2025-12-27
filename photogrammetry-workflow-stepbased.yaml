@@ -12,8 +12,9 @@ spec:
       - name: main
         imagePullPolicy: Always
 
-  # Ensure that by default, workflow pods are scheduled on non-GPU nodes. GPU tasks will explicitly
-  # override this with their own affinity configuration.
+  # Affinity rules for workflow pods:
+  # 1. nodeAffinity: Schedule on non-GPU nodes by default (GPU tasks override with affinity: {})
+  # 2. podAffinity: Prefer nodes with other running workflow pods to minimize autoscaler evictions
   affinity:
     nodeAffinity:
       requiredDuringSchedulingIgnoredDuringExecution:
@@ -21,6 +22,17 @@ spec:
           - matchExpressions:
               - key: nvidia.com/gpu.present
                 operator: DoesNotExist
+    podAffinity:
+      preferredDuringSchedulingIgnoredDuringExecution:
+        - weight: 100
+          podAffinityTerm:
+            labelSelector:
+              matchExpressions:
+                - key: workflows.argoproj.io/completed
+                  operator: In
+                  values:
+                    - "false"
+            topologyKey: kubernetes.io/hostname
 
   # A list of input parameters available to the workflow at runtime.
   # These parameters can be referenced throughout the workflow templates using {{workflow.parameters.<name>}}

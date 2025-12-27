@@ -107,7 +107,7 @@ Get the Kubernetes configuration file (`kubeconfig`) and configure your environm
 
 ```bash
 # Get cluster configuration
-openstack coe cluster config "ofocluster" --force
+openstack coe cluster config "ofocluster2" --force
 
 # Set permissions and move to appropriate location
 chmod 600 config
@@ -136,41 +136,48 @@ source ~/.ofocluster/app-cred-ofocluster-openrc.sh
 
 ### Add a new nodegroup
 
-To add a new nodegroup, first specify its parameters and then use OpenStack to create it:
+Use OpenStack to create new nodegroups:
 
 ```bash
-# Set nodegroup parameters
-NODEGROUP_NAME=cpu-group  # or gpu-group, or whatever is meaningful to you
-FLAVOR=m3.small  # or "g3.medium" etc for GPU
-N_WORKER_MIN=1 # Only relevant for autoscale
-N_WORKER_MAX=5 # Only relevant for autoscale
-BOOT_VOLUME_SIZE_GB=80
-
-# Create the nodegroup
-openstack coe nodegroup create ofocluster5 $NODEGROUP_NAME \
-    --flavor $FLAVOR \
-    --labels boot_volume_size=$BOOT_VOLUME_SIZE_GB
+openstack coe nodegroup create \
+  --min-nodes 1 \
+  --max-nodes 8 \
+  --flavor m3.small \
+ofocluster2 cpu-group1
 ```
+
+Due to apparent OpenStack limitations, all nodegroups in the cluster are "autoscaling" (the
+alternative would be that all are fixed, but this is set upon cluster creation and cannot be
+modified). Autoscaling means that the cluster will add/remove nodes in order to schedule all pending
+pods while keeping nodes near full utilization. The min and max number of nodes per nodegroup can be
+set. So if you want a fixed-size nodegroup, the best/only strategy appears to be to set min-nodes
+and max-nodes to the same value. The `--node-count` parameter is essentially irrelevant, because
+even as the nodegroup is being created, the autoscaler should detect whether more or fewer nodes are
+needed and make that change. The parameter can be left off and is then assumed to be 1.
 
 Quick access to create a CPU nodegroup:
 
 ```bash
-openstack coe nodegroup create ofocluster --labels boot_volume_size=80 cpu-group --flavor m3.large --node-count 2
+openstack coe nodegroup create ofocluster2 cpu-group --min-nodes 1 --max-nodes 8 --flavor m3.xl
 ```
 
 Quick access to create a GPU nodegroup:
 
 ```bash
-openstack coe nodegroup create ofocluster --labels boot_volume_size=80 gpu-group --flavor g3.xl --node-count 2
+openstack coe nodegroup create ofocluster2 gpu-group --min-nodes 1 --max-nodes 8 --flavor g3.xl
 ```
 
 
 
-### Drain nodes before downsizing or deleting
+
+### Drain nodes before manually downsizing or deleting
 
 When decreasing the number of nodes in a nodegroup, it is best practice to drain the Kubernetes pods
 from them first. Given that we don't know which nodes OpenStack will delete when reducing the size, we
 have to drain the whole nodegroup. This is also what you'd do when deleting a nodegroup entirely.
+
+WORK IN PROGRESS: It appears that draining will actually kill running pods. Still need to find a way
+to simply prevent scheduling of new pods, and confirm that nodes are empty, before deleting.
 
 ```bash
 NODEGROUP_NAME=cpu-group
@@ -192,12 +199,13 @@ It will print the IDs of the nodes, which you can then explicitly delete (see be
 
 ### Resize a nodegroup
 
-Change the number of nodes in an existing nodegroup:
+The autoscaler should take care of resizing to meet demand (within the node count bounds you
+specify). Downscaling has a delay of at least 10 min from triggering before being implemented in an
+effort to prevent cycling. You can change the min and max bounds on the number of nodes the
+autoscaler will request:
 
 ```bash
-NODEGROUP_NAME=cpu-group
-N_WORKER=2
-openstack coe cluster resize ofocluster --nodegroup $NODEGROUP_NAME $N_WORKER
+openstack coe nodegroup update ofocluster2 cpu-group replace min_node_count=1 max_node_count=1
 ```
 
 If you want to delete specific nodes of the nodegroup (recommended if you have drained some nodes,
