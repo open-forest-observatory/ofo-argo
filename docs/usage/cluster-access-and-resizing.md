@@ -167,17 +167,22 @@ Quick access to create a GPU nodegroup:
 openstack coe nodegroup create ofocluster2 gpu-group --min-nodes 1 --max-nodes 8 --flavor g3.xl
 ```
 
+### Check if the autoscaler is planning any upsizing or downsizing
+
+```bash
+kubectl get configmap cluster-autoscaler-status -n kube-system -o yaml
+```
 
 
 
 ### Drain nodes before manually downsizing or deleting
 
+**WORK IN PROGRESS:** It appears that draining will actually kill running pods. Still need to find a way
+to simply prevent scheduling of new pods, and confirm that nodes are empty, before deleting.
+
 When decreasing the number of nodes in a nodegroup, it is best practice to drain the Kubernetes pods
 from them first. Given that we don't know which nodes OpenStack will delete when reducing the size, we
 have to drain the whole nodegroup. This is also what you'd do when deleting a nodegroup entirely.
-
-WORK IN PROGRESS: It appears that draining will actually kill running pods. Still need to find a way
-to simply prevent scheduling of new pods, and confirm that nodes are empty, before deleting.
 
 ```bash
 NODEGROUP_NAME=cpu-group
