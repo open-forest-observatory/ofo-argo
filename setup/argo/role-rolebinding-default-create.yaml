@@ -28,4 +28,19 @@ subjects:
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: Role
-  name: executor # can be any name as long as it matches the role
+  name: executor
+---
+# RoleBinding for the 'argo' service account used by our workflows
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: executor-argo
+  namespace: argo
+subjects:
+- kind: ServiceAccount
+  name: argo
+  namespace: argo
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: executor

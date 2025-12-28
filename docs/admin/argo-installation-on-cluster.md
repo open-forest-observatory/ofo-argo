@@ -79,19 +79,21 @@ kubectl describe pod -n argo <pod-name>
 
 ## Configure workflow permissions
 
-The standard `install.yaml` configures permissions for the workflow controller, but does not configure permissions for the service accounts that workflow pods run as. Without these permissions, the executor will fall back to the legacy insecure pod patch method. This step grants the `default` service account the minimal permissions needed to create and update workflowtaskresults.
+The standard `install.yaml` configures permissions for the workflow controller, but does not configure permissions for the service accounts that workflow pods run as. Without these permissions, workflows will fail with an error like:
 
-If you use custom service accounts in your workflows, you'll need to create additional RoleBindings for those accounts.
+> workflowtaskresults.argoproj.io is forbidden: User "system:serviceaccount:argo:argo" cannot create resource "workflowtaskresults"
+
+This step grants both the `default` and `argo` service accounts the minimal permissions needed to create and update workflowtaskresults. Our workflows use `serviceAccountName: argo`, so the `argo` binding is required.
 
 ```bash
-# Apply role and role binding
+# Apply role and role bindings
 kubectl apply -f setup/argo/role-rolebinding-default-create.yaml
 
-# Confirm the necessary permission was granted (should return: yes)
+# Confirm the necessary permissions were granted (both should return: yes)
 kubectl auth can-i create workflowtaskresults.argoproj.io -n argo --as=system:serviceaccount:argo:default
+kubectl auth can-i create workflowtaskresults.argoproj.io -n argo --as=system:serviceaccount:argo:argo
 
 # Optional: Describe the roles
-kubectl describe role argo-role -n argo
 kubectl describe role executor -n argo
 ```
 
