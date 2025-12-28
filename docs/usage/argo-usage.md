@@ -69,11 +69,47 @@ argo submit -n argo photogrammetry-workflow.yaml \
 -p PARAMETER_NAME=parameter_value \
 ```
 
-## Observe and manage workflows through the Argo web UI
+## Observe and manage workflows
+
+### Argo web UI
 
 Access the Argo UI at [argo.focal-lab.org](https://argo.focal-lab.org). When prompted to log in,
 supply the client authentication token. You can find the token string in
 [Vaultwarden](https://vault.focal-lab.org) under the record "Argo UI token".
+
+### Command line
+
+Argo provides a CLI to inspect and monitor workflows. But sometimes pure Kubernetes works well too.
+For example, here is a snippet to show all nodes and which Argo pods are running on each.
+
+```bash
+# Get all nodes first
+kubectl get nodes -o jsonpath='{.items[*].metadata.name}' | tr ' ' '\n' | grep -v '^$' > /tmp/nodes.txt
+
+# Get all non-DaemonSet pods in argo namespace
+kubectl get pods -n argo -o custom-columns=NODE:.spec.nodeName,NAMESPACE:.metadata.namespace,NAME:.metadata.name,STATUS:.status.phase,OWNER:.metadata.ownerReferences[0].kind --no-headers 2>/dev/null | \
+  grep -v DaemonSet > /tmp/pods.txt
+
+# Display results
+while read node; do
+  echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+  echo "NODE: $node"
+  echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+  
+  # Get pods for this node
+  grep "^$node " /tmp/pods.txt 2>/dev/null | awk '{printf "  %-40s %-20s %s\n", $3, $2, $4}'
+  
+  # Check if node has no pods
+  if ! grep -q "^$node " /tmp/pods.txt 2>/dev/null; then
+    echo "  (no argo pods)"
+  fi
+  
+  echo ""
+done < /tmp/nodes.txt
+
+# Cleanup
+rm /tmp/nodes.txt /tmp/pods.txt
+```
 
 ## Autoscaler considerations
 
