@@ -229,8 +229,8 @@ refer to `/ofo-share/argo-data/XYZ`) using the
 ### Determine the maximum number of projects to process in parallel
 
 When tasked with parallelizing across multiple multi-step DAGs, Argo prioritizes breadth first. So
-when it has a choice, it will start on a new DAG rather than starting the next step of an existing
-DAG. This is unfortunately not customizable, and it is undesirable because the workflow involves
+when it has a choice, it will start on a new DAG (metashape project) rather than starting the next step of an existing
+one. This is unfortunately not customizable, and it is undesirable because the workflow involves
 storing in-process files (including raw imagery, metashape project, outputs) locally during
 processing. Our shared storage does not have the space to store all files locally at the same time.
 So we need to restrict the number of parallel DAGs (metashape projects) it will attempt to run (a
