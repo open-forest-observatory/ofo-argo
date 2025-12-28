@@ -1,0 +1,31 @@
+# Purpose: The standard install.yaml configures permissions for the workflow controller, but does
+# not configure permissions for the service accounts that workflow pods run as. Without these
+# permissions, workflows will fail with:
+#   "workflowtaskresults.argoproj.io is forbidden"
+#
+# This grants the 'argo' service account (used by all our workflows) the minimal permissions
+# needed to create and update workflowtaskresults.
+
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: executor
+  namespace: argo
+rules:
+- apiGroups: ["argoproj.io"]
+  resources: ["workflowtaskresults"]
+  verbs: ["create", "patch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: executor-argo
+  namespace: argo
+subjects:
+- kind: ServiceAccount
+  name: argo
+  namespace: argo
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: executor

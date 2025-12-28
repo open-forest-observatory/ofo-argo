@@ -83,18 +83,14 @@ The standard `install.yaml` configures permissions for the workflow controller, 
 
 > workflowtaskresults.argoproj.io is forbidden: User "system:serviceaccount:argo:argo" cannot create resource "workflowtaskresults"
 
-This step grants both the `default` and `argo` service accounts the minimal permissions needed to create and update workflowtaskresults. Our workflows use `serviceAccountName: argo`, so the `argo` binding is required.
+This step grants the `argo` service account (used by all our workflows via `serviceAccountName: argo`) the minimal permissions needed to create and update workflowtaskresults.
 
 ```bash
-# Apply role and role bindings
-kubectl apply -f setup/argo/role-rolebinding-default-create.yaml
+# Apply role and role binding
+kubectl apply -f setup/argo/workflow-executor-rbac.yaml
 
-# Confirm the necessary permissions were granted (both should return: yes)
-kubectl auth can-i create workflowtaskresults.argoproj.io -n argo --as=system:serviceaccount:argo:default
+# Confirm the necessary permission was granted (should return: yes)
 kubectl auth can-i create workflowtaskresults.argoproj.io -n argo --as=system:serviceaccount:argo:argo
-
-# Optional: Describe the roles
-kubectl describe role executor -n argo
 ```
 
 ## Configure workflow controller: Delete completed pods, and use S3 for artifact and log storage

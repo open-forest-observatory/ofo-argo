@@ -11,7 +11,7 @@ metadata:
   generateName: dag-test-
 spec:
   entrypoint: main
-  serviceAccountName: default
+  serviceAccountName: argo
   templates:
   - name: main
     dag:

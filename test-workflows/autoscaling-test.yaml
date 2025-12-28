@@ -12,7 +12,7 @@ kind: Workflow
 metadata:
   generateName: autoscaling-test-
 spec:
-  serviceAccountName: default
+  serviceAccountName: argo
   entrypoint: main
 
   # Ensure pods are scheduled on non-GPU nodes
