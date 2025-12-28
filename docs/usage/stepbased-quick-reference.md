@@ -29,8 +29,7 @@ argo submit photogrammetry-workflow-stepbased.yaml \
   -p S3_BUCKET_POSTPROCESSED_OUTPUTS="ofo-public" \
   -p OUTPUT_DIRECTORY="processed-outputs/december-2024" \
   -p BOUNDARY_DIRECTORY="boundaries" \
-  -p POSTPROCESSING_IMAGE_TAG="latest" \
-  -p MAX_PARALLEL_PROJECTS=5
+  -p POSTPROCESSING_IMAGE_TAG="latest"
 ```
 
 ## Monitor Workflows
@@ -167,25 +166,18 @@ python3 -c "import yaml; yaml.safe_load(open('/data/argo-input/configs/mission_0
 
 ## Controlling Parallelism
 
-### Limit Concurrent Projects
-```bash
-# Process at most 3 projects at a time
-argo submit photogrammetry-workflow-stepbased.yaml \
-  --name "limited-parallelism-run" \
-  -p CONFIG_LIST="argo-input/config-lists/many_missions.txt" \
-  -p RUN_FOLDER="batch-run" \
-  -p MAX_PARALLEL_PROJECTS=3
+The max number of concurrent projects is controlled by the `parallelism` field in the workflow file
+(around line 79). Edit this value directly before submitting. Default is `10`.
+
+```yaml
+# In photogrammetry-workflow-stepbased.yaml
+- name: main
+  parallelism: 10  # Change this value as needed
+  steps:
+    ...
 ```
 
-### Unlimited Parallelism (Default)
-```bash
-# Process all projects concurrently (default behavior)
-argo submit photogrammetry-workflow-stepbased.yaml \
-  --name "full-parallelism-run" \
-  -p CONFIG_LIST="argo-input/config-lists/missions.txt" \
-  -p RUN_FOLDER="batch-run" \
-  -p MAX_PARALLEL_PROJECTS=0
-```
+See the [complete guide](stepbased-workflow.md#determine-the-maximum-number-of-projects-to-process-in-parallel) for details on why this can't be a command-line parameter.
 
 ## Common Workflow Patterns
 

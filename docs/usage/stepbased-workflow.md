@@ -233,14 +233,21 @@ when it has a choice, it will start on a new DAG (metashape project) rather than
 one. This is unfortunately not customizable, and it is undesirable because the workflow involves
 storing in-process files (including raw imagery, metashape project, outputs) locally during
 processing. Our shared storage does not have the space to store all files locally at the same time.
-So we need to restrict the number of parallel DAGs (metashape projects) it will attempt to run (a
-template-level attribute it calls 'parallelism'). The workflow is set up to control this via a
-workflow parameter that can be passed on the command line with `argo submit` called
-`MAX_PARALLEL_PROJECTS`. It makes sense to set this at or slightly below the max number of nodes
-availble for processing (or more specifically, the max number of pods that can be hosted on the
-available nodes). So if you're using an auto-scaling cluster with a max of 8 nodes, probably set
-`MAX_PARALLEL_PROJECTS` somewhere between 5 and 8. Set to `0` (default) for unrestricted
-parallelism.
+So we need to restrict the number of parallel DAGs (metashape projects) it will attempt to run.
+
+The workflow controls this via the `parallelism` field in the `main` template (around line 79 in
+`photogrammetry-workflow-stepbased.yaml`). **To change the max parallel projects, edit this value
+directly in the workflow file before submitting.** The default is set to `10`.
+
+!!! note "Why not a command-line parameter?"
+    Argo Workflows doesn't support parameter substitution for integer fields like `parallelism`,
+    so this value must be hardcoded in the workflow file. This is an [known issue](https://github.com/argoproj/argo-workflows/issues/1780) with Argo and we
+    should look for it to be resovled so we can implement it as a command line parameter.
+
+It makes sense to set this at or slightly below the max number of nodes available for processing
+(or more specifically, the max number of pods that can be hosted on the available nodes). So if
+you're using an auto-scaling cluster with a max of 8 nodes, set `parallelism` somewhere between 5
+and 8.
 
 
 ## Submit the workflow
@@ -259,8 +266,7 @@ argo submit -n argo photogrammetry-workflow-stepbased.yaml \
   -p S3_BUCKET_POSTPROCESSED_OUTPUTS=ofo-public \
   -p BOUNDARY_DIRECTORY=jgillan_test \
   -p POSTPROCESSING_IMAGE_TAG=latest \
-  -p UTILS_IMAGE_TAG=latest \
-  -p MAX_PARALLEL_PROJECTS=5
+  -p UTILS_IMAGE_TAG=latest
 ```
 
 !!! note "Workflow File"
@@ -289,7 +295,6 @@ Database parameters (not currently functional):
 | `BOUNDARY_DIRECTORY` | Parent directory in S3 where mission boundary polygons reside (used to clip imagery). Example: `jgillan_test` |
 | `POSTPROCESSING_IMAGE_TAG` | Docker image tag for the postprocessing container (default: `latest`). Use a specific branch name or tag to test development versions (e.g., `dy-manila`) |
 | `UTILS_IMAGE_TAG` | Docker image tag for the argo-workflow-utils container (default: `latest`). Use a specific branch name or tag to test development versions (e.g., `dy-manila`) |
-| `MAX_PARALLEL_PROJECTS` | Maximum number of projects to process concurrently (default: `0` = unlimited). Set to a positive integer (e.g., `5`) to limit how many projects from the config list run in parallel. For details see parallelism discussion above. |
 | `DB_*` | Database parameters for logging Argo status (not currently functional; credentials in [OFO credentials document](https://docs.google.com/document/d/155AP0P3jkVa-yT53a-QLp7vBAfjRa78gdST1Dfb4fls/edit?tab=t.0)) |
 
 **Secrets configuration:**
