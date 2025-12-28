@@ -289,7 +289,8 @@ argo submit -n argo photogrammetry-workflow-stepbased.yaml \
   -p S3_BUCKET_POSTPROCESSED_OUTPUTS=ofo-public \
   -p BOUNDARY_DIRECTORY=jgillan_test \
   -p POSTPROCESSING_IMAGE_TAG=latest \
-  -p UTILS_IMAGE_TAG=latest
+  -p UTILS_IMAGE_TAG=latest \
+  -p AUTOMATE_METASHAPE_IMAGE_TAG=latest
 ```
 
 !!! note "Workflow File"
@@ -318,6 +319,7 @@ Database parameters (not currently functional):
 | `BOUNDARY_DIRECTORY` | Parent directory in S3 where mission boundary polygons reside (used to clip imagery). Example: `jgillan_test` |
 | `POSTPROCESSING_IMAGE_TAG` | Docker image tag for the postprocessing container (default: `latest`). Use a specific branch name or tag to test development versions (e.g., `dy-manila`) |
 | `UTILS_IMAGE_TAG` | Docker image tag for the argo-workflow-utils container (default: `latest`). Use a specific branch name or tag to test development versions (e.g., `dy-manila`) |
+| `AUTOMATE_METASHAPE_IMAGE_TAG` | Docker image tag for the automate-metashape container (default: `latest`). Use a specific branch name or tag to test development versions |
 | `DB_*` | Database parameters for logging Argo status (not currently functional; credentials in [OFO credentials document](https://docs.google.com/document/d/155AP0P3jkVa-yT53a-QLp7vBAfjRa78gdST1Dfb4fls/edit?tab=t.0)) |
 
 **Secrets configuration:**

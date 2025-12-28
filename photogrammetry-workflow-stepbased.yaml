@@ -63,6 +63,9 @@ spec:
         value: "latest"
       - name: UTILS_IMAGE_TAG
         value: "latest"
+      # Docker image tag for automate-metashape container
+      - name: AUTOMATE_METASHAPE_IMAGE_TAG
+        value: "latest"
 
   # Defining where to read raw drone imagery data and write out imagery products to `/ofo-share`
   volumes:
@@ -375,7 +378,7 @@ spec:
           - name: config-file
           - name: step
       script:
-        image: ghcr.io/open-forest-observatory/automate-metashape:latest
+        image: ghcr.io/open-forest-observatory/automate-metashape:{{workflow.parameters.AUTOMATE_METASHAPE_IMAGE_TAG}}
         volumeMounts:
           - name: data
             mountPath: /data
@@ -423,7 +426,7 @@ spec:
       # Disable workflow-level non-GPU affinity; let GPU resource request handle node selection
       affinity: {}
       script:
-        image: ghcr.io/open-forest-observatory/automate-metashape:latest
+        image: ghcr.io/open-forest-observatory/automate-metashape:{{workflow.parameters.AUTOMATE_METASHAPE_IMAGE_TAG}}
         volumeMounts:
           - name: data
             mountPath: /data

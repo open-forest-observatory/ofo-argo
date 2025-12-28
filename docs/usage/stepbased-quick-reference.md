@@ -29,7 +29,8 @@ argo submit photogrammetry-workflow-stepbased.yaml \
   -p S3_BUCKET_POSTPROCESSED_OUTPUTS="ofo-public" \
   -p OUTPUT_DIRECTORY="processed-outputs/december-2024" \
   -p BOUNDARY_DIRECTORY="boundaries" \
-  -p POSTPROCESSING_IMAGE_TAG="latest"
+  -p POSTPROCESSING_IMAGE_TAG="latest" \
+  -p AUTOMATE_METASHAPE_IMAGE_TAG="latest"
 ```
 
 ## Monitor Workflows
