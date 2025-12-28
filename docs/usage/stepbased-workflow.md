@@ -229,11 +229,12 @@ refer to `/ofo-share/argo-data/XYZ`) using the
 ### Determine the maximum number of projects to process in parallel
 
 When tasked with parallelizing across multiple multi-step DAGs, Argo prioritizes breadth first. So
-when it has a choice, it will start on a new DAG (metashape project) rather than starting the next step of an existing
-one. This is unfortunately not customizable, and it is undesirable because the workflow involves
-storing in-process files (including raw imagery, metashape project, outputs) locally during
-processing. Our shared storage does not have the space to store all files locally at the same time.
-So we need to restrict the number of parallel DAGs (metashape projects) it will attempt to run.
+when it has a choice, it will start on a new DAG (metashape project) rather than starting the next
+step of an existing one. This is unfortunately not customizable, and it is undesirable because the
+workflow involves storing in-process files (including raw imagery, metashape project, outputs)
+locally during processing. Our shared storage does not have the space to store all files locally at
+the same time. In addition, we have a limited number of Metashape licenses. So we need to restrict
+the number of parallel DAGs (metashape projects) it will attempt to run.
 
 The workflow controls this via the `parallelism` field in the `main` template (around line 79 in
 `photogrammetry-workflow-stepbased.yaml`). **To change the max parallel projects, edit this value
