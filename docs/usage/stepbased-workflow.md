@@ -249,6 +249,29 @@ It makes sense to set this at or slightly below the max number of nodes availabl
 you're using an auto-scaling cluster with a max of 8 nodes, set `parallelism` somewhere between 5
 and 8.
 
+### Adjusting parallelism on a running workflow
+
+If you need to increase or decrease parallelism while a workflow is already running, you can patch
+the workflow directly. First, find your workflow name:
+
+```bash
+argo list -n argo
+```
+
+Then patch the `main` template's parallelism (index 0):
+
+```bash
+kubectl patch workflow <workflow-name> -n argo --type='json' \
+  -p='[{"op": "replace", "path": "/spec/templates/0/parallelism", "value": 20}]'
+```
+
+The change takes effect immediately for any new pods that haven't started yet. Already-running pods
+are not affected.
+
+!!! note
+    This only affects the running workflow instance. Future submissions will still use the value
+    from the YAML file.
+
 
 ## Submit the workflow
 
