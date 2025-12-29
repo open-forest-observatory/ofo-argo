@@ -407,8 +407,8 @@ spec:
             --step "{{inputs.parameters.step}}"
         resources:
           requests:
-            cpu: "17"
-            memory: "100Gi"
+            cpu: "9"
+            memory: "50Gi"
         env:
           - name: AGISOFT_FLS
             valueFrom:
@@ -444,8 +444,8 @@ spec:
         resources:
           requests:
             nvidia.com/gpu: 1
-            cpu: "17"
-            memory: "100Gi"
+            cpu: "9"
+            memory: "50Gi"
           limits:
             nvidia.com/gpu: 1
         env:
@@ -512,7 +512,7 @@ spec:
 
         resources:
           requests:
-            cpu: "100m"
+            cpu: "9" # was 100m
             memory: "256Mi"
           limits:
             memory: "1Gi"
@@ -595,8 +595,8 @@ spec:
             value: "{{workflow.parameters.TEMP_WORKING_DIR}}/postprocessing"
         resources:
           requests:
-            cpu: "1"
-            memory: "4Gi"
-          limits:
-            cpu: "4"
-            memory: "16Gi"
+            cpu: "9"
+            memory: "50Gi"
+          # limits:
+          #   cpu: "4"
+          #   memory: "16Gi"
