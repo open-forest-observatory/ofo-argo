@@ -226,9 +226,10 @@ openstack server delete <server-id-1> <server-id-2>
 
 ### Delete a nodegroup
 
-If you attempt to delete a nodegroup with many nodes, the delete command can compute with the
-autoscaler, which will try to add nodes to restore the target node count. To prevent this, first
-reduce the max size of the nodegroup to 1 (the lowest allowed value), then delete.
+If you attempt to delete a nodegroup with many nodes and lots of pending compute jobs, the delete
+command can compete with the autoscaler, which will try to add nodes to restore the target node
+count. To prevent this, first reduce the max size of the nodegroup to 1 (the lowest allowed value),
+then delete.
 
 ```bash
 openstack coe nodegroup update ofocluster2 $NODEGROUP_NAME min_node_count=1 max_node_count=1
