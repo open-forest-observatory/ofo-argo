@@ -508,6 +508,16 @@ argo logs <workflow-name> -c determine-datasets
 4. Verify GPU nodes are tainted (`nvidia.com/gpu=true:NoSchedule`) - see [GPU node tainting](../admin/cluster-creation-and-resizing.md#configure-gpu-node-tainting)
 5. Verify the GPU step template has the correct toleration and resource request
 
+### MIG pods not scheduling
+
+**Check:**
+
+1. Verify nodegroup name includes `mig1-`, `mig2-`, or `mig3-`
+2. Verify the MIG NodeFeatureRule is applied: `kubectl get nodefeaturerule mig-nodegroup-labels`
+3. Check node has correct MIG label: `kubectl get node <name> -o yaml | grep mig.config`
+4. Check MIG resources are available: `kubectl describe node <name> | grep mig`
+5. Verify workflow requests correct MIG resource type (e.g., `nvidia.com/mig-2g.10gb`)
+
 ### Project file not found in later steps
 
 **Cause:** The `setup` step failed or project file was not saved correctly.

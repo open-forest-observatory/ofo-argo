@@ -171,6 +171,35 @@ openstack coe nodegroup create ofocluster2 gpu-group --min-nodes 1 --max-nodes 8
     GPU nodes are automatically tainted to prevent non-GPU workloads from using them. Workflow
     templates that need GPU access must include a toleration. See [GPU node scheduling](argo-usage.md#gpu-node-scheduling) for details.
 
+### MIG nodegroups
+
+MIG (Multi-Instance GPU) partitions A100 GPUs into smaller isolated slices, allowing multiple pods per GPU. Use MIG when your GPU workloads have low utilization (<30%) and don't need full GPU memory.
+
+**Create MIG nodegroups** by including `mig1-`, `mig2-`, or `mig3-` in the nodegroup name:
+
+```bash
+# 4 pods/GPU (10GB VRAM, 1/7 compute each) - best for low-utilization workloads
+openstack coe nodegroup create ofocluster2 mig1-group --min-nodes 1 --max-nodes 4 --flavor g3.xl
+
+# 3 pods/GPU (10GB VRAM, 2/7 compute each) - balanced
+openstack coe nodegroup create ofocluster2 mig2-group --min-nodes 1 --max-nodes 4 --flavor g3.xl
+
+# 2 pods/GPU (20GB VRAM, 3/7 compute each) - for memory-intensive workloads
+openstack coe nodegroup create ofocluster2 mig3-group --min-nodes 1 --max-nodes 4 --flavor g3.xl
+```
+
+!!! note "Resource limits for MIG"
+    When using MIG, reduce CPU/memory requests to fit multiple pods per node:
+
+    | Profile | MIG resource request | Max pods/node | CPU each | RAM each |
+    |---------|----------------------|---------------|----------|----------|
+    | mig1 (4 slices) | `nvidia.com/mig-1g.10gb` | 4 | 8 | 28GB |
+    | mig2 (3 slices) | `nvidia.com/mig-2g.10gb` | 3 | 10 | 38GB |
+    | mig3 (2 slices) | `nvidia.com/mig-3g.20gb` | 2 | 15 | 55GB |
+
+!!! warning "Workflow compatibility"
+    MIG nodegroups require workflows that request MIG resources (e.g., `nvidia.com/mig-2g.10gb: 1`) instead of full GPUs (`nvidia.com/gpu: 1`). See [MIG workflow configuration](argo-usage.md#mig-multi-instance-gpu).
+
 ### Check if the autoscaler is planning any upsizing or downsizing
 
 ```bash

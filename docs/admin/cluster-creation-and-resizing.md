@@ -284,6 +284,48 @@ kubectl get nodes -l nvidia.com/gpu.present=true -o custom-columns='NAME:.metada
 - **System pods**: Not affected. DaemonSets (GPU Operator, NFD, Calico, kube-proxy, etc.) have built-in tolerations that allow them to run on tainted nodes.
 
 
+## Configure MIG (Multi-Instance GPU)
+
+MIG partitions A100 GPUs into isolated slices, allowing multiple pods to share one physical GPU with hardware-level isolation. This is optional - standard GPU nodegroups work without MIG.
+
+### MIG profiles
+
+| Nodegroup pattern | MIG profile | Pods/GPU | VRAM each | Compute each |
+|-------------------|-------------|----------|-----------|--------------|
+| `mig1-*` | `all-1g.10gb` | 4 | 10GB | 1/7 |
+| `mig2-*` | `all-2g.10gb` | 3 | 10GB | 2/7 |
+| `mig3-*` | `all-3g.20gb` | 2 | 20GB | 3/7 |
+
+### Apply MIG configuration rule
+
+```bash
+kubectl apply -f setup/k8s/mig-nodegroup-labels.yaml
+```
+
+This creates a NodeFeatureRule that automatically labels GPU nodes based on their nodegroup name. The NVIDIA MIG manager watches for these labels and configures the GPU accordingly.
+
+### Verify MIG is working
+
+After creating a MIG nodegroup (see [MIG nodegroups](../usage/cluster-access-and-resizing.md#mig-nodegroups)):
+
+```bash
+# Check node MIG config label
+kubectl get nodes -l nvidia.com/mig.config -o custom-columns='NAME:.metadata.name,MIG_CONFIG:.metadata.labels.nvidia\.com/mig\.config'
+
+# Check MIG resources are available
+kubectl get nodes -o custom-columns='NAME:.metadata.name,MIG-1G:.status.allocatable.nvidia\.com/mig-1g\.10gb,MIG-2G:.status.allocatable.nvidia\.com/mig-2g\.10gb,MIG-3G:.status.allocatable.nvidia\.com/mig-3g\.20gb'
+```
+
+### How it works
+
+1. User creates nodegroup with MIG naming (e.g., `mig2-group`)
+2. Node joins cluster with name containing `-mig2-`
+3. NFD applies label `nvidia.com/mig.config=all-2g.10gb`
+4. MIG manager detects label, configures GPU into 3 partitions
+5. Device plugin exposes `nvidia.com/mig-2g.10gb: 3` as allocatable resources
+6. Pods requesting `nvidia.com/mig-2g.10gb: 1` get one partition
+
+
 ## Kubernetes management
 
 If you are resuming cluster management after a reboot, you will need to re-set environment variables and source the application credential:

@@ -155,3 +155,23 @@ a `tolerations` block - they don't need to override or repeat affinity rules. Se
 `metashape-gpu-step` template in `photogrammetry-workflow-stepbased.yaml` for an example.
 
 For admin setup of GPU tainting, see [GPU node tainting](../admin/cluster-creation-and-resizing.md#configure-gpu-node-tainting).
+
+### MIG (Multi-Instance GPU)
+
+For workloads with low GPU utilization, MIG nodegroups partition each A100 into multiple isolated slices. To use MIG, create a MIG nodegroup (see [MIG nodegroups](cluster-access-and-resizing.md#mig-nodegroups)) and update the workflow GPU template to request MIG resources:
+
+```yaml
+resources:
+  requests:
+    nvidia.com/mig-2g.10gb: 1  # Instead of nvidia.com/gpu: 1
+    cpu: "10"
+    memory: "38Gi"
+```
+
+Available MIG resource types:
+
+- `nvidia.com/mig-1g.10gb` - 1/7 compute, 10GB VRAM (4 per GPU)
+- `nvidia.com/mig-2g.10gb` - 2/7 compute, 10GB VRAM (3 per GPU)
+- `nvidia.com/mig-3g.20gb` - 3/7 compute, 20GB VRAM (2 per GPU)
+
+The existing GPU toleration works for both MIG and non-MIG GPU nodes.
