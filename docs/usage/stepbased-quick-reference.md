@@ -139,13 +139,16 @@ build_mesh:
 match_photos:
   enabled: true
   gpu_enabled: true
-  gpu_resource: "nvidia.com/mig-2g.10gb"  # 2/7 compute, 10GB VRAM
+  gpu_resource: "nvidia.com/mig-1g.10gb"  # 1/7 compute, 10GB VRAM
+  gpu_count: 2  # Request 2 slices for 2/7 compute
 
 build_depth_maps:
   enabled: true
   gpu_resource: "nvidia.com/mig-3g.20gb"  # 3/7 compute, 20GB VRAM
+  # gpu_count: 1 (default)
 
 # Available: nvidia.com/gpu (full, default), mig-1g.10gb, mig-2g.10gb, mig-3g.20gb
+# Use gpu_count to request multiple slices of the same type
 ```
 
 ## Troubleshooting Commands
