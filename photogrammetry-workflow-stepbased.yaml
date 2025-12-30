@@ -485,8 +485,8 @@ spec:
             --step "{{inputs.parameters.step}}"
         resources:
           requests:
-            cpu: "9"
-            memory: "50Gi"
+            cpu: "4"
+            memory: "16Gi"
         env:
           - name: AGISOFT_FLS
             valueFrom:
