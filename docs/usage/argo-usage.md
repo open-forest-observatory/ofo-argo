@@ -135,9 +135,22 @@ node. To minimize the probability of this, we have implemented several measures:
    they are deleted by podGC, which allows the node to scale down normally.
 
 These defaults are configured in the workflow controller configmap (see [Argo
-installation](../admin/argo-installation-on-cluster.md)). **Important:** Workflows that define their
-own `affinity` block (e.g., to specify GPU vs CPU node selection) must include the podAffinity rules
-explicitly in the workflow, as workflow-level affinity overrides the configmap defaults. See the
-`photogrammetry-workflow-stepbased.yml` for an example. The `podAffinity` section can be copy-pasted
-verbatim. There is an alternative option we could apply in the future: we define an alternative,
-custom pod scheduler and configure Argo workflows to use it instead of the default scheduler.
+installation](../admin/argo-installation-on-cluster.md)).
+
+## GPU node scheduling
+
+GPU nodes are automatically **tainted** to prevent non-GPU workloads from being scheduled on them.
+This ensures expensive GPU resources are reserved for workloads that need them.
+
+**How it works:**
+
+- GPU nodes receive a taint: `nvidia.com/gpu=true:NoSchedule`
+- CPU pods (no toleration) are automatically excluded from GPU nodes
+- GPU pods have a toleration + GPU resource request, allowing them to schedule on GPU nodes
+- All pods still inherit `podAffinity` from the workflow controller configmap
+
+This taint-based approach is simpler than using affinity overrides. GPU templates only need to add
+a `tolerations` block - they don't need to override or repeat affinity rules. See the
+`metashape-gpu-step` template in `photogrammetry-workflow-stepbased.yaml` for an example.
+
+For admin setup of GPU tainting, see [GPU node tainting](../admin/argo-installation-on-cluster.md#configure-gpu-node-tainting).
