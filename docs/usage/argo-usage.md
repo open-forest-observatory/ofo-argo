@@ -147,10 +147,11 @@ This ensures expensive GPU resources are reserved for workloads that need them.
 - GPU nodes receive a taint: `nvidia.com/gpu=true:NoSchedule`
 - CPU pods (no toleration) are automatically excluded from GPU nodes
 - GPU pods have a toleration + GPU resource request, allowing them to schedule on GPU nodes
-- All pods still inherit `podAffinity` from the workflow controller configmap
+- All pods still inherit `podAffinity` from the workflow controller configmap to prefer scheduling
+  on nodes with other running pods (to support autoscaling in removing empty nodes)
 
 This taint-based approach is simpler than using affinity overrides. GPU templates only need to add
 a `tolerations` block - they don't need to override or repeat affinity rules. See the
 `metashape-gpu-step` template in `photogrammetry-workflow-stepbased.yaml` for an example.
 
-For admin setup of GPU tainting, see [GPU node tainting](../admin/argo-installation-on-cluster.md#configure-gpu-node-tainting).
+For admin setup of GPU tainting, see [GPU node tainting](../admin/cluster-creation-and-resizing.md#configure-gpu-node-tainting).

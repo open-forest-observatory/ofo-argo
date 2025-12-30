@@ -167,6 +167,10 @@ Quick access to create a GPU nodegroup:
 openstack coe nodegroup create ofocluster2 gpu-group --min-nodes 1 --max-nodes 8 --flavor g3.xl
 ```
 
+!!! note "GPU Node Tainting"
+    GPU nodes are automatically tainted to prevent non-GPU workloads from using them. Workflow
+    templates that need GPU access must include a toleration. See [GPU node scheduling](argo-usage.md#gpu-node-scheduling) for details.
+
 ### Check if the autoscaler is planning any upsizing or downsizing
 
 ```bash

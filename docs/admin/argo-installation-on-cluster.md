@@ -159,54 +159,6 @@ kubectl get configmap workflow-controller-configmap -n argo -o yaml
 
 You should see the `artifactRepository` section with the S3 configuration.
 
-## Configure GPU node tainting
-
-GPU nodes are tainted to prevent non-GPU workloads from being scheduled on them. This ensures that expensive GPU resources are reserved for workloads that actually need them. The taint is applied automatically by Node Feature Discovery (NFD) based on the presence of an NVIDIA GPU.
-
-### Enable NFD taints
-
-NFD is pre-installed on Jetstream2 Magnum clusters but taints are disabled by default. Enable them:
-
-```bash
-# Add NFD helm repo (if not already added)
-helm repo add nfd https://kubernetes-sigs.github.io/node-feature-discovery/charts
-helm repo update nfd
-
-# Check current NFD version
-helm list -n node-feature-discovery
-
-# Enable taints (use the same version as currently installed)
-helm upgrade node-feature-discovery nfd/node-feature-discovery \
-  -n node-feature-discovery \
-  --version <CURRENT_VERSION> \
-  --reuse-values \
-  --set master.config.enableTaints=true
-```
-
-### Apply GPU taint rule
-
-Apply the NodeFeatureRule that automatically taints any node with an NVIDIA GPU:
-
-```bash
-kubectl apply -f setup/k8s/gpu-taint-rule.yaml
-```
-
-This creates a taint `nvidia.com/gpu=true:NoSchedule` on all GPU nodes. The taint is applied automatically when:
-- A new GPU node joins the cluster (e.g., via autoscaler)
-- An existing node gains a GPU label
-
-### Verify taint (when GPU nodes exist)
-
-```bash
-kubectl get nodes -l nvidia.com/gpu.present=true -o custom-columns='NAME:.metadata.name,TAINTS:.spec.taints'
-```
-
-### How it works
-
-- **CPU pods**: No toleration needed. Automatically excluded from tainted GPU nodes.
-- **GPU pods**: Must have a toleration (configured in workflow templates) AND request GPU resources.
-- **Pod affinity**: All pods still inherit `podAffinity` from `workflow-controller-configmap` to prefer nodes with running pods.
-
 ## Test the installation
 
 Run a test workflow to verify everything is working:

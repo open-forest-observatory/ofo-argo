@@ -234,19 +234,54 @@ Replace `<LICENSE_SERVER_IP>` with the actual IP address from the credentials do
 
 These secrets only need to be created once per cluster.
 
-### Rotating secrets
+## Configure GPU node tainting
 
-If you accidentally expose a secret, or for periodic rotation, delete, then re-create. Example for
-S3 (assuming your S3 is via JS2 Swift):
+GPU nodes are tainted to prevent non-GPU workloads from being scheduled on them. This ensures that expensive GPU resources are reserved for workloads that actually need them. The taint is applied automatically by Node Feature Discovery (NFD) based on the presence of an NVIDIA GPU.
 
-List creds to get the ID of the cred you want to swap out: `openstack ec2 credentials list`
-Delete it: `openstack ec2 credentials delete <your-access-key-id>`
-Create a new one: `openstack ec2 credentials create`
-Update it in [Vaultwarden](http://vault.focal-lab.org).
-Delete the k8s secret: `kubectl delete secret -n argo s3-credentials`
-Re-create k8s secret following the instructions above.
-If you have already installed Argo on the cluster, restart the workflow controller so it picks up
-the new creds: `kubectl rollout restart deployment workflow-controller -n argo`
+### Enable NFD taints
+
+NFD is pre-installed on Jetstream2 Magnum clusters but taints are disabled by default. Enable them:
+
+```bash
+# Add NFD helm repo (if not already added)
+helm repo add nfd https://kubernetes-sigs.github.io/node-feature-discovery/charts
+helm repo update nfd
+
+# Check current NFD version
+helm list -n node-feature-discovery
+
+# Enable taints (use the same version as currently installed)
+helm upgrade node-feature-discovery nfd/node-feature-discovery \
+  -n node-feature-discovery \
+  --version <CURRENT_VERSION> \
+  --reuse-values \
+  --set master.config.enableTaints=true
+```
+
+### Apply GPU taint rule
+
+Apply the NodeFeatureRule that automatically taints any node with an NVIDIA GPU:
+
+```bash
+kubectl apply -f setup/k8s/gpu-taint-rule.yaml
+```
+
+This creates a taint `nvidia.com/gpu=true:NoSchedule` on all GPU nodes. The taint is applied automatically when:
+
+- A new GPU node joins the cluster (e.g., via autoscaler)
+- An existing node gains a GPU label
+
+### Verify taint (when GPU nodes exist)
+
+```bash
+kubectl get nodes -l nvidia.com/gpu.present=true -o custom-columns='NAME:.metadata.name,TAINTS:.spec.taints'
+```
+
+### How it works
+
+- **CPU pods**: No toleration needed. Automatically excluded from tainted GPU nodes.
+- **GPU pods**: Must have a toleration AND request GPU resources. See the `metashape-gpu-step` template in `photogrammetry-workflow-stepbased.yaml` for an example.
+- **System pods**: Not affected. DaemonSets (GPU Operator, NFD, Calico, kube-proxy, etc.) have built-in tolerations that allow them to run on tainted nodes.
 
 
 ## Kubernetes management
@@ -292,6 +327,22 @@ Look for the `/dev/vda1` volume. Then delete the debugging pods:
 ```bash
 kubectl get pods -o name | grep node-debugger | xargs kubectl delete
 ```
+
+### Rotating secrets
+
+If you accidentally expose a secret, or for periodic rotation, delete, then re-create. Example for
+S3 (assuming your S3 is via JS2 Swift):
+
+List creds to get the ID of the cred you want to swap out: `openstack ec2 credentials list`
+Delete it: `openstack ec2 credentials delete <your-access-key-id>`
+Create a new one: `openstack ec2 credentials create`
+Update it in [Vaultwarden](http://vault.focal-lab.org).
+Delete the k8s secret: `kubectl delete secret -n argo s3-credentials`
+Re-create k8s secret following the instructions above.
+If you have already installed Argo on the cluster, restart the workflow controller so it picks up
+the new creds: `kubectl rollout restart deployment workflow-controller -n argo`
+
+
 
 ## Cluster resizing
 

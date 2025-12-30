@@ -505,7 +505,7 @@ argo logs <workflow-name> -c determine-datasets
 1. Verify `gpu_enabled` parameter in config is a boolean (`true` or `false`), not a string
 2. Check preprocessing output to confirm correct `use_gpu` parameter was extracted
 3. Verify cluster has GPU nodes available and properly labeled (`nvidia.com/gpu.present=true`)
-4. Verify GPU nodes are tainted (`nvidia.com/gpu=true:NoSchedule`) - see [GPU node tainting](../admin/argo-installation-on-cluster.md#configure-gpu-node-tainting)
+4. Verify GPU nodes are tainted (`nvidia.com/gpu=true:NoSchedule`) - see [GPU node tainting](../admin/cluster-creation-and-resizing.md#configure-gpu-node-tainting)
 5. Verify the GPU step template has the correct toleration and resource request
 
 ### Project file not found in later steps
