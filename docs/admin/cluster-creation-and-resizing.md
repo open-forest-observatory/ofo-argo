@@ -258,6 +258,29 @@ helm upgrade node-feature-discovery nfd/node-feature-discovery \
   --set master.config.enableTaints=true
 ```
 
+### Enable mixed MIG strategy
+
+The GPU Operator defaults to "single" MIG strategy, which exposes MIG slices as generic `nvidia.com/gpu` resources. For MIG nodegroups to expose specific resources like `nvidia.com/mig-2g.10gb`, enable "mixed" strategy:
+
+```bash
+# Add NVIDIA helm repo (if not already added)
+helm repo add nvidia https://helm.ngc.nvidia.com/nvidia
+helm repo update nvidia
+
+# Check current GPU Operator version
+helm list -n gpu-operator
+
+# Enable mixed MIG strategy (use the same version as currently installed)
+helm upgrade nvidia-gpu-operator nvidia/gpu-operator \
+  -n gpu-operator \
+  --version <CURRENT_VERSION> \
+  --reuse-values \
+  --set mig.strategy=mixed
+```
+
+!!! note "Cluster upgrades"
+    This setting may be reset if the cluster template is upgraded and Magnum redeploys the GPU Operator. Re-run this command after cluster upgrades if MIG resources stop appearing.
+
 ### Apply GPU taint rule
 
 Apply the NodeFeatureRule that automatically taints any node with an NVIDIA GPU:
