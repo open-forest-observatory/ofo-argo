@@ -133,6 +133,21 @@ build_mesh:
   gpu_enabled: false  # CPU node
 ```
 
+### MIG (GPU Partitioning) Configuration
+```yaml
+# Use MIG partition instead of full GPU
+match_photos:
+  enabled: true
+  gpu_enabled: true
+  gpu_resource: "nvidia.com/mig-2g.10gb"  # 2/7 compute, 10GB VRAM
+
+build_depth_maps:
+  enabled: true
+  gpu_resource: "nvidia.com/mig-3g.20gb"  # 3/7 compute, 20GB VRAM
+
+# Available: nvidia.com/gpu (full, default), mig-1g.10gb, mig-2g.10gb, mig-3g.20gb
+```
+
 ## Troubleshooting Commands
 
 ### Check Preprocessing Output

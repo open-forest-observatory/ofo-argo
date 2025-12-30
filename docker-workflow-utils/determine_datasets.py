@@ -139,6 +139,10 @@ def process_config_file(config_path: str) -> Dict[str, Any]:
     # The original project_name is preserved for file paths and processing
     project_name_sanitized = sanitize_dns1123(project_name)
 
+    # Default GPU resource (full GPU). Can be overridden per-step with MIG resources like:
+    # "nvidia.com/mig-1g.10gb", "nvidia.com/mig-2g.10gb", "nvidia.com/mig-3g.20gb"
+    DEFAULT_GPU_RESOURCE = "nvidia.com/gpu"
+
     # Apply translation logic from implementation plan
     mission = {
         "project_name": project_name,
@@ -149,15 +153,18 @@ def process_config_file(config_path: str) -> Dict[str, Any]:
         # Use actual Python booleans (not strings) so they serialize to JSON true/false
         "match_photos_enabled": str_to_bool(get_nested(config, ['match_photos', 'enabled'], False)),
         "match_photos_use_gpu": str_to_bool(get_nested(config, ['match_photos', 'gpu_enabled'], True)),
+        "match_photos_gpu_resource": get_nested(config, ['match_photos', 'gpu_resource'], DEFAULT_GPU_RESOURCE),
 
         "align_cameras_enabled": str_to_bool(get_nested(config, ['align_cameras', 'enabled'], False)),
 
         "build_depth_maps_enabled": str_to_bool(get_nested(config, ['build_depth_maps', 'enabled'], False)),
+        "build_depth_maps_gpu_resource": get_nested(config, ['build_depth_maps', 'gpu_resource'], DEFAULT_GPU_RESOURCE),
 
         "build_point_cloud_enabled": str_to_bool(get_nested(config, ['build_point_cloud', 'enabled'], False)),
 
         "build_mesh_enabled": str_to_bool(get_nested(config, ['build_mesh', 'enabled'], False)),
         "build_mesh_use_gpu": str_to_bool(get_nested(config, ['build_mesh', 'gpu_enabled'], True)),
+        "build_mesh_gpu_resource": get_nested(config, ['build_mesh', 'gpu_resource'], DEFAULT_GPU_RESOURCE),
 
         # build_dem_orthomosaic runs if either DEM or orthomosaic is enabled
         "build_dem_orthomosaic_enabled": (
@@ -168,6 +175,8 @@ def process_config_file(config_path: str) -> Dict[str, Any]:
         # Secondary photo processing runs if photo_path_secondary is non-empty
         "match_photos_secondary_enabled": bool(get_nested(config, ['project', 'photo_path_secondary'], "")),
         "match_photos_secondary_use_gpu": str_to_bool(get_nested(config, ['match_photos', 'gpu_enabled'], True)),
+        # Secondary uses same GPU resource as primary match_photos
+        "match_photos_secondary_gpu_resource": get_nested(config, ['match_photos', 'gpu_resource'], DEFAULT_GPU_RESOURCE),
 
         "align_cameras_secondary_enabled": bool(get_nested(config, ['project', 'photo_path_secondary'], "")),
     }

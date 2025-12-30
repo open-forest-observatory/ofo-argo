@@ -84,22 +84,30 @@ spec:
                   value: "{{item.match_photos_enabled}}"
                 - name: match_photos_use_gpu
                   value: "{{item.match_photos_use_gpu}}"
+                - name: match_photos_gpu_resource
+                  value: "{{item.match_photos_gpu_resource}}"
                 - name: align_cameras_enabled
                   value: "{{item.align_cameras_enabled}}"
                 - name: build_depth_maps_enabled
                   value: "{{item.build_depth_maps_enabled}}"
+                - name: build_depth_maps_gpu_resource
+                  value: "{{item.build_depth_maps_gpu_resource}}"
                 - name: build_point_cloud_enabled
                   value: "{{item.build_point_cloud_enabled}}"
                 - name: build_mesh_enabled
                   value: "{{item.build_mesh_enabled}}"
                 - name: build_mesh_use_gpu
                   value: "{{item.build_mesh_use_gpu}}"
+                - name: build_mesh_gpu_resource
+                  value: "{{item.build_mesh_gpu_resource}}"
                 - name: build_dem_orthomosaic_enabled
                   value: "{{item.build_dem_orthomosaic_enabled}}"
                 - name: match_photos_secondary_enabled
                   value: "{{item.match_photos_secondary_enabled}}"
                 - name: match_photos_secondary_use_gpu
                   value: "{{item.match_photos_secondary_use_gpu}}"
+                - name: match_photos_secondary_gpu_resource
+                  value: "{{item.match_photos_secondary_gpu_resource}}"
                 - name: align_cameras_secondary_enabled
                   value: "{{item.align_cameras_secondary_enabled}}"
             withParam: "{{steps.determine-projects.outputs.result}}"
@@ -143,14 +151,18 @@ spec:
           # Step enabled flags
           - name: match_photos_enabled
           - name: match_photos_use_gpu
+          - name: match_photos_gpu_resource
           - name: align_cameras_enabled
           - name: build_depth_maps_enabled
+          - name: build_depth_maps_gpu_resource
           - name: build_point_cloud_enabled
           - name: build_mesh_enabled
           - name: build_mesh_use_gpu
+          - name: build_mesh_gpu_resource
           - name: build_dem_orthomosaic_enabled
           - name: match_photos_secondary_enabled
           - name: match_photos_secondary_use_gpu
+          - name: match_photos_secondary_gpu_resource
           - name: align_cameras_secondary_enabled
       dag:
         tasks:
@@ -179,6 +191,8 @@ spec:
                   value: "{{inputs.parameters.config-file}}"
                 - name: step
                   value: "match_photos"
+                - name: gpu-resource
+                  value: "{{inputs.parameters.match_photos_gpu_resource}}"
 
           - name: match-photos-cpu
             depends: "setup.Succeeded"
@@ -220,6 +234,8 @@ spec:
                   value: "{{inputs.parameters.config-file}}"
                 - name: step
                   value: "build_depth_maps"
+                - name: gpu-resource
+                  value: "{{inputs.parameters.build_depth_maps_gpu_resource}}"
 
           # Step 5: Build Point Cloud (conditional, CPU only)
           - name: build-point-cloud
@@ -248,6 +264,8 @@ spec:
                   value: "{{inputs.parameters.config-file}}"
                 - name: step
                   value: "build_mesh"
+                - name: gpu-resource
+                  value: "{{inputs.parameters.build_mesh_gpu_resource}}"
 
           - name: build-mesh-cpu
             depends: "build-point-cloud.Succeeded || build-point-cloud.Skipped"
@@ -289,6 +307,8 @@ spec:
                   value: "{{inputs.parameters.config-file}}"
                 - name: step
                   value: "match_photos_secondary"
+                - name: gpu-resource
+                  value: "{{inputs.parameters.match_photos_secondary_gpu_resource}}"
 
           - name: match-photos-secondary-cpu
             depends: "build-dem-orthomosaic.Succeeded || build-dem-orthomosaic.Skipped"
@@ -401,18 +421,30 @@ spec:
                 key: license_server
 
     # GPU step template for Metashape processing
+    # Supports dynamic GPU resource selection (full GPU or MIG partitions)
     - name: metashape-gpu-step
       inputs:
         parameters:
           - name: project-name
           - name: config-file
           - name: step
+          - name: gpu-resource
+            default: "nvidia.com/gpu"  # Full GPU. MIG options: nvidia.com/mig-1g.10gb, mig-2g.10gb, mig-3g.20gb
       # Tolerate GPU node taint; GPU resource request handles node selection
       tolerations:
         - key: nvidia.com/gpu
           operator: Equal
           value: "true"
           effect: NoSchedule
+      # Dynamic GPU resource request via podSpecPatch (parameter substitution happens before YAML parse)
+      podSpecPatch: |
+        containers:
+        - name: main
+          resources:
+            requests:
+              {{inputs.parameters.gpu-resource}}: "1"
+            limits:
+              {{inputs.parameters.gpu-resource}}: "1"
       script:
         image: ghcr.io/open-forest-observatory/automate-metashape:{{workflow.parameters.AUTOMATE_METASHAPE_IMAGE_TAG}}
         volumeMounts:
@@ -431,11 +463,8 @@ spec:
             --step "{{inputs.parameters.step}}"
         resources:
           requests:
-            nvidia.com/gpu: 1
             cpu: "9"
             memory: "50Gi"
-          limits:
-            nvidia.com/gpu: 1
         env:
           - name: AGISOFT_FLS
             valueFrom:

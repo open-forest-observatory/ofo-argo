@@ -196,6 +196,39 @@ project:
 
 The `build_depth_maps` step always runs on GPU nodes (no config option) as it always benefits from GPU acceleration.
 
+**GPU resource selection (MIG support):** For GPU steps, you can optionally specify which GPU resource to request using `gpu_resource`. This allows using MIG (Multi-Instance GPU) partitions instead of full GPUs:
+
+```yaml
+match_photos:
+  enabled: true
+  gpu_enabled: true
+  gpu_resource: "nvidia.com/mig-2g.10gb"  # Use MIG partition instead of full GPU
+
+build_depth_maps:
+  enabled: true
+  gpu_resource: "nvidia.com/gpu"  # Explicitly request full GPU (this is the default)
+
+build_mesh:
+  enabled: true
+  gpu_enabled: true
+  gpu_resource: "nvidia.com/mig-3g.20gb"  # Larger MIG partition for mesh building
+```
+
+Available GPU resources:
+
+| Resource | Description | Pods per GPU |
+|----------|-------------|--------------|
+| `nvidia.com/gpu` | Full GPU (default if `gpu_resource` omitted) | 1 |
+| `nvidia.com/mig-1g.10gb` | 1/7 compute, 10GB VRAM | 4 |
+| `nvidia.com/mig-2g.10gb` | 2/7 compute, 10GB VRAM | 3 |
+| `nvidia.com/mig-3g.20gb` | 3/7 compute, 20GB VRAM | 2 |
+
+!!! tip "When to use MIG"
+    Use MIG partitions when your GPU steps have low utilization. This allows multiple workflow steps to share a single physical GPU, reducing costs. Start with `mig-2g.10gb` for most workloads; use `mig-3g.20gb` for memory-intensive steps like `build_depth_maps`.
+
+!!! note "Nodegroup requirement"
+    MIG resources are only available on MIG-enabled nodegroups. Create a MIG nodegroup with a name containing `mig1-`, `mig2-`, or `mig3-` (see [MIG nodegroups](cluster-access-and-resizing.md#mig-nodegroups)).
+
 **Parameters handled by Argo:** The `project_path`, `output_path`, and `project_name` configuration parameters are handled automatically by the Argo workflow:
 
 - `project_path` and `output_path` are determined via CLI arguments passed to the automate-metashape container, derived from the `RUN_FOLDER` workflow parameter
