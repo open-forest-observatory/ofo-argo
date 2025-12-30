@@ -1,0 +1,400 @@
+api_calls:
+  - api_call: addPhotos
+    duration_seconds: 31.8
+    cpu_percent: 2.4
+    cpu_percent_p90: 2.8
+    gpu_percent: null
+    gpu_percent_p90: null
+    cpu_cores_used: 0.3
+    cpu_cores_used_p90: 0.3
+    cpu_cores_available: 32
+    proc_mem_peak_gb: 0.4
+    container_limit_gb: 122.8
+    container_used_peak_gb: 24.3
+    container_avail_min_gb: 98.5
+    sys_total_gb: 122.8
+    sys_used_peak_gb: 2.5
+    sys_avail_min_gb: 120.3
+    gpu_count: 0
+    gpu_model: 
+    node_name: automate-metashape-workflow-g95x4-metashape-cpu-step-3675476428
+  - api_call: matchPhotos
+    duration_seconds: 838.3
+    cpu_percent: 8.3
+    cpu_percent_p90: 26.5
+    gpu_percent: 15.5
+    gpu_percent_p90: 84.0
+    cpu_cores_used: 2.5
+    cpu_cores_used_p90: 8.4
+    cpu_cores_available: 32
+    proc_mem_peak_gb: 1.8
+    container_limit_gb: 115.1
+    container_used_peak_gb: 32.1
+    container_avail_min_gb: 83.0
+    sys_total_gb: 115.1
+    sys_used_peak_gb: 4.6
+    sys_avail_min_gb: 110.5
+    gpu_count: 1
+    gpu_model: NVIDIA A100-SXM4-40GB
+    node_name: automate-metashape-workflow-g95x4-metashape-gpu-step-3581908565
+  - api_call: alignCameras
+    duration_seconds: 905.5
+    cpu_percent: 71.9
+    cpu_percent_p90: 95.3
+    gpu_percent: null
+    gpu_percent_p90: null
+    cpu_cores_used: 22.9
+    cpu_cores_used_p90: 30.4
+    cpu_cores_available: 32
+    proc_mem_peak_gb: 2.7
+    container_limit_gb: 122.8
+    container_used_peak_gb: 2.9
+    container_avail_min_gb: 120.0
+    sys_total_gb: 122.8
+    sys_used_peak_gb: 4.7
+    sys_avail_min_gb: 118.2
+    gpu_count: 0
+    gpu_model: 
+    node_name: automate-metashape-workflow-g95x4-metashape-cpu-step-3406096977
+  - api_call: optimizeCameras
+    duration_seconds: 61.7
+    cpu_percent: 63.3
+    cpu_percent_p90: 94.9
+    gpu_percent: null
+    gpu_percent_p90: null
+    cpu_cores_used: 20.2
+    cpu_cores_used_p90: 30.2
+    cpu_cores_available: 32
+    proc_mem_peak_gb: 2.7
+    container_limit_gb: 122.8
+    container_used_peak_gb: 3.6
+    container_avail_min_gb: 119.2
+    sys_total_gb: 122.8
+    sys_used_peak_gb: 4.6
+    sys_avail_min_gb: 118.2
+    gpu_count: 0
+    gpu_model: 
+    node_name: automate-metashape-workflow-g95x4-metashape-cpu-step-3406096977
+  - api_call: exportCameras
+    duration_seconds: 0.4
+    cpu_percent: 9.3
+    cpu_percent_p90: 9.3
+    gpu_percent: null
+    gpu_percent_p90: null
+    cpu_cores_used: 2.8
+    cpu_cores_used_p90: 2.8
+    cpu_cores_available: 32
+    proc_mem_peak_gb: 1.1
+    container_limit_gb: 122.8
+    container_used_peak_gb: 2.0
+    container_avail_min_gb: 120.9
+    sys_total_gb: 122.8
+    sys_used_peak_gb: 3.0
+    sys_avail_min_gb: 119.9
+    gpu_count: 0
+    gpu_model: 
+    node_name: automate-metashape-workflow-g95x4-metashape-cpu-step-3406096977
+  - api_call: buildDepthMaps
+    duration_seconds: 1447.2
+    cpu_percent: 18.2
+    cpu_percent_p90: 24.2
+    gpu_percent: 44.9
+    gpu_percent_p90: 91.0
+    cpu_cores_used: 5.7
+    cpu_cores_used_p90: 7.6
+    cpu_cores_available: 32
+    proc_mem_peak_gb: 5.8
+    container_limit_gb: 115.1
+    container_used_peak_gb: 37.0
+    container_avail_min_gb: 78.1
+    sys_total_gb: 115.1
+    sys_used_peak_gb: 8.6
+    sys_avail_min_gb: 106.6
+    gpu_count: 1
+    gpu_model: NVIDIA A100-SXM4-40GB
+    node_name: automate-metashape-workflow-g95x4-metashape-gpu-step-2168958323
+  - api_call: buildPointCloud
+    duration_seconds: 2449.1
+    cpu_percent: 49.4
+    cpu_percent_p90: 77.4
+    gpu_percent: null
+    gpu_percent_p90: null
+    cpu_cores_used: 15.7
+    cpu_cores_used_p90: 24.7
+    cpu_cores_available: 32
+    proc_mem_peak_gb: 19.2
+    container_limit_gb: 122.8
+    container_used_peak_gb: 46.1
+    container_avail_min_gb: 76.7
+    sys_total_gb: 122.8
+    sys_used_peak_gb: 21.2
+    sys_avail_min_gb: 101.7
+    gpu_count: 0
+    gpu_model: 
+    node_name: automate-metashape-workflow-g95x4-metashape-cpu-step-3531329758
+  - api_call: classifyGroundPoints
+    duration_seconds: 2104.7
+    cpu_percent: 83.7
+    cpu_percent_p90: 100.0
+    gpu_percent: null
+    gpu_percent_p90: null
+    cpu_cores_used: 26.4
+    cpu_cores_used_p90: 32.0
+    cpu_cores_available: 32
+    proc_mem_peak_gb: 7.9
+    container_limit_gb: 122.8
+    container_used_peak_gb: 37.6
+    container_avail_min_gb: 85.2
+    sys_total_gb: 122.8
+    sys_used_peak_gb: 10.8
+    sys_avail_min_gb: 112.0
+    gpu_count: 0
+    gpu_model: 
+    node_name: automate-metashape-workflow-g95x4-metashape-cpu-step-3531329758
+  - api_call: buildModel
+    duration_seconds: 5881.9
+    cpu_percent: 40.6
+    cpu_percent_p90: 59.7
+    gpu_percent: 0.9
+    gpu_percent_p90: 0.0
+    cpu_cores_used: 12.9
+    cpu_cores_used_p90: 19.0
+    cpu_cores_available: 32
+    proc_mem_peak_gb: 22.6
+    container_limit_gb: 115.1
+    container_used_peak_gb: 37.0
+    container_avail_min_gb: 78.1
+    sys_total_gb: 115.1
+    sys_used_peak_gb: 25.3
+    sys_avail_min_gb: 89.8
+    gpu_count: 1
+    gpu_model: NVIDIA A100-SXM4-40GB
+    node_name: automate-metashape-workflow-g95x4-metashape-gpu-step-1859944610
+  - api_call: exportModel
+    duration_seconds: 25.6
+    cpu_percent: 4.1
+    cpu_percent_p90: 4.0
+    gpu_percent: 0.0
+    gpu_percent_p90: 0.0
+    cpu_cores_used: 1.2
+    cpu_cores_used_p90: 1.0
+    cpu_cores_available: 32
+    proc_mem_peak_gb: 9.8
+    container_limit_gb: 115.1
+    container_used_peak_gb: 18.8
+    container_avail_min_gb: 96.4
+    sys_total_gb: 115.1
+    sys_used_peak_gb: 12.6
+    sys_avail_min_gb: 102.6
+    gpu_count: 1
+    gpu_model: NVIDIA A100-SXM4-40GB
+    node_name: automate-metashape-workflow-g95x4-metashape-gpu-step-1859944610
+  - api_call: buildDem (DSM-ptcloud)
+    duration_seconds: 57.3
+    cpu_percent: 20.8
+    cpu_percent_p90: 47.0
+    gpu_percent: null
+    gpu_percent_p90: null
+    cpu_cores_used: 6.6
+    cpu_cores_used_p90: 15.0
+    cpu_cores_available: 32
+    proc_mem_peak_gb: 0.5
+    container_limit_gb: 122.8
+    container_used_peak_gb: 2.0
+    container_avail_min_gb: 120.8
+    sys_total_gb: 122.8
+    sys_used_peak_gb: 2.5
+    sys_avail_min_gb: 120.3
+    gpu_count: 0
+    gpu_model: 
+    node_name: automate-metashape-workflow-g95x4-metashape-cpu-step-33334613
+  - api_call: exportRaster (DSM-ptcloud)
+    duration_seconds: 6.0
+    cpu_percent: 7.2
+    cpu_percent_p90: 10.3
+    gpu_percent: null
+    gpu_percent_p90: null
+    cpu_cores_used: 2.2
+    cpu_cores_used_p90: 3.1
+    cpu_cores_available: 32
+    proc_mem_peak_gb: 0.6
+    container_limit_gb: 122.8
+    container_used_peak_gb: 2.3
+    container_avail_min_gb: 120.6
+    sys_total_gb: 122.8
+    sys_used_peak_gb: 2.5
+    sys_avail_min_gb: 120.3
+    gpu_count: 0
+    gpu_model: 
+    node_name: automate-metashape-workflow-g95x4-metashape-cpu-step-33334613
+  - api_call: buildDem (DTM-ptcloud)
+    duration_seconds: 43.2
+    cpu_percent: 18.0
+    cpu_percent_p90: 51.3
+    gpu_percent: null
+    gpu_percent_p90: null
+    cpu_cores_used: 5.7
+    cpu_cores_used_p90: 16.4
+    cpu_cores_available: 32
+    proc_mem_peak_gb: 0.5
+    container_limit_gb: 122.8
+    container_used_peak_gb: 2.4
+    container_avail_min_gb: 120.4
+    sys_total_gb: 122.8
+    sys_used_peak_gb: 2.4
+    sys_avail_min_gb: 120.4
+    gpu_count: 0
+    gpu_model: 
+    node_name: automate-metashape-workflow-g95x4-metashape-cpu-step-33334613
+  - api_call: exportRaster (DTM-ptcloud)
+    duration_seconds: 5.4
+    cpu_percent: 9.1
+    cpu_percent_p90: 12.4
+    gpu_percent: null
+    gpu_percent_p90: null
+    cpu_cores_used: 2.8
+    cpu_cores_used_p90: 3.7
+    cpu_cores_available: 32
+    proc_mem_peak_gb: 0.6
+    container_limit_gb: 122.8
+    container_used_peak_gb: 2.7
+    container_avail_min_gb: 120.2
+    sys_total_gb: 122.8
+    sys_used_peak_gb: 2.5
+    sys_avail_min_gb: 120.3
+    gpu_count: 0
+    gpu_model: 
+    node_name: automate-metashape-workflow-g95x4-metashape-cpu-step-33334613
+  - api_call: buildDem (DSM-mesh)
+    duration_seconds: 50.8
+    cpu_percent: 13.7
+    cpu_percent_p90: 30.2
+    gpu_percent: null
+    gpu_percent_p90: null
+    cpu_cores_used: 4.3
+    cpu_cores_used_p90: 9.5
+    cpu_cores_available: 32
+    proc_mem_peak_gb: 1.1
+    container_limit_gb: 122.8
+    container_used_peak_gb: 3.5
+    container_avail_min_gb: 119.4
+    sys_total_gb: 122.8
+    sys_used_peak_gb: 3.1
+    sys_avail_min_gb: 119.8
+    gpu_count: 0
+    gpu_model: 
+    node_name: automate-metashape-workflow-g95x4-metashape-cpu-step-33334613
+  - api_call: exportRaster (DSM-mesh)
+    duration_seconds: 3.8
+    cpu_percent: 7.7
+    cpu_percent_p90: 11.5
+    gpu_percent: null
+    gpu_percent_p90: null
+    cpu_cores_used: 2.4
+    cpu_cores_used_p90: 3.5
+    cpu_cores_available: 32
+    proc_mem_peak_gb: 0.6
+    container_limit_gb: 122.8
+    container_used_peak_gb: 3.2
+    container_avail_min_gb: 119.7
+    sys_total_gb: 122.8
+    sys_used_peak_gb: 2.5
+    sys_avail_min_gb: 120.3
+    gpu_count: 0
+    gpu_model: 
+    node_name: automate-metashape-workflow-g95x4-metashape-cpu-step-33334613
+  - api_call: buildOrthomosaic (dsm-ptcloud)
+    duration_seconds: 7331.2
+    cpu_percent: 25.8
+    cpu_percent_p90: 65.5
+    gpu_percent: null
+    gpu_percent_p90: null
+    cpu_cores_used: 8.2
+    cpu_cores_used_p90: 20.8
+    cpu_cores_available: 32
+    proc_mem_peak_gb: 30.6
+    container_limit_gb: 122.8
+    container_used_peak_gb: 98.7
+    container_avail_min_gb: 24.2
+    sys_total_gb: 122.8
+    sys_used_peak_gb: 32.7
+    sys_avail_min_gb: 90.2
+    gpu_count: 0
+    gpu_model: 
+    node_name: automate-metashape-workflow-g95x4-metashape-cpu-step-33334613
+  - api_call: exportRaster (ortho-dsm-ptcloud)
+    duration_seconds: 81.1
+    cpu_percent: 7.2
+    cpu_percent_p90: 11.7
+    gpu_percent: null
+    gpu_percent_p90: null
+    cpu_cores_used: 2.2
+    cpu_cores_used_p90: 3.7
+    cpu_cores_available: 32
+    proc_mem_peak_gb: 2.4
+    container_limit_gb: 122.8
+    container_used_peak_gb: 45.2
+    container_avail_min_gb: 77.6
+    sys_total_gb: 122.8
+    sys_used_peak_gb: 4.5
+    sys_avail_min_gb: 118.3
+    gpu_count: 0
+    gpu_model: 
+    node_name: automate-metashape-workflow-g95x4-metashape-cpu-step-33334613
+  - api_call: buildOrthomosaic (dsm-mesh)
+    duration_seconds: 4362.3
+    cpu_percent: 24.8
+    cpu_percent_p90: 65.5
+    gpu_percent: null
+    gpu_percent_p90: null
+    cpu_cores_used: 7.9
+    cpu_cores_used_p90: 20.9
+    cpu_cores_available: 32
+    proc_mem_peak_gb: 19.7
+    container_limit_gb: 122.8
+    container_used_peak_gb: 59.8
+    container_avail_min_gb: 63.1
+    sys_total_gb: 122.8
+    sys_used_peak_gb: 21.8
+    sys_avail_min_gb: 101.1
+    gpu_count: 0
+    gpu_model: 
+    node_name: automate-metashape-workflow-g95x4-metashape-cpu-step-33334613
+  - api_call: exportRaster (ortho-dsm-mesh)
+    duration_seconds: 50.1
+    cpu_percent: 7.3
+    cpu_percent_p90: 11.7
+    gpu_percent: null
+    gpu_percent_p90: null
+    cpu_cores_used: 2.2
+    cpu_cores_used_p90: 3.7
+    cpu_cores_available: 32
+    proc_mem_peak_gb: 2.4
+    container_limit_gb: 122.8
+    container_used_peak_gb: 44.1
+    container_avail_min_gb: 78.7
+    sys_total_gb: 122.8
+    sys_used_peak_gb: 4.5
+    sys_avail_min_gb: 118.3
+    gpu_count: 0
+    gpu_model: 
+    node_name: automate-metashape-workflow-g95x4-metashape-cpu-step-33334613
+  - api_call: exportReport
+    duration_seconds: 18.9
+    cpu_percent: 17.3
+    cpu_percent_p90: 67.0
+    gpu_percent: null
+    gpu_percent_p90: null
+    cpu_cores_used: 3.6
+    cpu_cores_used_p90: 7.9
+    cpu_cores_available: 32
+    proc_mem_peak_gb: 0.6
+    container_limit_gb: 122.8
+    container_used_peak_gb: 1.8
+    container_avail_min_gb: 121.0
+    sys_total_gb: 122.8
+    sys_used_peak_gb: 2.6
+    sys_avail_min_gb: 120.3
+    gpu_count: 0
+    gpu_model: 
+    node_name: automate-metashape-workflow-g95x4-metashape-cpu-step-1398738425
