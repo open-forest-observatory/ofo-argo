@@ -170,7 +170,7 @@ resources:
 
 Available MIG resource types:
 
-- `nvidia.com/mig-1g.10gb` - 1/7 compute, 10GB VRAM (4 per GPU)
+- `nvidia.com/mig-1g.5gb` - 1/7 compute, 5GB VRAM (7 per GPU)
 - `nvidia.com/mig-2g.10gb` - 2/7 compute, 10GB VRAM (3 per GPU)
 - `nvidia.com/mig-3g.20gb` - 3/7 compute, 20GB VRAM (2 per GPU)
 

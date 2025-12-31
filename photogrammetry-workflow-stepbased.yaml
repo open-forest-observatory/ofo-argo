@@ -449,7 +449,7 @@ spec:
           - name: config-file
           - name: step
           - name: gpu-resource
-            default: "nvidia.com/gpu"  # Full GPU. MIG options: nvidia.com/mig-1g.10gb, mig-2g.10gb, mig-3g.20gb
+            default: "nvidia.com/gpu"  # Full GPU. MIG options: nvidia.com/mig-1g.5gb, mig-2g.10gb, mig-3g.20gb
           - name: gpu-count
             default: "1"  # Number of GPU resources to request (e.g., 2 for two MIG slices)
       # Tolerate GPU node taint; GPU resource request handles node selection

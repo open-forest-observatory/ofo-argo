@@ -140,7 +140,7 @@ def process_config_file(config_path: str) -> Dict[str, Any]:
     project_name_sanitized = sanitize_dns1123(project_name)
 
     # Default GPU resource (full GPU). Can be overridden per-step with MIG resources like:
-    # "nvidia.com/mig-1g.10gb", "nvidia.com/mig-2g.10gb", "nvidia.com/mig-3g.20gb"
+    # "nvidia.com/mig-1g.5gb", "nvidia.com/mig-2g.10gb", "nvidia.com/mig-3g.20gb"
     DEFAULT_GPU_RESOURCE = "nvidia.com/gpu"
     DEFAULT_GPU_COUNT = 1
 

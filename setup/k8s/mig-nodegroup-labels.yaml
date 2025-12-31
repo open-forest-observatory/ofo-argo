@@ -6,7 +6,7 @@ spec:
   rules:
     - name: "MIG 1g nodes"
       labels:
-        nvidia.com/mig.config: "all-1g.10gb"
+        nvidia.com/mig.config: "all-1g.5gb"
       matchFeatures:
         - feature: system.name
           matchExpressions:

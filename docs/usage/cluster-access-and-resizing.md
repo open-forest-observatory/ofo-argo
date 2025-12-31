@@ -193,7 +193,7 @@ openstack coe nodegroup create ofocluster2 mig3-group --min-nodes 1 --max-nodes 
 
     | Profile | MIG resource request | Max pods/node | CPU each | RAM each |
     |---------|----------------------|---------------|----------|----------|
-    | mig1 (4 slices) | `nvidia.com/mig-1g.10gb` | 4 | 8 | 28GB |
+    | mig1 (7 slices) | `nvidia.com/mig-1g.5gb` | 7 | 4 | 16GB |
     | mig2 (3 slices) | `nvidia.com/mig-2g.10gb` | 3 | 10 | 38GB |
     | mig3 (2 slices) | `nvidia.com/mig-3g.20gb` | 2 | 15 | 55GB |
 

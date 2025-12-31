@@ -202,7 +202,7 @@ The `build_depth_maps` step always runs on GPU nodes (no config option) as it al
 match_photos:
   enabled: true
   gpu_enabled: true
-  gpu_resource: "nvidia.com/mig-1g.10gb"  # Use smallest MIG partition
+  gpu_resource: "nvidia.com/mig-1g.5gb"  # Use smallest MIG partition
   gpu_count: 2  # Request 2 MIG slices for more parallelism
 
 build_depth_maps:
@@ -221,11 +221,11 @@ Available GPU resources:
 | Resource | Description | Pods per GPU |
 |----------|-------------|--------------|
 | `nvidia.com/gpu` | Full GPU (default if `gpu_resource` omitted) | 1 |
-| `nvidia.com/mig-1g.10gb` | 1/7 compute, 10GB VRAM | 4 |
+| `nvidia.com/mig-1g.5gb` | 1/7 compute, 5GB VRAM | 7 |
 | `nvidia.com/mig-2g.10gb` | 2/7 compute, 10GB VRAM | 3 |
 | `nvidia.com/mig-3g.20gb` | 3/7 compute, 20GB VRAM | 2 |
 
-Use `gpu_count` to request multiple MIG slices (e.g., `gpu_count: 2` with `mig-1g.10gb` to get 2/7 compute power). This is useful when you need more compute than a single small slice provides but don't need the full 20GB VRAM of a `mig-3g.20gb`.
+Use `gpu_count` to request multiple MIG slices (e.g., `gpu_count: 2` with `mig-1g.5gb` to get 2/7 compute power). This is useful when you need more compute than a single small slice provides but don't need the full 20GB VRAM of a `mig-3g.20gb`.
 
 !!! tip "When to use MIG"
     Use MIG partitions when your GPU steps have low utilization. This allows multiple workflow steps to share a single physical GPU, reducing costs. Start with `mig-2g.10gb` for most workloads; use `mig-3g.20gb` for memory-intensive steps like `build_depth_maps`.
