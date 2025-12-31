@@ -136,40 +136,26 @@ source ~/.ofocluster/app-cred-ofocluster-openrc.sh
 
 ### Add a new nodegroup
 
-Use OpenStack to create new nodegroups:
+Use OpenStack to create new nodegroups.
 
-```bash
-openstack coe nodegroup create \
-  --min-nodes 1 \
-  --max-nodes 8 \
-  --flavor m3.small \
-ofocluster2 cpu-group1
-```
-
-Due to apparent OpenStack limitations, all nodegroups in the cluster are "autoscaling" (the
-alternative would be that all are fixed, but this is set upon cluster creation and cannot be
-modified). Autoscaling means that the cluster will add/remove nodes in order to schedule all pending
-pods while keeping nodes near full utilization. The min and max number of nodes per nodegroup can be
-set. So if you want a fixed-size nodegroup, the best/only strategy appears to be to set min-nodes
-and max-nodes to the same value. The `--node-count` parameter is essentially irrelevant, because
-even as the nodegroup is being created, the autoscaler should detect whether more or fewer nodes are
-needed and make that change. The parameter can be left off and is then assumed to be 1.
-
-Quick access to create a CPU nodegroup:
+**CPU nodegroups** must include `cpu` in the nodegroup name for automatic labeling to work:
 
 ```bash
 openstack coe nodegroup create ofocluster2 cpu-group --min-nodes 1 --max-nodes 8 --flavor m3.xl
 ```
 
-Quick access to create a GPU nodegroup:
+The `cpu` substring triggers automatic labeling (`workload-type: cpu`) via NodeFeatureRule, which ensures CPU-only workflow pods schedule on these nodes.
+
+**GPU nodegroups** can use any name (GPU resource requests handle scheduling):
 
 ```bash
 openstack coe nodegroup create ofocluster2 gpu-group --min-nodes 1 --max-nodes 8 --flavor g3.xl
 ```
 
-!!! note "GPU Node Tainting"
-    GPU nodes are automatically tainted to prevent non-GPU workloads from using them. Workflow
-    templates that need GPU access must include a toleration. See [GPU node scheduling](argo-usage.md#gpu-node-scheduling) for details.
+**Autoscaling behavior:** Due to OpenStack limitations, all nodegroups in the cluster are autoscaling. The cluster adds/removes nodes to schedule all pending pods while keeping nodes near full utilization. Set `--min-nodes` and `--max-nodes` to the same value for a fixed-size nodegroup. The `--node-count` parameter is essentially irrelevant and defaults to 1 if omitted.
+
+!!! note "GPU Node Scheduling"
+    CPU-only workflow pods use `nodeSelector` to target CPU nodes explicitly, preventing them from scheduling on expensive GPU nodes. GPU pods request GPU resources, which naturally constrains them to GPU nodes. See [GPU node scheduling](argo-usage.md#gpu-node-scheduling) for details.
 
 ### MIG nodegroups
 

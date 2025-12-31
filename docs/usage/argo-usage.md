@@ -139,26 +139,24 @@ installation](../admin/argo-installation-on-cluster.md)).
 
 ## GPU node scheduling
 
-GPU nodes are automatically **tainted** to prevent non-GPU workloads from being scheduled on them.
-This ensures expensive GPU resources are reserved for workloads that need them.
+To prevent expensive GPU resources from being consumed by CPU-only workloads, the cluster uses explicit scheduling rules:
 
 **How it works:**
 
-- GPU nodes receive a taint: `nvidia.com/gpu=true:NoSchedule`
-- CPU pods (no toleration) are automatically excluded from GPU nodes
-- GPU pods have a toleration + GPU resource request, allowing them to schedule on GPU nodes
-- All pods still inherit `podAffinity` from the workflow controller configmap to prefer scheduling
-  on nodes with other running pods (to support autoscaling in removing empty nodes)
+- **CPU nodes** are labeled with `workload-type: cpu` based on their nodegroup naming pattern (any node with `cpu` in the name)
+- **CPU pods** use `nodeSelector: workload-type: cpu` to explicitly target CPU nodes
+- **GPU pods** request GPU resources (e.g., `nvidia.com/gpu` or MIG resources), which naturally constrains them to nodes advertising those resources
+- All pods still inherit `podAffinity` from the workflow controller configmap to prefer scheduling on nodes with other running pods (to support autoscaling in removing empty nodes)
 
-This taint-based approach is simpler than using affinity overrides. GPU templates only need to add
-a `tolerations` block - they don't need to override or repeat affinity rules. See the
-`metashape-gpu-step` template in `photogrammetry-workflow-stepbased.yaml` for an example.
+This approach ensures CPU pods cannot schedule on GPU nodes, even during the brief period when new GPU nodes join the cluster before NFD labels them.
 
-For admin setup of GPU tainting, see [GPU node tainting](../admin/cluster-creation-and-resizing.md#configure-gpu-node-tainting).
+For admin setup of CPU node labeling, see [CPU node labeling](../admin/cluster-creation-and-resizing.md#configure-cpu-node-labeling).
 
 ### MIG (Multi-Instance GPU)
 
-For workloads with low GPU utilization, MIG nodegroups partition each A100 into multiple isolated slices. To use MIG, create a MIG nodegroup (see [MIG nodegroups](cluster-access-and-resizing.md#mig-nodegroups)) and update the workflow GPU template to request MIG resources:
+For workloads with low GPU utilization, MIG nodegroups partition each A100 into multiple isolated slices. To use MIG, create a MIG nodegroup (see [MIG nodegroups](cluster-access-and-resizing.md#mig-nodegroups)).
+
+**For custom workflows**, update the workflow GPU template to request MIG resources:
 
 ```yaml
 resources:
@@ -168,10 +166,12 @@ resources:
     memory: "38Gi"
 ```
 
+**For the photogrammetry workflow**, configure MIG resources (along with CPU/memory) in your config file's `argo` section instead of editing the workflow YAML. See [Step-based workflow resource configuration](stepbased-workflow.md#resource-configuration) for details.
+
 Available MIG resource types:
 
 - `nvidia.com/mig-1g.5gb` - 1/7 compute, 5GB VRAM (7 per GPU)
 - `nvidia.com/mig-2g.10gb` - 2/7 compute, 10GB VRAM (3 per GPU)
 - `nvidia.com/mig-3g.20gb` - 3/7 compute, 20GB VRAM (2 per GPU)
 
-The existing GPU toleration works for both MIG and non-MIG GPU nodes.
+GPU resource requests work for both MIG and non-MIG GPU nodes.

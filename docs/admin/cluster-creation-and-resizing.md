@@ -234,29 +234,36 @@ Replace `<LICENSE_SERVER_IP>` with the actual IP address from the credentials do
 
 These secrets only need to be created once per cluster.
 
-## Configure GPU node tainting
+## Configure CPU node labeling
 
-GPU nodes are tainted to prevent non-GPU workloads from being scheduled on them. This ensures that expensive GPU resources are reserved for workloads that actually need them. The taint is applied automatically by Node Feature Discovery (NFD) based on the presence of an NVIDIA GPU.
+To prevent CPU workloads from being scheduled on expensive GPU nodes, CPU nodes are labeled based on their nodegroup naming pattern. CPU-only workflow templates use `nodeSelector` to explicitly target these labeled nodes, while GPU pods use resource requests that naturally constrain them to GPU nodes.
 
-### Enable NFD taints
+### Apply CPU node labels
 
-NFD is pre-installed on Jetstream2 Magnum clusters but taints are disabled by default. Enable them:
+Label CPU nodes automatically based on their nodegroup naming pattern:
 
 ```bash
-# Add NFD helm repo (if not already added)
-helm repo add nfd https://kubernetes-sigs.github.io/node-feature-discovery/charts
-helm repo update nfd
-
-# Check current NFD version
-helm list -n node-feature-discovery
-
-# Enable taints (use the same version as currently installed)
-helm upgrade node-feature-discovery nfd/node-feature-discovery \
-  -n node-feature-discovery \
-  --version <CURRENT_VERSION> \
-  --reuse-values \
-  --set master.config.enableTaints=true
+kubectl apply -f setup/k8s/cpu-nodegroup-labels.yaml
 ```
+
+This creates a NodeFeatureRule that automatically labels any node with `cpu` in its name with `workload-type: cpu`. The label is applied by Node Feature Discovery (NFD) when the node joins the cluster.
+
+!!! important "Nodegroup naming requirement"
+    When creating CPU nodegroups, ensure the nodegroup name contains `cpu` (e.g., `cpu-group`, `cpu-m3xl`) so nodes are automatically labeled. See [nodegroup creation](../usage/cluster-access-and-resizing.md#add-a-new-nodegroup) for details.
+
+### Verify CPU node labels
+
+```bash
+kubectl get nodes -L workload-type
+```
+
+All nodes with `cpu` in their name should show `workload-type=cpu`.
+
+### How it works
+
+- **CPU pods**: Use `nodeSelector: workload-type: cpu` to explicitly target CPU nodes
+- **GPU pods**: Request GPU resources (e.g., `nvidia.com/mig-1g.5gb`), which naturally constrains them to nodes advertising those resources
+- **System pods**: DaemonSets run on all nodes as needed
 
 ### Enable mixed MIG strategy
 
@@ -280,31 +287,6 @@ helm upgrade nvidia-gpu-operator nvidia/gpu-operator \
 
 !!! note "Cluster upgrades"
     This setting may be reset if the cluster template is upgraded and Magnum redeploys the GPU Operator. Re-run this command after cluster upgrades if MIG resources stop appearing.
-
-### Apply GPU taint rule
-
-Apply the NodeFeatureRule that automatically taints any node with an NVIDIA GPU:
-
-```bash
-kubectl apply -f setup/k8s/gpu-taint-rule.yaml
-```
-
-This creates a taint `nvidia.com/gpu=true:NoSchedule` on all GPU nodes. The taint is applied automatically when:
-
-- A new GPU node joins the cluster (e.g., via autoscaler)
-- An existing node gains a GPU label
-
-### Verify taint (when GPU nodes exist)
-
-```bash
-kubectl get nodes -l nvidia.com/gpu.present=true -o custom-columns='NAME:.metadata.name,TAINTS:.spec.taints'
-```
-
-### How it works
-
-- **CPU pods**: No toleration needed. Automatically excluded from tainted GPU nodes.
-- **GPU pods**: Must have a toleration AND request GPU resources. See the `metashape-gpu-step` template in `photogrammetry-workflow-stepbased.yaml` for an example.
-- **System pods**: Not affected. DaemonSets (GPU Operator, NFD, Calico, kube-proxy, etc.) have built-in tolerations that allow them to run on tainted nodes.
 
 
 ## Configure MIG (Multi-Instance GPU)

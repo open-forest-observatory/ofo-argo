@@ -13,9 +13,9 @@ spec:
         imagePullPolicy: Always
 
   # Pod scheduling:
-  # - GPU nodes are tainted (nvidia.com/gpu=true:NoSchedule) via NodeFeatureRule
-  # - CPU pods: No toleration needed, automatically excluded from GPU nodes
-  # - GPU pods: Have toleration in metashape-gpu-step template
+  # - CPU nodes are labeled (workload-type=cpu) via NodeFeatureRule based on nodegroup name
+  # - CPU pods: Use nodeSelector to target CPU nodes explicitly
+  # - GPU pods: GPU resource requests ensure scheduling only on nodes with GPU resources
   # - podAffinity (prefer nodes with running pods) inherited from workflow-controller-configmap
 
   # A list of input parameters available to the workflow at runtime.
@@ -125,6 +125,9 @@ spec:
     # Compute the photogrammetry config subfolder name based on PHOTOGRAMMETRY_CONFIG_ID
     # If PHOTOGRAMMETRY_CONFIG_ID is non-empty and not "NONE", returns "photogrammetry_<ID>", otherwise returns empty string
     - name: compute-photogrammetry-config-subfolder
+      # Ensure CPU pods only schedule on CPU nodes (labeled by NFD based on nodegroup name)
+      nodeSelector:
+        workload-type: cpu
       script:
         image: python:3.9
         command: ["python3"]
@@ -141,6 +144,9 @@ spec:
     # processing steps are enabled. It also determines GPU vs CPU node scheduling for GPU-capable steps.
     # Uses containerized preprocessing script from argo-workflow-utils.
     - name: determine-projects
+      # Ensure CPU pods only schedule on CPU nodes (labeled by NFD based on nodegroup name)
+      nodeSelector:
+        workload-type: cpu
       container:
         image: ghcr.io/open-forest-observatory/argo-workflow-utils:{{workflow.parameters.UTILS_IMAGE_TAG}}
         volumeMounts:
@@ -500,6 +506,9 @@ spec:
         parameters:
           - name: project-name
           - name: photogrammetry-config-subfolder
+      # Ensure CPU pods only schedule on CPU nodes (labeled by NFD based on nodegroup name)
+      nodeSelector:
+        workload-type: cpu
       container:
         image: rclone/rclone:latest
         volumeMounts:
@@ -551,7 +560,7 @@ spec:
 
         resources:
           requests:
-            cpu: "9" # was 100m
+            cpu: "18" # was 100m
             memory: "256Mi"
           limits:
             memory: "1Gi"
@@ -586,6 +595,9 @@ spec:
         parameters:
           - name: project-name
           - name: photogrammetry-config-subfolder
+      # Ensure CPU pods only schedule on CPU nodes (labeled by NFD based on nodegroup name)
+      nodeSelector:
+        workload-type: cpu
       container:
         image: ghcr.io/open-forest-observatory/photogrammetry-postprocessing:{{workflow.parameters.POSTPROCESSING_IMAGE_TAG}}
         volumeMounts:
@@ -634,8 +646,8 @@ spec:
             value: "{{workflow.parameters.TEMP_WORKING_DIR}}/postprocessing"
         resources:
           requests:
-            cpu: "9"
-            memory: "50Gi"
+            cpu: "18"
+            memory: "80Gi"
           # limits:
           #   cpu: "4"
           #   memory: "16Gi"
