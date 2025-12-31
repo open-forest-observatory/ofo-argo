@@ -147,7 +147,6 @@ calibrate_reflectance:
 
 match_photos:
   enabled: true
-  gpu_enabled: true  # Optional: true=GPU node, false=CPU node (default: true)
   downscale: 1
   # ... other match_photos parameters
 
@@ -158,7 +157,7 @@ align_cameras:
 
 build_depth_maps:
   enabled: true
-  # ... depth maps parameters (always uses GPU)
+  # ... depth maps parameters
 
 build_point_cloud:
   enabled: true
@@ -166,7 +165,6 @@ build_point_cloud:
 
 build_mesh:
   enabled: false
-  gpu_enabled: true  # Optional: true=GPU node, false=CPU node (default: true)
   # ... mesh parameters
 
 build_dem:
@@ -176,6 +174,42 @@ build_dem:
 build_orthomosaic:
   enabled: true
   # ... orthomosaic parameters
+
+# Argo workflow resource configuration (optional)
+# All parameters below are optional - if omitted, sensible defaults are used
+argo:
+  # Optional: Global defaults that apply to all steps unless overridden
+  defaults:
+    cpu_request: "10"                      # Default CPU cores for all steps
+    memory_request: "50Gi"                 # Default memory for all steps
+    gpu_resource: "nvidia.com/gpu"         # Default GPU type for GPU steps
+    gpu_count: 1                           # Default GPU count
+
+  # Per-step resource configuration (all parameters optional)
+  match_photos:
+    gpu_enabled: true                      # true=GPU node, false=CPU node (default: true)
+    gpu_resource: "nvidia.com/gpu"         # GPU type (default: nvidia.com/gpu)
+    gpu_count: 1                           # Number of GPUs (default: 1)
+    cpu_request: "4"                       # CPU cores (default: 4 for GPU, 18 for CPU)
+    memory_request: "16Gi"                 # Memory (default: 16Gi for GPU, 100Gi for CPU)
+
+  build_depth_maps:
+    gpu_resource: "nvidia.com/gpu"         # Always uses GPU
+    gpu_count: 1
+    cpu_request: "4"
+    memory_request: "16Gi"
+
+  build_mesh:
+    gpu_enabled: true                      # true=GPU node, false=CPU node (default: true)
+    gpu_resource: "nvidia.com/gpu"
+    gpu_count: 1
+    cpu_request: "4"
+    memory_request: "16Gi"
+
+  # CPU-only steps (align_cameras, build_point_cloud, build_dem_orthomosaic, etc.)
+  align_cameras:
+    cpu_request: "18"                      # Default: 18
+    memory_request: "100Gi"                # Default: 100Gi
 ```
 
 **Setting the `photo_path`:** Within the `project:` section, you must specify `photo_path` which is
@@ -188,32 +222,39 @@ project:
   photo_path: /data/argo-input/datasets/dataset_1
 ```
 
-**GPU scheduling parameters:** Three steps support configurable GPU usage via `gpu_enabled` parameters:
+## Resource Configuration
 
-- `match_photos.gpu_enabled` - If `true`, runs on GPU node; if `false`, runs on CPU node (default: `true`)
-- `build_mesh.gpu_enabled` - If `true`, runs on GPU node; if `false`, runs on CPU node (default: `true`)
-- Secondary photo matching uses `match_photos.gpu_enabled` setting
+All Argo workflow resource parameters (GPU, CPU, memory) are configured in the top-level `argo` section of your config file. This section is **completely optional** - if omitted, sensible defaults will be used.
+
+### GPU Scheduling
+
+Three steps support configurable GPU usage via `argo.<step>.gpu_enabled` parameters:
+
+- `argo.match_photos.gpu_enabled` - If `true`, runs on GPU node; if `false`, runs on CPU node (default: `true`)
+- `argo.build_mesh.gpu_enabled` - If `true`, runs on GPU node; if `false`, runs on CPU node (default: `true`)
+- `argo.match_photos_secondary.gpu_enabled` - Inherits from `match_photos` unless explicitly set
 
 The `build_depth_maps` step always runs on GPU nodes (no config option) as it always benefits from GPU acceleration.
 
-**GPU resource selection (MIG support):** For GPU steps, you can optionally specify which GPU resource to request using `gpu_resource` and `gpu_count`. This allows using MIG (Multi-Instance GPU) partitions instead of full GPUs:
+### GPU Resource Selection (MIG Support)
+
+For GPU steps, you can specify which GPU resource to request using `gpu_resource` and `gpu_count` in the `argo` section. This allows using MIG (Multi-Instance GPU) partitions instead of full GPUs:
 
 ```yaml
-match_photos:
-  enabled: true
-  gpu_enabled: true
-  gpu_resource: "nvidia.com/mig-1g.5gb"  # Use smallest MIG partition
-  gpu_count: 2  # Request 2 MIG slices for more parallelism
+argo:
+  match_photos:
+    gpu_enabled: true
+    gpu_resource: "nvidia.com/mig-1g.5gb"  # Use smallest MIG partition
+    gpu_count: 2                           # Request 2 MIG slices for more parallelism
 
-build_depth_maps:
-  enabled: true
-  gpu_resource: "nvidia.com/gpu"  # Explicitly request full GPU (this is the default)
-  # gpu_count defaults to 1 if omitted
+  build_depth_maps:
+    gpu_resource: "nvidia.com/gpu"         # Explicitly request full GPU (this is the default)
+    # gpu_count defaults to 1 if omitted
 
-build_mesh:
-  enabled: true
-  gpu_enabled: true
-  gpu_resource: "nvidia.com/mig-3g.20gb"  # Larger MIG partition for mesh building
+  build_mesh:
+    gpu_enabled: true
+    gpu_resource: "nvidia.com/mig-3g.20gb" # Larger MIG partition for mesh building
+    gpu_count: 1
 ```
 
 Available GPU resources:
@@ -232,6 +273,81 @@ Use `gpu_count` to request multiple MIG slices (e.g., `gpu_count: 2` with `mig-1
 
 !!! note "Nodegroup requirement"
     MIG resources are only available on MIG-enabled nodegroups. Create a MIG nodegroup with a name containing `mig1-`, `mig2-`, or `mig3-` (see [MIG nodegroups](cluster-access-and-resizing.md#mig-nodegroups)).
+
+### CPU and Memory Configuration
+
+You can configure CPU and memory requests for all workflow steps (both CPU and GPU steps) using `cpu_request` and `memory_request` parameters in the `argo` section:
+
+```yaml
+argo:
+  # Optional: Set global defaults that apply to all steps
+  defaults:
+    cpu_request: "10"        # Default CPU cores for all steps
+    memory_request: "50Gi"   # Default memory for all steps
+
+  # Override for specific steps
+  match_photos:
+    cpu_request: "8"         # Override CPU for this step
+    memory_request: "32Gi"   # Override memory for this step
+
+  build_depth_maps:
+    cpu_request: "6"
+    memory_request: "24Gi"
+
+  align_cameras:
+    cpu_request: "20"        # CPU-heavy step
+    memory_request: "120Gi"
+```
+
+**Default values (if not specified):**
+
+- **GPU steps** (match_photos with GPU, build_depth_maps, build_mesh with GPU): `4` CPU cores, `16Gi` memory
+- **CPU steps** (setup, align_cameras, build_point_cloud, build_dem_orthomosaic, finalize): `18` CPU cores, `100Gi` memory
+- **Dual-mode steps** (match_photos, build_mesh): Defaults depend on `gpu_enabled` setting
+
+**Fallback order:**
+
+1. Step-specific value (e.g., `argo.match_photos.cpu_request`)
+2. User default from `argo.defaults` (if specified)
+3. Hardcoded default (based on step type and GPU mode)
+
+!!! tip "Using defaults as a template"
+    You can leave step-level parameters blank/empty to use the defaults, which serves as a visual template:
+
+    ```yaml
+    argo:
+      defaults:
+        cpu_request: "8"
+        memory_request: "40Gi"
+
+      match_photos:
+        cpu_request:      # Blank = uses defaults.cpu_request → 8
+        memory_request:   # Blank = uses defaults.memory_request → 40Gi
+
+      build_depth_maps:
+        cpu_request: "12" # Override: uses 12 instead of defaults
+        memory_request:   # Blank = uses defaults.memory_request → 40Gi
+    ```
+
+### Secondary Photo Processing
+
+The `match_photos_secondary` and `align_cameras_secondary` steps **inherit resource configuration** from their primary steps unless explicitly overridden:
+
+```yaml
+argo:
+  match_photos:
+    gpu_resource: "nvidia.com/mig-2g.10gb"
+    cpu_request: "6"
+    memory_request: "24Gi"
+
+  # match_photos_secondary automatically inherits the above settings
+  # unless you override them:
+  match_photos_secondary:
+    gpu_resource: "nvidia.com/mig-1g.5gb"  # Override: use smaller GPU
+    # cpu_request and memory_request still inherited from match_photos
+```
+
+This 4-level fallback applies: Secondary-specific → Primary step → User defaults → Hardcoded defaults
 
 **Parameters handled by Argo:** The `project_path`, `output_path`, and `project_name` configuration parameters are handled automatically by the Argo workflow:
 
@@ -539,11 +655,13 @@ argo logs <workflow-name> -c determine-datasets
 
 **Check:**
 
-1. Verify `gpu_enabled` parameter in config is a boolean (`true` or `false`), not a string
-2. Check preprocessing output to confirm correct `use_gpu` parameter was extracted
+1. Verify `argo.<step>.gpu_enabled` parameter in config is a boolean (`true` or `false`), not a string
+2. Check preprocessing output to confirm correct `use_gpu` parameter was extracted:
+   ```bash
+   argo logs <workflow-name> -c determine-datasets
+   ```
 3. Verify cluster has GPU nodes available and properly labeled (`nvidia.com/gpu.present=true`)
-4. Verify GPU nodes are tainted (`nvidia.com/gpu=true:NoSchedule`) - see [GPU node tainting](../admin/cluster-creation-and-resizing.md#configure-gpu-node-tainting)
-5. Verify the GPU step template has the correct toleration and resource request
+4. Verify the GPU step template has the correct GPU resource request
 
 ### MIG pods not scheduling
 
@@ -601,10 +719,16 @@ python3 -c "import yaml; yaml.safe_load(open('/ofo-share/argo-data/argo-input/co
 ```yaml
 match_photos:
   enabled: true
-  gpu_enabled: false  # CPU is sufficient, saves cost
+  # ... match_photos parameters
 
-build_mesh:
-  enabled: false  # Skip if not needed
+argo:
+  match_photos:
+    gpu_enabled: false  # CPU is sufficient, saves cost
+    cpu_request: "18"
+    memory_request: "100Gi"
+
+  build_mesh:
+    # Skip mesh generation if not needed (set enabled: false in build_mesh section)
 ```
 
 **For large datasets (>500 images):**
@@ -612,27 +736,56 @@ build_mesh:
 ```yaml
 match_photos:
   enabled: true
-  gpu_enabled: true  # GPU recommended
+  # ... match_photos parameters
 
 build_depth_maps:
-  enabled: true  # Always uses GPU
+  enabled: true
+  # ... depth maps parameters
 
 build_mesh:
   enabled: true
-  gpu_enabled: true  # GPU recommended for large meshes
+  # ... mesh parameters
+
+argo:
+  match_photos:
+    gpu_enabled: true  # GPU recommended
+    gpu_resource: "nvidia.com/mig-2g.10gb"
+    cpu_request: "4"
+    memory_request: "16Gi"
+
+  build_depth_maps:
+    # Always uses GPU
+    gpu_resource: "nvidia.com/gpu"  # Use full GPU for large datasets
+    cpu_request: "4"
+    memory_request: "16Gi"
+
+  build_mesh:
+    gpu_enabled: true  # GPU recommended for large meshes
+    gpu_resource: "nvidia.com/mig-2g.10gb"
 ```
 
 **Cost optimization:**
 
 ```yaml
 # Minimize GPU usage where possible
-match_photos:
-  gpu_enabled: false  # Use CPU for small datasets
+argo:
+  defaults:
+    gpu_resource: "nvidia.com/mig-1g.5gb"  # Use smallest MIG by default
 
+  match_photos:
+    gpu_enabled: false  # Use CPU for small datasets
+    cpu_request: "18"
+    memory_request: "100Gi"
+
+  build_depth_maps:
+    gpu_resource: "nvidia.com/mig-2g.10gb"  # Smaller GPU for depth maps
+    cpu_request: "4"
+    memory_request: "16Gi"
+
+# In step sections:
 build_mesh:
   enabled: false  # Skip mesh generation if not needed
 
-# Remove point cloud after DEM/ortho generation
 build_point_cloud:
   enabled: true
   remove_after_export: true  # Cleanup happens in finalize step
