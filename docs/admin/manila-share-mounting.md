@@ -54,9 +54,14 @@ helm repo update
 # Create namespace for Ceph CSI
 kubectl create namespace ceph-csi-cephfs
 
-# Install Ceph CSI driver
+# Install Ceph CSI driver with GPU node support
+# - provisioner.replicaCount=2: Reduced from default of 3 so autoscaler doesn't keep nodegroups scaled up with 2 nodes
+# - nodeplugin.tolerations: Allow CSI driver to run on GPU nodes (tainted with nvidia.com/gpu=true:NoSchedule). Unclear if this is actually necessary. On next cluster creation, try witout the tolerations and see if pods that mount the PVC can run on GPU nodes.
 helm install --namespace "ceph-csi-cephfs" "ceph-csi-cephfs" ceph-csi/ceph-csi-cephfs \
-  --set provisioner.replicaCount=2 # Reduced from default of 3 so autoscaler doesn't keep nodegroups scaled up with 2 nodes (one replica goes on default-worker and one on a nodegroup)
+  --set provisioner.replicaCount=2 \
+  --set nodeplugin.tolerations[0].key=nvidia.com/gpu \
+  --set nodeplugin.tolerations[0].operator=Exists \
+  --set nodeplugin.tolerations[0].effect=NoSchedule
 
 # Check installation status
 helm status --namespace "ceph-csi-cephfs" "ceph-csi-cephfs"
