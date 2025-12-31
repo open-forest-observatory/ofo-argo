@@ -168,7 +168,7 @@ spec:
     - name: compute-photogrammetry-config-subfolder
       # Ensure CPU pods only schedule on CPU nodes (labeled by NFD based on nodegroup name)
       nodeSelector:
-        workload-type: cpu
+        feature.node.kubernetes.io/workload-type: cpu
       script:
         image: python:3.9
         command: ["python3"]
@@ -187,7 +187,7 @@ spec:
     - name: determine-projects
       # Ensure CPU pods only schedule on CPU nodes (labeled by NFD based on nodegroup name)
       nodeSelector:
-        workload-type: cpu
+        feature.node.kubernetes.io/workload-type: cpu
       container:
         image: ghcr.io/open-forest-observatory/argo-workflow-utils:{{workflow.parameters.UTILS_IMAGE_TAG}}
         volumeMounts:
@@ -527,7 +527,7 @@ spec:
             default: "100Gi"  # Default memory for CPU steps
       # Ensure CPU pods only schedule on CPU nodes (labeled by NFD based on nodegroup name)
       nodeSelector:
-        workload-type: cpu
+        feature.node.kubernetes.io/workload-type: cpu
       podSpecPatch: '{"containers":[{"name":"main","resources":{"requests":{"cpu":"{{inputs.parameters.cpu-request}}","memory":"{{inputs.parameters.memory-request}}"}}}]}'
       script:
         image: ghcr.io/open-forest-observatory/automate-metashape:{{workflow.parameters.AUTOMATE_METASHAPE_IMAGE_TAG}}
@@ -614,7 +614,7 @@ spec:
           - name: photogrammetry-config-subfolder
       # Ensure CPU pods only schedule on CPU nodes (labeled by NFD based on nodegroup name)
       nodeSelector:
-        workload-type: cpu
+        feature.node.kubernetes.io/workload-type: cpu
       container:
         image: rclone/rclone:latest
         volumeMounts:
@@ -703,7 +703,7 @@ spec:
           - name: photogrammetry-config-subfolder
       # Ensure CPU pods only schedule on CPU nodes (labeled by NFD based on nodegroup name)
       nodeSelector:
-        workload-type: cpu
+        feature.node.kubernetes.io/workload-type: cpu
       container:
         image: ghcr.io/open-forest-observatory/photogrammetry-postprocessing:{{workflow.parameters.POSTPROCESSING_IMAGE_TAG}}
         volumeMounts:

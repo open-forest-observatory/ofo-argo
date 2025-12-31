@@ -246,7 +246,7 @@ Label CPU nodes automatically based on their nodegroup naming pattern:
 kubectl apply -f setup/k8s/cpu-nodegroup-labels.yaml
 ```
 
-This creates a NodeFeatureRule that automatically labels any node with `cpu` in its name with `workload-type: cpu`. The label is applied by Node Feature Discovery (NFD) when the node joins the cluster.
+This creates a NodeFeatureRule that automatically labels any node with `cpu` in its name with `feature.node.kubernetes.io/workload-type: cpu`. The label is applied by Node Feature Discovery (NFD) when the node joins the cluster.
 
 !!! important "Nodegroup naming requirement"
     When creating CPU nodegroups, ensure the nodegroup name contains `cpu` (e.g., `cpu-group`, `cpu-m3xl`) so nodes are automatically labeled. See [nodegroup creation](../usage/cluster-access-and-resizing.md#add-a-new-nodegroup) for details.
@@ -254,14 +254,14 @@ This creates a NodeFeatureRule that automatically labels any node with `cpu` in 
 ### Verify CPU node labels
 
 ```bash
-kubectl get nodes -L workload-type
+kubectl get nodes -L feature.node.kubernetes.io/workload-type
 ```
 
-All nodes with `cpu` in their name should show `workload-type=cpu`.
+All nodes with `cpu` in their name should show `feature.node.kubernetes.io/workload-type=cpu`.
 
 ### How it works
 
-- **CPU pods**: Use `nodeSelector: workload-type: cpu` to explicitly target CPU nodes
+- **CPU pods**: Use `nodeSelector: feature.node.kubernetes.io/workload-type: cpu` to explicitly target CPU nodes
 - **GPU pods**: Request GPU resources (e.g., `nvidia.com/mig-1g.5gb`), which naturally constrains them to nodes advertising those resources
 - **System pods**: DaemonSets run on all nodes as needed
 
