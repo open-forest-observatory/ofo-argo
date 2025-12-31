@@ -144,46 +144,210 @@ def process_config_file(config_path: str) -> Dict[str, Any]:
     DEFAULT_GPU_RESOURCE = "nvidia.com/gpu"
     DEFAULT_GPU_COUNT = 1
 
+    # Hardcoded defaults for CPU/memory requests
+    DEFAULT_CPU_REQUEST_CPU_MODE = "18"
+    DEFAULT_MEMORY_REQUEST_CPU_MODE = "100Gi"
+    DEFAULT_CPU_REQUEST_GPU_MODE = "4"
+    DEFAULT_MEMORY_REQUEST_GPU_MODE = "16Gi"
+
+    # Extract user-specified defaults from argo.defaults section (if present)
+    # These sit between step-specific values and hardcoded defaults in the fallback chain
+    user_cpu_default = get_nested(config, ['argo', 'defaults', 'cpu_request'])
+    user_memory_default = get_nested(config, ['argo', 'defaults', 'memory_request'])
+    user_gpu_resource_default = get_nested(config, ['argo', 'defaults', 'gpu_resource'])
+    user_gpu_count_default = get_nested(config, ['argo', 'defaults', 'gpu_count'])
+
     # Apply translation logic from implementation plan
     mission = {
         "project_name": project_name,
         "project_name_sanitized": project_name_sanitized,
         "config": config_path,
 
+        # Setup step resources
+        "setup_cpu_request": (
+            get_nested(config, ['argo', 'setup', 'cpu_request']) or
+            user_cpu_default or
+            DEFAULT_CPU_REQUEST_CPU_MODE
+        ),
+        "setup_memory_request": (
+            get_nested(config, ['argo', 'setup', 'memory_request']) or
+            user_memory_default or
+            DEFAULT_MEMORY_REQUEST_CPU_MODE
+        ),
+
         # Step enabled flags (setup and finalize always run, so not included)
         # Use actual Python booleans (not strings) so they serialize to JSON true/false
         "match_photos_enabled": str_to_bool(get_nested(config, ['match_photos', 'enabled'], False)),
-        "match_photos_use_gpu": str_to_bool(get_nested(config, ['match_photos', 'gpu_enabled'], True)),
-        "match_photos_gpu_resource": get_nested(config, ['match_photos', 'gpu_resource'], DEFAULT_GPU_RESOURCE),
-        "match_photos_gpu_count": get_nested(config, ['match_photos', 'gpu_count'], DEFAULT_GPU_COUNT),
+        "match_photos_use_gpu": str_to_bool(get_nested(config, ['argo', 'match_photos', 'gpu_enabled'], True)),
+        "match_photos_gpu_resource": (
+            get_nested(config, ['argo', 'match_photos', 'gpu_resource']) or
+            user_gpu_resource_default or
+            DEFAULT_GPU_RESOURCE
+        ),
+        "match_photos_gpu_count": (
+            get_nested(config, ['argo', 'match_photos', 'gpu_count']) or
+            user_gpu_count_default or
+            DEFAULT_GPU_COUNT
+        ),
+        "match_photos_cpu_request": (
+            get_nested(config, ['argo', 'match_photos', 'cpu_request']) or
+            user_cpu_default or
+            (DEFAULT_CPU_REQUEST_GPU_MODE if str_to_bool(get_nested(config, ['argo', 'match_photos', 'gpu_enabled'], True)) else DEFAULT_CPU_REQUEST_CPU_MODE)
+        ),
+        "match_photos_memory_request": (
+            get_nested(config, ['argo', 'match_photos', 'memory_request']) or
+            user_memory_default or
+            (DEFAULT_MEMORY_REQUEST_GPU_MODE if str_to_bool(get_nested(config, ['argo', 'match_photos', 'gpu_enabled'], True)) else DEFAULT_MEMORY_REQUEST_CPU_MODE)
+        ),
 
         "align_cameras_enabled": str_to_bool(get_nested(config, ['align_cameras', 'enabled'], False)),
+        "align_cameras_cpu_request": (
+            get_nested(config, ['argo', 'align_cameras', 'cpu_request']) or
+            user_cpu_default or
+            DEFAULT_CPU_REQUEST_CPU_MODE
+        ),
+        "align_cameras_memory_request": (
+            get_nested(config, ['argo', 'align_cameras', 'memory_request']) or
+            user_memory_default or
+            DEFAULT_MEMORY_REQUEST_CPU_MODE
+        ),
 
         "build_depth_maps_enabled": str_to_bool(get_nested(config, ['build_depth_maps', 'enabled'], False)),
-        "build_depth_maps_gpu_resource": get_nested(config, ['build_depth_maps', 'gpu_resource'], DEFAULT_GPU_RESOURCE),
-        "build_depth_maps_gpu_count": get_nested(config, ['build_depth_maps', 'gpu_count'], DEFAULT_GPU_COUNT),
+        "build_depth_maps_gpu_resource": (
+            get_nested(config, ['argo', 'build_depth_maps', 'gpu_resource']) or
+            user_gpu_resource_default or
+            DEFAULT_GPU_RESOURCE
+        ),
+        "build_depth_maps_gpu_count": (
+            get_nested(config, ['argo', 'build_depth_maps', 'gpu_count']) or
+            user_gpu_count_default or
+            DEFAULT_GPU_COUNT
+        ),
+        "build_depth_maps_cpu_request": (
+            get_nested(config, ['argo', 'build_depth_maps', 'cpu_request']) or
+            user_cpu_default or
+            DEFAULT_CPU_REQUEST_GPU_MODE
+        ),
+        "build_depth_maps_memory_request": (
+            get_nested(config, ['argo', 'build_depth_maps', 'memory_request']) or
+            user_memory_default or
+            DEFAULT_MEMORY_REQUEST_GPU_MODE
+        ),
 
         "build_point_cloud_enabled": str_to_bool(get_nested(config, ['build_point_cloud', 'enabled'], False)),
+        "build_point_cloud_cpu_request": (
+            get_nested(config, ['argo', 'build_point_cloud', 'cpu_request']) or
+            user_cpu_default or
+            DEFAULT_CPU_REQUEST_CPU_MODE
+        ),
+        "build_point_cloud_memory_request": (
+            get_nested(config, ['argo', 'build_point_cloud', 'memory_request']) or
+            user_memory_default or
+            DEFAULT_MEMORY_REQUEST_CPU_MODE
+        ),
 
         "build_mesh_enabled": str_to_bool(get_nested(config, ['build_mesh', 'enabled'], False)),
-        "build_mesh_use_gpu": str_to_bool(get_nested(config, ['build_mesh', 'gpu_enabled'], True)),
-        "build_mesh_gpu_resource": get_nested(config, ['build_mesh', 'gpu_resource'], DEFAULT_GPU_RESOURCE),
-        "build_mesh_gpu_count": get_nested(config, ['build_mesh', 'gpu_count'], DEFAULT_GPU_COUNT),
+        "build_mesh_use_gpu": str_to_bool(get_nested(config, ['argo', 'build_mesh', 'gpu_enabled'], True)),
+        "build_mesh_gpu_resource": (
+            get_nested(config, ['argo', 'build_mesh', 'gpu_resource']) or
+            user_gpu_resource_default or
+            DEFAULT_GPU_RESOURCE
+        ),
+        "build_mesh_gpu_count": (
+            get_nested(config, ['argo', 'build_mesh', 'gpu_count']) or
+            user_gpu_count_default or
+            DEFAULT_GPU_COUNT
+        ),
+        "build_mesh_cpu_request": (
+            get_nested(config, ['argo', 'build_mesh', 'cpu_request']) or
+            user_cpu_default or
+            (DEFAULT_CPU_REQUEST_GPU_MODE if str_to_bool(get_nested(config, ['argo', 'build_mesh', 'gpu_enabled'], True)) else DEFAULT_CPU_REQUEST_CPU_MODE)
+        ),
+        "build_mesh_memory_request": (
+            get_nested(config, ['argo', 'build_mesh', 'memory_request']) or
+            user_memory_default or
+            (DEFAULT_MEMORY_REQUEST_GPU_MODE if str_to_bool(get_nested(config, ['argo', 'build_mesh', 'gpu_enabled'], True)) else DEFAULT_MEMORY_REQUEST_CPU_MODE)
+        ),
 
         # build_dem_orthomosaic runs if either DEM or orthomosaic is enabled
         "build_dem_orthomosaic_enabled": (
             str_to_bool(get_nested(config, ['build_dem', 'enabled'], False)) or
             str_to_bool(get_nested(config, ['build_orthomosaic', 'enabled'], False))
         ),
+        "build_dem_orthomosaic_cpu_request": (
+            get_nested(config, ['argo', 'build_dem_orthomosaic', 'cpu_request']) or
+            user_cpu_default or
+            DEFAULT_CPU_REQUEST_CPU_MODE
+        ),
+        "build_dem_orthomosaic_memory_request": (
+            get_nested(config, ['argo', 'build_dem_orthomosaic', 'memory_request']) or
+            user_memory_default or
+            DEFAULT_MEMORY_REQUEST_CPU_MODE
+        ),
 
         # Secondary photo processing runs if photo_path_secondary is non-empty
         "match_photos_secondary_enabled": bool(get_nested(config, ['project', 'photo_path_secondary'], "")),
-        "match_photos_secondary_use_gpu": str_to_bool(get_nested(config, ['match_photos', 'gpu_enabled'], True)),
-        # Secondary uses same GPU resource/count as primary match_photos
-        "match_photos_secondary_gpu_resource": get_nested(config, ['match_photos', 'gpu_resource'], DEFAULT_GPU_RESOURCE),
-        "match_photos_secondary_gpu_count": get_nested(config, ['match_photos', 'gpu_count'], DEFAULT_GPU_COUNT),
+        # Secondary inherits from primary unless explicitly overridden (4-level fallback)
+        "match_photos_secondary_use_gpu": str_to_bool(
+            get_nested(config, ['argo', 'match_photos_secondary', 'gpu_enabled']) or
+            get_nested(config, ['argo', 'match_photos', 'gpu_enabled'], True)
+        ),
+        "match_photos_secondary_gpu_resource": (
+            get_nested(config, ['argo', 'match_photos_secondary', 'gpu_resource']) or
+            get_nested(config, ['argo', 'match_photos', 'gpu_resource']) or
+            user_gpu_resource_default or
+            DEFAULT_GPU_RESOURCE
+        ),
+        "match_photos_secondary_gpu_count": (
+            get_nested(config, ['argo', 'match_photos_secondary', 'gpu_count']) or
+            get_nested(config, ['argo', 'match_photos', 'gpu_count']) or
+            user_gpu_count_default or
+            DEFAULT_GPU_COUNT
+        ),
+        "match_photos_secondary_cpu_request": (
+            get_nested(config, ['argo', 'match_photos_secondary', 'cpu_request']) or
+            get_nested(config, ['argo', 'match_photos', 'cpu_request']) or
+            user_cpu_default or
+            (DEFAULT_CPU_REQUEST_GPU_MODE if str_to_bool(
+                get_nested(config, ['argo', 'match_photos_secondary', 'gpu_enabled']) or
+                get_nested(config, ['argo', 'match_photos', 'gpu_enabled'], True)
+            ) else DEFAULT_CPU_REQUEST_CPU_MODE)
+        ),
+        "match_photos_secondary_memory_request": (
+            get_nested(config, ['argo', 'match_photos_secondary', 'memory_request']) or
+            get_nested(config, ['argo', 'match_photos', 'memory_request']) or
+            user_memory_default or
+            (DEFAULT_MEMORY_REQUEST_GPU_MODE if str_to_bool(
+                get_nested(config, ['argo', 'match_photos_secondary', 'gpu_enabled']) or
+                get_nested(config, ['argo', 'match_photos', 'gpu_enabled'], True)
+            ) else DEFAULT_MEMORY_REQUEST_CPU_MODE)
+        ),
 
         "align_cameras_secondary_enabled": bool(get_nested(config, ['project', 'photo_path_secondary'], "")),
+        "align_cameras_secondary_cpu_request": (
+            get_nested(config, ['argo', 'align_cameras_secondary', 'cpu_request']) or
+            get_nested(config, ['argo', 'align_cameras', 'cpu_request']) or
+            user_cpu_default or
+            DEFAULT_CPU_REQUEST_CPU_MODE
+        ),
+        "align_cameras_secondary_memory_request": (
+            get_nested(config, ['argo', 'align_cameras_secondary', 'memory_request']) or
+            get_nested(config, ['argo', 'align_cameras', 'memory_request']) or
+            user_memory_default or
+            DEFAULT_MEMORY_REQUEST_CPU_MODE
+        ),
+
+        # Finalize step resources
+        "finalize_cpu_request": (
+            get_nested(config, ['argo', 'finalize', 'cpu_request']) or
+            user_cpu_default or
+            DEFAULT_CPU_REQUEST_CPU_MODE
+        ),
+        "finalize_memory_request": (
+            get_nested(config, ['argo', 'finalize', 'memory_request']) or
+            user_memory_default or
+            DEFAULT_MEMORY_REQUEST_CPU_MODE
+        ),
     }
 
     return mission

@@ -118,6 +118,47 @@ spec:
                   value: "{{item.match_photos_secondary_gpu_count}}"
                 - name: align_cameras_secondary_enabled
                   value: "{{item.align_cameras_secondary_enabled}}"
+                # CPU/memory request parameters
+                - name: setup_cpu_request
+                  value: "{{item.setup_cpu_request}}"
+                - name: setup_memory_request
+                  value: "{{item.setup_memory_request}}"
+                - name: match_photos_cpu_request
+                  value: "{{item.match_photos_cpu_request}}"
+                - name: match_photos_memory_request
+                  value: "{{item.match_photos_memory_request}}"
+                - name: align_cameras_cpu_request
+                  value: "{{item.align_cameras_cpu_request}}"
+                - name: align_cameras_memory_request
+                  value: "{{item.align_cameras_memory_request}}"
+                - name: build_depth_maps_cpu_request
+                  value: "{{item.build_depth_maps_cpu_request}}"
+                - name: build_depth_maps_memory_request
+                  value: "{{item.build_depth_maps_memory_request}}"
+                - name: build_point_cloud_cpu_request
+                  value: "{{item.build_point_cloud_cpu_request}}"
+                - name: build_point_cloud_memory_request
+                  value: "{{item.build_point_cloud_memory_request}}"
+                - name: build_mesh_cpu_request
+                  value: "{{item.build_mesh_cpu_request}}"
+                - name: build_mesh_memory_request
+                  value: "{{item.build_mesh_memory_request}}"
+                - name: build_dem_orthomosaic_cpu_request
+                  value: "{{item.build_dem_orthomosaic_cpu_request}}"
+                - name: build_dem_orthomosaic_memory_request
+                  value: "{{item.build_dem_orthomosaic_memory_request}}"
+                - name: match_photos_secondary_cpu_request
+                  value: "{{item.match_photos_secondary_cpu_request}}"
+                - name: match_photos_secondary_memory_request
+                  value: "{{item.match_photos_secondary_memory_request}}"
+                - name: align_cameras_secondary_cpu_request
+                  value: "{{item.align_cameras_secondary_cpu_request}}"
+                - name: align_cameras_secondary_memory_request
+                  value: "{{item.align_cameras_secondary_memory_request}}"
+                - name: finalize_cpu_request
+                  value: "{{item.finalize_cpu_request}}"
+                - name: finalize_memory_request
+                  value: "{{item.finalize_memory_request}}"
             withParam: "{{steps.determine-projects.outputs.result}}"
 
     ## Here we define what the main steps actually do
@@ -182,6 +223,27 @@ spec:
           - name: match_photos_secondary_gpu_resource
           - name: match_photos_secondary_gpu_count
           - name: align_cameras_secondary_enabled
+          # CPU/memory request parameters for ALL steps
+          - name: setup_cpu_request
+          - name: setup_memory_request
+          - name: match_photos_cpu_request
+          - name: match_photos_memory_request
+          - name: align_cameras_cpu_request
+          - name: align_cameras_memory_request
+          - name: build_depth_maps_cpu_request
+          - name: build_depth_maps_memory_request
+          - name: build_point_cloud_cpu_request
+          - name: build_point_cloud_memory_request
+          - name: build_mesh_cpu_request
+          - name: build_mesh_memory_request
+          - name: build_dem_orthomosaic_cpu_request
+          - name: build_dem_orthomosaic_memory_request
+          - name: match_photos_secondary_cpu_request
+          - name: match_photos_secondary_memory_request
+          - name: align_cameras_secondary_cpu_request
+          - name: align_cameras_secondary_memory_request
+          - name: finalize_cpu_request
+          - name: finalize_memory_request
       dag:
         tasks:
           # Step 1: Setup (always runs, CPU only)
@@ -195,6 +257,10 @@ spec:
                   value: "{{inputs.parameters.config-file}}"
                 - name: step
                   value: "setup"
+                - name: cpu-request
+                  value: "{{inputs.parameters.setup_cpu_request}}"
+                - name: memory-request
+                  value: "{{inputs.parameters.setup_memory_request}}"
 
           # Step 2: Match Photos (conditional, GPU or CPU based on config)
           - name: match-photos-gpu
@@ -213,6 +279,10 @@ spec:
                   value: "{{inputs.parameters.match_photos_gpu_resource}}"
                 - name: gpu-count
                   value: "{{inputs.parameters.match_photos_gpu_count}}"
+                - name: cpu-request
+                  value: "{{inputs.parameters.match_photos_cpu_request}}"
+                - name: memory-request
+                  value: "{{inputs.parameters.match_photos_memory_request}}"
 
           - name: match-photos-cpu
             depends: "setup.Succeeded"
@@ -226,6 +296,10 @@ spec:
                   value: "{{inputs.parameters.config-file}}"
                 - name: step
                   value: "match_photos"
+                - name: cpu-request
+                  value: "{{inputs.parameters.match_photos_cpu_request}}"
+                - name: memory-request
+                  value: "{{inputs.parameters.match_photos_memory_request}}"
 
           # Step 3: Align Cameras (conditional, CPU only)
           - name: align-cameras
@@ -240,6 +314,10 @@ spec:
                   value: "{{inputs.parameters.config-file}}"
                 - name: step
                   value: "align_cameras"
+                - name: cpu-request
+                  value: "{{inputs.parameters.align_cameras_cpu_request}}"
+                - name: memory-request
+                  value: "{{inputs.parameters.align_cameras_memory_request}}"
 
           # Step 4: Build Depth Maps (conditional, GPU only)
           - name: build-depth-maps
@@ -258,6 +336,10 @@ spec:
                   value: "{{inputs.parameters.build_depth_maps_gpu_resource}}"
                 - name: gpu-count
                   value: "{{inputs.parameters.build_depth_maps_gpu_count}}"
+                - name: cpu-request
+                  value: "{{inputs.parameters.build_depth_maps_cpu_request}}"
+                - name: memory-request
+                  value: "{{inputs.parameters.build_depth_maps_memory_request}}"
 
           # Step 5: Build Point Cloud (conditional, CPU only)
           - name: build-point-cloud
@@ -272,6 +354,10 @@ spec:
                   value: "{{inputs.parameters.config-file}}"
                 - name: step
                   value: "build_point_cloud"
+                - name: cpu-request
+                  value: "{{inputs.parameters.build_point_cloud_cpu_request}}"
+                - name: memory-request
+                  value: "{{inputs.parameters.build_point_cloud_memory_request}}"
 
           # Step 6: Build Mesh (conditional, GPU or CPU based on config)
           - name: build-mesh-gpu
@@ -290,6 +376,10 @@ spec:
                   value: "{{inputs.parameters.build_mesh_gpu_resource}}"
                 - name: gpu-count
                   value: "{{inputs.parameters.build_mesh_gpu_count}}"
+                - name: cpu-request
+                  value: "{{inputs.parameters.build_mesh_cpu_request}}"
+                - name: memory-request
+                  value: "{{inputs.parameters.build_mesh_memory_request}}"
 
           - name: build-mesh-cpu
             depends: "build-point-cloud.Succeeded || build-point-cloud.Skipped"
@@ -303,6 +393,10 @@ spec:
                   value: "{{inputs.parameters.config-file}}"
                 - name: step
                   value: "build_mesh"
+                - name: cpu-request
+                  value: "{{inputs.parameters.build_mesh_cpu_request}}"
+                - name: memory-request
+                  value: "{{inputs.parameters.build_mesh_memory_request}}"
 
           # Step 7: Build DEM/Orthomosaic (conditional, CPU only)
           - name: build-dem-orthomosaic
@@ -317,6 +411,10 @@ spec:
                   value: "{{inputs.parameters.config-file}}"
                 - name: step
                   value: "build_dem_orthomosaic"
+                - name: cpu-request
+                  value: "{{inputs.parameters.build_dem_orthomosaic_cpu_request}}"
+                - name: memory-request
+                  value: "{{inputs.parameters.build_dem_orthomosaic_memory_request}}"
 
           # Step 8: Match Photos Secondary (conditional, GPU or CPU based on config)
           - name: match-photos-secondary-gpu
@@ -335,6 +433,10 @@ spec:
                   value: "{{inputs.parameters.match_photos_secondary_gpu_resource}}"
                 - name: gpu-count
                   value: "{{inputs.parameters.match_photos_secondary_gpu_count}}"
+                - name: cpu-request
+                  value: "{{inputs.parameters.match_photos_secondary_cpu_request}}"
+                - name: memory-request
+                  value: "{{inputs.parameters.match_photos_secondary_memory_request}}"
 
           - name: match-photos-secondary-cpu
             depends: "build-dem-orthomosaic.Succeeded || build-dem-orthomosaic.Skipped"
@@ -348,6 +450,10 @@ spec:
                   value: "{{inputs.parameters.config-file}}"
                 - name: step
                   value: "match_photos_secondary"
+                - name: cpu-request
+                  value: "{{inputs.parameters.match_photos_secondary_cpu_request}}"
+                - name: memory-request
+                  value: "{{inputs.parameters.match_photos_secondary_memory_request}}"
 
           # Step 9: Align Cameras Secondary (conditional, CPU only)
           - name: align-cameras-secondary
@@ -362,6 +468,10 @@ spec:
                   value: "{{inputs.parameters.config-file}}"
                 - name: step
                   value: "align_cameras_secondary"
+                - name: cpu-request
+                  value: "{{inputs.parameters.align_cameras_secondary_cpu_request}}"
+                - name: memory-request
+                  value: "{{inputs.parameters.align_cameras_secondary_memory_request}}"
 
           # Step 10: Finalize (always runs, CPU only)
           - name: finalize
@@ -375,6 +485,10 @@ spec:
                   value: "{{inputs.parameters.config-file}}"
                 - name: step
                   value: "finalize"
+                - name: cpu-request
+                  value: "{{inputs.parameters.finalize_cpu_request}}"
+                - name: memory-request
+                  value: "{{inputs.parameters.finalize_memory_request}}"
 
           # Upload task (runs after finalize completes)
           - name: rclone-upload-task
@@ -407,6 +521,13 @@ spec:
           - name: project-name
           - name: config-file
           - name: step
+          - name: cpu-request
+            default: "18"  # Default CPU cores for CPU steps
+          - name: memory-request
+            default: "100Gi"  # Default memory for CPU steps
+      # Ensure CPU pods only schedule on CPU nodes (labeled by NFD based on nodegroup name)
+      nodeSelector:
+        workload-type: cpu
       script:
         image: ghcr.io/open-forest-observatory/automate-metashape:{{workflow.parameters.AUTOMATE_METASHAPE_IMAGE_TAG}}
         volumeMounts:
@@ -437,8 +558,8 @@ spec:
             --step "{{inputs.parameters.step}}"
         resources:
           requests:
-            cpu: "18"
-            memory: "100Gi"
+            cpu: "{{inputs.parameters.cpu-request}}"
+            memory: "{{inputs.parameters.memory-request}}"
         env:
           - name: AGISOFT_FLS
             valueFrom:
@@ -458,13 +579,12 @@ spec:
             default: "nvidia.com/gpu"  # Full GPU. MIG options: nvidia.com/mig-1g.5gb, mig-2g.10gb, mig-3g.20gb
           - name: gpu-count
             default: "1"  # Number of GPU resources to request (e.g., 2 for two MIG slices)
-      # Tolerate GPU node taint; GPU resource request handles node selection
-      tolerations:
-        - key: nvidia.com/gpu
-          operator: Equal
-          value: "true"
-          effect: NoSchedule
+          - name: cpu-request
+            default: "4"  # Default CPU cores for GPU steps
+          - name: memory-request
+            default: "16Gi"  # Default memory for GPU steps
       # Dynamic GPU resource request via podSpecPatch (parameter substitution happens before YAML parse)
+      # GPU resource request ensures pod only schedules on nodes with GPU resources available
       podSpecPatch: |
         containers:
         - name: main
@@ -491,8 +611,8 @@ spec:
             --step "{{inputs.parameters.step}}"
         resources:
           requests:
-            cpu: "4"
-            memory: "16Gi"
+            cpu: "{{inputs.parameters.cpu-request}}"
+            memory: "{{inputs.parameters.memory-request}}"
         env:
           - name: AGISOFT_FLS
             valueFrom:
