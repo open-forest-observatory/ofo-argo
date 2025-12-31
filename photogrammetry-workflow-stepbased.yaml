@@ -528,6 +528,7 @@ spec:
       # Ensure CPU pods only schedule on CPU nodes (labeled by NFD based on nodegroup name)
       nodeSelector:
         workload-type: cpu
+      podSpecPatch: '{"containers":[{"name":"main","resources":{"requests":{"cpu":"{{inputs.parameters.cpu-request}}","memory":"{{inputs.parameters.memory-request}}"}}}]}'
       script:
         image: ghcr.io/open-forest-observatory/automate-metashape:{{workflow.parameters.AUTOMATE_METASHAPE_IMAGE_TAG}}
         volumeMounts:
@@ -556,10 +557,6 @@ spec:
             --output-path "{{workflow.parameters.TEMP_WORKING_DIR}}/photogrammetry/{{inputs.parameters.project-name}}/output" \
             --project-name "{{inputs.parameters.project-name}}" \
             --step "{{inputs.parameters.step}}"
-        resources:
-          requests:
-            cpu: "{{inputs.parameters.cpu-request}}"
-            memory: "{{inputs.parameters.memory-request}}"
         env:
           - name: AGISOFT_FLS
             valueFrom:
@@ -585,14 +582,7 @@ spec:
             default: "16Gi"  # Default memory for GPU steps
       # Dynamic GPU resource request via podSpecPatch (parameter substitution happens before YAML parse)
       # GPU resource request ensures pod only schedules on nodes with GPU resources available
-      podSpecPatch: |
-        containers:
-        - name: main
-          resources:
-            requests:
-              {{inputs.parameters.gpu-resource}}: "{{inputs.parameters.gpu-count}}"
-            limits:
-              {{inputs.parameters.gpu-resource}}: "{{inputs.parameters.gpu-count}}"
+      podSpecPatch: '{"containers":[{"name":"main","resources":{"requests":{"cpu":"{{inputs.parameters.cpu-request}}","memory":"{{inputs.parameters.memory-request}}","{{inputs.parameters.gpu-resource}}":"{{inputs.parameters.gpu-count}}"},"limits":{"{{inputs.parameters.gpu-resource}}":"{{inputs.parameters.gpu-count}}"}}}]}'
       script:
         image: ghcr.io/open-forest-observatory/automate-metashape:{{workflow.parameters.AUTOMATE_METASHAPE_IMAGE_TAG}}
         volumeMounts:
@@ -609,10 +599,6 @@ spec:
             --output-path "{{workflow.parameters.TEMP_WORKING_DIR}}/photogrammetry/{{inputs.parameters.project-name}}/output" \
             --project-name "{{inputs.parameters.project-name}}" \
             --step "{{inputs.parameters.step}}"
-        resources:
-          requests:
-            cpu: "{{inputs.parameters.cpu-request}}"
-            memory: "{{inputs.parameters.memory-request}}"
         env:
           - name: AGISOFT_FLS
             valueFrom:
