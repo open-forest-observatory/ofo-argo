@@ -12,7 +12,7 @@ Overall, on average:
 - matchPhotos takes 56% of the time (51-60 across all 10 sample projects, except worse for smallest
   ones)
 
-Therefore, for matchPhotos it is marginally cheaper, but slower, to use CPU instead of GPU (since GPU costs 2x per
+Therefore, for matchPhotos it is marginally cheaper per project, but slower, to use CPU instead of GPU (since GPU costs 2x per
 minute), and potentially a good strategy when GPU nodes are scarce. Confirming this: I can fit 2-3
 matchPhotos on a m3.xl. Can fit 3-4 matchPhotos on a g3.xl MIG. The g3 costs twice but runs a little
 less than double the speed, so still cheaper to use CPU for matching.
