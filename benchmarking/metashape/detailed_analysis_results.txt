@@ -1,0 +1,970 @@
+====================================================================================================
+DETAILED PER-STEP SCALING ANALYSIS
+====================================================================================================
+
+====================================================================================================
+UNDERSTANDING EFFICIENCY METRICS
+====================================================================================================
+
+When we compare 16-core to 32-core performance, we calculate:
+
+    Speedup = Time_16core / Time_32core
+
+    Efficiency = (Speedup / CoreRatio) × 100%
+                = (Speedup / 2.0) × 100%
+
+INTERPRETATION:
+- Efficiency = 100%: Perfect scaling. 2x cores = 2x faster
+- Efficiency > 100%: SUPER-LINEAR scaling. Better than expected!
+- Efficiency < 100%: SUB-LINEAR scaling. Parallelization overhead
+
+WHY CAN EFFICIENCY EXCEED 100%?
+1. Cache effects: More cores = more L3 cache, data fits better
+2. Memory bandwidth: Better utilization with more cores
+3. NUMA effects: Better memory locality
+4. Reduced contention: Less lock contention per core
+
+For "match_photos" showing 115% efficiency:
+- 16c: 1263s → 32c: 481s
+- Speedup = 1263/481 = 2.63x (not just 2x!)
+- Efficiency = 2.63/2 × 100% = 131%
+- This is REAL - the algorithm benefits from extra cache/memory bandwidth
+
+WHY IS LOW EFFICIENCY BAD?
+- Efficiency = 50% means you're wasting half your cores
+- Example: 16c: 100s → 32c: 100s (no speedup)
+  - Speedup = 1.0x, Efficiency = 50%
+  - You're paying for 32 cores but only using 16 cores worth of work
+
+
+
+====================================================================================================
+PART 1: CPU SCALING - DETAILED PER-STEP BREAKDOWN
+====================================================================================================
+
+====================================================================================================
+STEP: align_cameras / alignCameras
+====================================================================================================
+Number of projects tested: 7
+
+AVERAGE PERFORMANCE:
+  Speedup (16c→32c):        1.41x
+  Parallel efficiency:      70.3% (±6.6%)
+  Efficiency range:         58.4% to 79.6%
+  CPU utilization (16c):    77.4%
+  CPU utilization (32c):    69.1%
+
+INTERPRETATION:
+  ⚠ MODERATE scaling. Limited benefit from additional cores.
+  → Recommendation: Consider 16-core instances or bin-packing
+
+  → Moderate variability (σ=6.6%): Some variation by project
+
+PER-PROJECT RESULTS:
+  Project                   16c(s)     32c(s)     Speedup    Eff%       CPU%16   CPU%32  
+  ------------------------------------------------------------------------------------------
+  000810                    1712       1075       1.59       79.6       73.0     63.0    
+  000404                    1793       1213       1.48       73.9       74.0     64.0    
+  0068_000434_000440        4167       2864       1.45       72.7       75.0     63.0    
+  0131_000015_000013        100        70         1.43       71.4       79.0     73.0    
+  benchmarking-emerald-subset 22         16         1.38       68.8       87.0     82.0    
+  000192                    496        369        1.34       67.2       76.0     67.0    
+  000195                    1057       905        1.17       58.4       78.0     72.0    
+
+====================================================================================================
+STEP: align_cameras / optimizeCameras
+====================================================================================================
+Number of projects tested: 7
+
+AVERAGE PERFORMANCE:
+  Speedup (16c→32c):        1.23x
+  Parallel efficiency:      61.7% (±8.4%)
+  Efficiency range:         50.0% to 70.0%
+  CPU utilization (16c):    61.9%
+  CPU utilization (32c):    47.6%
+
+INTERPRETATION:
+  ⚠ MODERATE scaling. Limited benefit from additional cores.
+  → Recommendation: Consider 16-core instances or bin-packing
+
+  → Moderate variability (σ=8.4%): Some variation by project
+
+PER-PROJECT RESULTS:
+  Project                   16c(s)     32c(s)     Speedup    Eff%       CPU%16   CPU%32  
+  ------------------------------------------------------------------------------------------
+  0131_000015_000013        7          5          1.40       70.0       66.0     60.0    
+  000404                    109        78         1.40       69.9       60.0     47.0    
+  000810                    117        88         1.33       66.5       56.0     45.0    
+  0068_000434_000440        118        89         1.33       66.3       58.0     45.0    
+  000192                    34         31         1.10       54.8       68.0     59.0    
+  000195                    66         61         1.08       54.1       70.0     63.0    
+  benchmarking-emerald-subset 1          1          1.00       50.0       55.0     14.0    
+
+====================================================================================================
+STEP: build_dem_orthomosaic / buildDem (DSM-mesh)
+====================================================================================================
+Number of projects tested: 7
+
+AVERAGE PERFORMANCE:
+  Speedup (16c→32c):        1.17x
+  Parallel efficiency:      58.4% (±7.7%)
+  Efficiency range:         52.0% to 75.0%
+  CPU utilization (16c):    25.6%
+  CPU utilization (32c):    16.1%
+
+INTERPRETATION:
+  ✗ POOR scaling. Minimal benefit from additional cores.
+  → Recommendation: Use 16-core instances or pack multiple jobs
+
+  → Moderate variability (σ=7.7%): Some variation by project
+
+PER-PROJECT RESULTS:
+  Project                   16c(s)     32c(s)     Speedup    Eff%       CPU%16   CPU%32  
+  ------------------------------------------------------------------------------------------
+  benchmarking-emerald-subset 6          4          1.50       75.0       19.0     19.0    
+  0068_000434_000440        65         55         1.18       59.1       27.0     14.0    
+  0131_000015_000013        7          6          1.17       58.3       30.0     19.0    
+  000195                    56         50         1.12       56.0       24.0     14.0    
+  000810                    98         88         1.11       55.7       27.0     16.0    
+  000192                    35         33         1.06       53.0       26.0     15.0    
+  000404                    78         75         1.04       52.0       26.0     16.0    
+
+====================================================================================================
+STEP: build_dem_orthomosaic / buildDem (DSM-ptcloud)
+====================================================================================================
+Number of projects tested: 7
+
+AVERAGE PERFORMANCE:
+  Speedup (16c→32c):        1.22x
+  Parallel efficiency:      61.0% (±7.4%)
+  Efficiency range:         53.8% to 75.0%
+  CPU utilization (16c):    31.9%
+  CPU utilization (32c):    20.3%
+
+INTERPRETATION:
+  ⚠ MODERATE scaling. Limited benefit from additional cores.
+  → Recommendation: Consider 16-core instances or bin-packing
+
+  → Moderate variability (σ=7.4%): Some variation by project
+
+PER-PROJECT RESULTS:
+  Project                   16c(s)     32c(s)     Speedup    Eff%       CPU%16   CPU%32  
+  ------------------------------------------------------------------------------------------
+  benchmarking-emerald-subset 6          4          1.50       75.0       23.0     17.0    
+  0131_000015_000013        9          7          1.29       64.3       34.0     23.0    
+  0068_000434_000440        60         47         1.28       63.8       36.0     21.0    
+  000195                    67         57         1.18       58.8       34.0     21.0    
+  000810                    82         73         1.12       56.2       30.0     20.0    
+  000192                    33         30         1.10       55.0       34.0     21.0    
+  000404                    70         65         1.08       53.8       32.0     19.0    
+
+====================================================================================================
+STEP: build_dem_orthomosaic / buildDem (DTM-ptcloud)
+====================================================================================================
+Number of projects tested: 7
+
+AVERAGE PERFORMANCE:
+  Speedup (16c→32c):        1.24x
+  Parallel efficiency:      62.2% (±12.4%)
+  Efficiency range:         52.5% to 83.3%
+  CPU utilization (16c):    29.3%
+  CPU utilization (32c):    19.0%
+
+INTERPRETATION:
+  ⚠ MODERATE scaling. Limited benefit from additional cores.
+  → Recommendation: Consider 16-core instances or bin-packing
+
+  → Moderate variability (σ=12.4%): Some variation by project
+
+PER-PROJECT RESULTS:
+  Project                   16c(s)     32c(s)     Speedup    Eff%       CPU%16   CPU%32  
+  ------------------------------------------------------------------------------------------
+  benchmarking-emerald-subset 5          3          1.67       83.3       22.0     20.0    
+  0068_000434_000440        43         28         1.54       76.8       28.0     18.0    
+  0131_000015_000013        8          7          1.14       57.1       36.0     24.0    
+  000195                    48         43         1.12       55.8       30.0     18.0    
+  000810                    69         62         1.11       55.6       28.0     17.0    
+  000192                    25         23         1.09       54.3       31.0     18.0    
+  000404                    63         60         1.05       52.5       30.0     18.0    
+
+====================================================================================================
+STEP: build_dem_orthomosaic / buildOrthomosaic (dsm-mesh)
+====================================================================================================
+Number of projects tested: 7
+
+AVERAGE PERFORMANCE:
+  Speedup (16c→32c):        1.22x
+  Parallel efficiency:      60.8% (±7.1%)
+  Efficiency range:         52.7% to 73.9%
+  CPU utilization (16c):    39.0%
+  CPU utilization (32c):    27.4%
+
+INTERPRETATION:
+  ⚠ MODERATE scaling. Limited benefit from additional cores.
+  → Recommendation: Consider 16-core instances or bin-packing
+
+  → Moderate variability (σ=7.1%): Some variation by project
+
+PER-PROJECT RESULTS:
+  Project                   16c(s)     32c(s)     Speedup    Eff%       CPU%16   CPU%32  
+  ------------------------------------------------------------------------------------------
+  benchmarking-emerald-subset 201        136        1.48       73.9       24.0     22.0    
+  0131_000015_000013        435        329        1.32       66.1       43.0     34.0    
+  0068_000434_000440        3969       3275       1.21       60.6       43.0     29.0    
+  000195                    5126       4362       1.18       58.8       38.0     25.0    
+  000810                    6131       5388       1.14       56.9       44.0     28.0    
+  000404                    3466       3067       1.13       56.5       42.0     28.0    
+  000192                    2077       1969       1.05       52.7       39.0     26.0    
+
+====================================================================================================
+STEP: build_dem_orthomosaic / buildOrthomosaic (dsm-ptcloud)
+====================================================================================================
+Number of projects tested: 7
+
+AVERAGE PERFORMANCE:
+  Speedup (16c→32c):        1.19x
+  Parallel efficiency:      59.5% (±9.9%)
+  Efficiency range:         51.6% to 80.7%
+  CPU utilization (16c):    35.9%
+  CPU utilization (32c):    25.1%
+
+INTERPRETATION:
+  ✗ POOR scaling. Minimal benefit from additional cores.
+  → Recommendation: Use 16-core instances or pack multiple jobs
+
+  → Moderate variability (σ=9.9%): Some variation by project
+
+PER-PROJECT RESULTS:
+  Project                   16c(s)     32c(s)     Speedup    Eff%       CPU%16   CPU%32  
+  ------------------------------------------------------------------------------------------
+  benchmarking-emerald-subset 239        148        1.61       80.7       21.0     22.0    
+  0131_000015_000013        544        453        1.20       60.0       46.0     34.0    
+  000195                    8632       7331       1.18       58.9       41.0     26.0    
+  0068_000434_000440        6098       5220       1.17       58.4       34.0     21.0    
+  000810                    6650       6200       1.07       53.6       36.0     24.0    
+  000404                    4162       3910       1.06       53.2       39.0     26.0    
+  000192                    2512       2436       1.03       51.6       34.0     23.0    
+
+====================================================================================================
+STEP: build_dem_orthomosaic / exportRaster (DSM-mesh)
+====================================================================================================
+Number of projects tested: 6
+
+AVERAGE PERFORMANCE:
+  Speedup (16c→32c):        1.31x
+  Parallel efficiency:      65.3% (±20.0%)
+  Efficiency range:         50.0% to 100.0%
+  CPU utilization (16c):    12.5%
+  CPU utilization (32c):    8.5%
+
+INTERPRETATION:
+  ⚠ MODERATE scaling. Limited benefit from additional cores.
+  → Recommendation: Consider 16-core instances or bin-packing
+
+  ⚠ HIGH VARIABILITY (σ=20.0%): Results vary significantly by project
+     Performance may depend on dataset characteristics
+
+PER-PROJECT RESULTS:
+  Project                   16c(s)     32c(s)     Speedup    Eff%       CPU%16   CPU%32  
+  ------------------------------------------------------------------------------------------
+  0131_000015_000013        2          1          2.00       100.0      10.0     8.0     
+  0068_000434_000440        3          2          1.50       75.0       14.0     8.0     
+  000195                    4          3          1.33       66.7       12.0     8.0     
+  000192                    3          3          1.00       50.0       13.0     9.0     
+  000404                    7          7          1.00       50.0       13.0     10.0    
+  000810                    9          9          1.00       50.0       13.0     8.0     
+
+====================================================================================================
+STEP: build_dem_orthomosaic / exportRaster (DSM-ptcloud)
+====================================================================================================
+Number of projects tested: 6
+
+AVERAGE PERFORMANCE:
+  Speedup (16c→32c):        1.25x
+  Parallel efficiency:      62.5% (±20.9%)
+  Efficiency range:         50.0% to 100.0%
+  CPU utilization (16c):    13.3%
+  CPU utilization (32c):    9.2%
+
+INTERPRETATION:
+  ⚠ MODERATE scaling. Limited benefit from additional cores.
+  → Recommendation: Consider 16-core instances or bin-packing
+
+  ⚠ HIGH VARIABILITY (σ=20.9%): Results vary significantly by project
+     Performance may depend on dataset characteristics
+
+PER-PROJECT RESULTS:
+  Project                   16c(s)     32c(s)     Speedup    Eff%       CPU%16   CPU%32  
+  ------------------------------------------------------------------------------------------
+  0131_000015_000013        2          1          2.00       100.0      11.0     11.0    
+  0068_000434_000440        3          2          1.50       75.0       16.0     10.0    
+  000192                    3          3          1.00       50.0       12.0     10.0    
+  000195                    6          6          1.00       50.0       13.0     7.0     
+  000404                    7          7          1.00       50.0       15.0     8.0     
+  000810                    6          6          1.00       50.0       13.0     9.0     
+
+====================================================================================================
+STEP: build_dem_orthomosaic / exportRaster (DTM-ptcloud)
+====================================================================================================
+Number of projects tested: 6
+
+AVERAGE PERFORMANCE:
+  Speedup (16c→32c):        1.20x
+  Parallel efficiency:      60.0% (±20.0%)
+  Efficiency range:         50.0% to 100.0%
+  CPU utilization (16c):    13.3%
+  CPU utilization (32c):    9.5%
+
+INTERPRETATION:
+  ✗ POOR scaling. Minimal benefit from additional cores.
+  → Recommendation: Use 16-core instances or pack multiple jobs
+
+  ⚠ HIGH VARIABILITY (σ=20.0%): Results vary significantly by project
+     Performance may depend on dataset characteristics
+
+PER-PROJECT RESULTS:
+  Project                   16c(s)     32c(s)     Speedup    Eff%       CPU%16   CPU%32  
+  ------------------------------------------------------------------------------------------
+  0131_000015_000013        2          1          2.00       100.0      10.0     10.0    
+  000195                    6          5          1.20       60.0       14.0     9.0     
+  000192                    3          3          1.00       50.0       13.0     9.0     
+  000404                    6          6          1.00       50.0       16.0     11.0    
+  000810                    6          6          1.00       50.0       12.0     8.0     
+  0068_000434_000440        2          2          1.00       50.0       15.0     10.0    
+
+====================================================================================================
+STEP: build_dem_orthomosaic / exportRaster (ortho-dsm-mesh)
+====================================================================================================
+Number of projects tested: 7
+
+AVERAGE PERFORMANCE:
+  Speedup (16c→32c):        1.04x
+  Parallel efficiency:      51.9% (±3.4%)
+  Efficiency range:         45.8% to 56.0%
+  CPU utilization (16c):    13.3%
+  CPU utilization (32c):    7.7%
+
+INTERPRETATION:
+  ✗ POOR scaling. Minimal benefit from additional cores.
+  → Recommendation: Use 16-core instances or pack multiple jobs
+
+  ✓ Low variability (σ=3.4%): Consistent across projects
+
+PER-PROJECT RESULTS:
+  Project                   16c(s)     32c(s)     Speedup    Eff%       CPU%16   CPU%32  
+  ------------------------------------------------------------------------------------------
+  000195                    56         50         1.12       56.0       14.0     7.0     
+  000810                    128        117        1.09       54.7       13.0     7.0     
+  0068_000434_000440        40         37         1.08       54.1       13.0     8.0     
+  000404                    107        103        1.04       51.9       14.0     8.0     
+  000192                    51         50         1.02       51.0       13.0     8.0     
+  0131_000015_000013        21         21         1.00       50.0       13.0     8.0     
+  benchmarking-emerald-subset 11         12         0.92       45.8       13.0     8.0     
+
+====================================================================================================
+STEP: build_dem_orthomosaic / exportRaster (ortho-dsm-ptcloud)
+====================================================================================================
+Number of projects tested: 7
+
+AVERAGE PERFORMANCE:
+  Speedup (16c→32c):        1.07x
+  Parallel efficiency:      53.6% (±3.4%)
+  Efficiency range:         50.0% to 59.7%
+  CPU utilization (16c):    13.3%
+  CPU utilization (32c):    7.9%
+
+INTERPRETATION:
+  ✗ POOR scaling. Minimal benefit from additional cores.
+  → Recommendation: Use 16-core instances or pack multiple jobs
+
+  ✓ Low variability (σ=3.4%): Consistent across projects
+
+PER-PROJECT RESULTS:
+  Project                   16c(s)     32c(s)     Speedup    Eff%       CPU%16   CPU%32  
+  ------------------------------------------------------------------------------------------
+  0068_000434_000440        37         31         1.19       59.7       14.0     8.0     
+  benchmarking-emerald-subset 10         9          1.11       55.6       13.0     8.0     
+  000195                    89         81         1.10       54.9       13.0     7.0     
+  000404                    99         94         1.05       52.7       14.0     8.0     
+  000810                    85         83         1.02       51.2       13.0     8.0     
+  000192                    46         45         1.02       51.1       13.0     8.0     
+  0131_000015_000013        25         25         1.00       50.0       13.0     8.0     
+
+====================================================================================================
+STEP: build_depth_maps / buildDepthMaps
+====================================================================================================
+Number of projects tested: 7
+
+AVERAGE PERFORMANCE:
+  Speedup (16c→32c):        1.02x
+  Parallel efficiency:      51.2% (±2.8%)
+  Efficiency range:         48.4% to 56.7%
+  CPU utilization (16c):    18.1%
+  CPU utilization (32c):    18.3%
+
+INTERPRETATION:
+  ✗ POOR scaling. Minimal benefit from additional cores.
+  → Recommendation: Use 16-core instances or pack multiple jobs
+
+  ✓ Low variability (σ=2.8%): Consistent across projects
+
+PER-PROJECT RESULTS:
+  Project                   16c(s)     32c(s)     Speedup    Eff%       CPU%16   CPU%32  
+  ------------------------------------------------------------------------------------------
+  benchmarking-emerald-subset 93         82         1.13       56.7       12.0     13.0    
+  0131_000015_000013        389        366        1.06       53.1       19.0     19.0    
+  0068_000434_000440        2977       2960       1.01       50.3       18.0     17.0    
+  000192                    1200       1195       1.00       50.2       20.0     21.0    
+  000404                    4142       4132       1.00       50.1       20.0     20.0    
+  000810                    4016       4052       0.99       49.6       20.0     20.0    
+  000195                    1401       1447       0.97       48.4       18.0     18.0    
+
+====================================================================================================
+STEP: build_mesh / buildModel
+====================================================================================================
+Number of projects tested: 7
+
+AVERAGE PERFORMANCE:
+  Speedup (16c→32c):        1.74x
+  Parallel efficiency:      87.2% (±52.7%)
+  Efficiency range:         52.0% to 203.4%
+  CPU utilization (16c):    51.6%
+  CPU utilization (32c):    38.9%
+
+INTERPRETATION:
+  → GOOD scaling. Moderate benefit from additional cores.
+  → Recommendation: 32-core instances are reasonable
+
+  ⚠ HIGH VARIABILITY (σ=52.7%): Results vary significantly by project
+     Performance may depend on dataset characteristics
+
+PER-PROJECT RESULTS:
+  Project                   16c(s)     32c(s)     Speedup    Eff%       CPU%16   CPU%32  
+  ------------------------------------------------------------------------------------------
+  benchmarking-emerald-subset 887        218        4.07       203.4      17.0     35.0    
+  000810                    10117      5952       1.70       85.0       62.0     41.0    
+  0131_000015_000013        884        555        1.59       79.6       47.0     37.0    
+  0068_000434_000440        13317      9375       1.42       71.0       57.0     37.0    
+  000404                    6991       5401       1.29       64.7       62.0     39.0    
+  000195                    6419       5881       1.09       54.6       60.0     41.0    
+  000192                    2692       2586       1.04       52.0       56.0     42.0    
+
+====================================================================================================
+STEP: build_mesh / exportModel
+====================================================================================================
+Number of projects tested: 7
+
+AVERAGE PERFORMANCE:
+  Speedup (16c→32c):        0.99x
+  Parallel efficiency:      49.7% (±0.8%)
+  Efficiency range:         48.0% to 50.0%
+  CPU utilization (16c):    8.3%
+  CPU utilization (32c):    5.9%
+
+INTERPRETATION:
+  ✗ POOR scaling. Minimal benefit from additional cores.
+  → Recommendation: Use 16-core instances or pack multiple jobs
+
+  ✓ Low variability (σ=0.8%): Consistent across projects
+
+PER-PROJECT RESULTS:
+  Project                   16c(s)     32c(s)     Speedup    Eff%       CPU%16   CPU%32  
+  ------------------------------------------------------------------------------------------
+  000192                    13         13         1.00       50.0       9.0      5.0     
+  000404                    14         14         1.00       50.0       8.0      4.0     
+  000810                    18         18         1.00       50.0       8.0      4.0     
+  0068_000434_000440        15         15         1.00       50.0       8.0      4.0     
+  0131_000015_000013        2          2          1.00       50.0       11.0     9.0     
+  benchmarking-emerald-subset 2          2          1.00       50.0       6.0      11.0    
+  000195                    24         25         0.96       48.0       8.0      4.0     
+
+====================================================================================================
+STEP: build_point_cloud / buildPointCloud
+====================================================================================================
+Number of projects tested: 7
+
+AVERAGE PERFORMANCE:
+  Speedup (16c→32c):        1.57x
+  Parallel efficiency:      78.3% (±8.8%)
+  Efficiency range:         66.3% to 91.1%
+  CPU utilization (16c):    73.3%
+  CPU utilization (32c):    59.6%
+
+INTERPRETATION:
+  → GOOD scaling. Moderate benefit from additional cores.
+  → Recommendation: 32-core instances are reasonable
+
+  → Moderate variability (σ=8.8%): Some variation by project
+
+PER-PROJECT RESULTS:
+  Project                   16c(s)     32c(s)     Speedup    Eff%       CPU%16   CPU%32  
+  ------------------------------------------------------------------------------------------
+  0131_000015_000013        501        275        1.82       91.1       78.0     67.0    
+  000810                    5173       3072       1.68       84.2       79.0     68.0    
+  000404                    3969       2435       1.63       81.5       80.0     68.0    
+  000192                    1928       1186       1.63       81.3       82.0     69.0    
+  benchmarking-emerald-subset 105        70         1.50       75.0       62.0     51.0    
+  000195                    3355       2449       1.37       68.5       69.0     49.0    
+  0068_000434_000440        5583       4210       1.33       66.3       63.0     45.0    
+
+====================================================================================================
+STEP: build_point_cloud / classifyGroundPoints
+====================================================================================================
+Number of projects tested: 7
+
+AVERAGE PERFORMANCE:
+  Speedup (16c→32c):        1.70x
+  Parallel efficiency:      84.9% (±12.4%)
+  Efficiency range:         61.6% to 100.6%
+  CPU utilization (16c):    80.0%
+  CPU utilization (32c):    70.7%
+
+INTERPRETATION:
+  → GOOD scaling. Moderate benefit from additional cores.
+  → Recommendation: 32-core instances are reasonable
+
+  → Moderate variability (σ=12.4%): Some variation by project
+
+PER-PROJECT RESULTS:
+  Project                   16c(s)     32c(s)     Speedup    Eff%       CPU%16   CPU%32  
+  ------------------------------------------------------------------------------------------
+  0068_000434_000440        43243      21484      2.01       100.6      99.0     98.0    
+  000195                    4034       2104       1.92       95.9       91.0     84.0    
+  000404                    1160       674        1.72       86.1       80.0     68.0    
+  benchmarking-emerald-subset 92         55         1.67       83.6       82.0     70.0    
+  000810                    1785       1069       1.67       83.5       86.0     77.0    
+  000192                    795        478        1.66       83.2       81.0     68.0    
+  0131_000015_000013        53         43         1.23       61.6       41.0     30.0    
+
+====================================================================================================
+STEP: finalize / exportReport
+====================================================================================================
+Number of projects tested: 7
+
+AVERAGE PERFORMANCE:
+  Speedup (16c→32c):        1.32x
+  Parallel efficiency:      66.2% (±26.2%)
+  Efficiency range:         52.4% to 125.0%
+  CPU utilization (16c):    18.1%
+  CPU utilization (32c):    11.3%
+
+INTERPRETATION:
+  ⚠ MODERATE scaling. Limited benefit from additional cores.
+  → Recommendation: Consider 16-core instances or bin-packing
+
+  ⚠ HIGH VARIABILITY (σ=26.2%): Results vary significantly by project
+     Performance may depend on dataset characteristics
+
+PER-PROJECT RESULTS:
+  Project                   16c(s)     32c(s)     Speedup    Eff%       CPU%16   CPU%32  
+  ------------------------------------------------------------------------------------------
+  benchmarking-emerald-subset 5          2          2.50       125.0      13.0     9.0     
+  0131_000015_000013        5          4          1.25       62.5       22.0     14.0    
+  000195                    22         18         1.22       61.1       21.0     17.0    
+  000810                    21         19         1.11       55.3       15.0     9.0     
+  000192                    12         11         1.09       54.5       19.0     11.0    
+  000404                    18         17         1.06       52.9       17.0     8.0     
+  0068_000434_000440        22         21         1.05       52.4       20.0     11.0    
+
+====================================================================================================
+STEP: match_photos / matchPhotos
+====================================================================================================
+Number of projects tested: 7
+
+AVERAGE PERFORMANCE:
+  Speedup (16c→32c):        2.30x
+  Parallel efficiency:      115.2% (±27.0%)
+  Efficiency range:         56.1% to 137.2%
+  CPU utilization (16c):    57.3%
+  CPU utilization (32c):    8.3%
+
+INTERPRETATION:
+  ✓ EXCELLENT scaling! This step benefits from more cores.
+  → Recommendation: 32-core instances are well-utilized
+
+  ⚠ HIGH VARIABILITY (σ=27.0%): Results vary significantly by project
+     Performance may depend on dataset characteristics
+
+PER-PROJECT RESULTS:
+  Project                   16c(s)     32c(s)     Speedup    Eff%       CPU%16   CPU%32  
+  ------------------------------------------------------------------------------------------
+  000195                    2300       838        2.74       137.2      61.0     8.0     
+  000192                    1263       481        2.63       131.3      59.0     8.0     
+  000810                    2717       1100       2.47       123.5      60.0     9.0     
+  0131_000015_000013        336        138        2.43       121.7      50.0     9.0     
+  0068_000434_000440        3276       1362       2.41       120.3      57.0     9.0     
+  000404                    2556       1098       2.33       116.4      58.0     10.0    
+  benchmarking-emerald-subset 64         57         1.12       56.1       56.0     5.0     
+
+====================================================================================================
+STEP: setup / addPhotos
+====================================================================================================
+Number of projects tested: 7
+
+AVERAGE PERFORMANCE:
+  Speedup (16c→32c):        0.94x
+  Parallel efficiency:      47.1% (±14.8%)
+  Efficiency range:         25.0% to 67.7%
+  CPU utilization (16c):    4.6%
+  CPU utilization (32c):    2.1%
+
+INTERPRETATION:
+  ✗ POOR scaling. Minimal benefit from additional cores.
+  → Recommendation: Use 16-core instances or pack multiple jobs
+
+  → Moderate variability (σ=14.8%): Some variation by project
+
+PER-PROJECT RESULTS:
+  Project                   16c(s)     32c(s)     Speedup    Eff%       CPU%16   CPU%32  
+  ------------------------------------------------------------------------------------------
+  000195                    42         31         1.35       67.7       6.0      2.0     
+  000810                    51         40         1.27       63.7       5.0      2.0     
+  benchmarking-emerald-subset 1          1          1.00       50.0       2.0      1.0     
+  0068_000434_000440        20         24         0.83       41.7       4.0      2.0     
+  000192                    19         23         0.83       41.3       5.0      2.0     
+  000404                    45         56         0.80       40.2       6.0      3.0     
+  0131_000015_000013        1          2          0.50       25.0       4.0      3.0     
+
+
+====================================================================================================
+PART 2: RUNNING 2 JOBS ON m3.xl vs 1 JOB ON m3.large
+====================================================================================================
+
+QUESTION: If I run 2 parallel jobs on one m3.xl (32 cores), will each job perform
+          as well as running 1 job on m3.large (16 cores)?
+
+ANALYSIS APPROACH:
+1. Look at CPU utilization on 16-core instances
+2. If avg CPU% < 50%, the process doesn't use all 16 cores effectively
+3. If 2 such processes run on 32 cores, they won't interfere much
+
+KEY ASSUMPTION: When running 2 jobs on m3.xl, each job will see 32 cores but
+                 the scheduler will distribute CPU time fairly between them.
+
+
+Step                      API Call                       Avg CPU%   Can pack?    Reasoning                                         
+----------------------------------------------------------------------------------------------------------------------------------
+align_cameras             alignCameras                   77.4       NO           High CPU usage (77%), likely contention           
+align_cameras             optimizeCameras                61.9       MAYBE        Moderate CPU usage (62%), some risk of contention 
+build_dem_orthomosaic     buildDem (DSM-mesh)            25.6       YES          Low CPU usage (26%), plenty of headroom           
+build_dem_orthomosaic     buildDem (DSM-ptcloud)         31.9       YES          Low CPU usage (32%), plenty of headroom           
+build_dem_orthomosaic     buildDem (DTM-ptcloud)         29.3       YES          Low CPU usage (29%), plenty of headroom           
+build_dem_orthomosaic     buildOrthomosaic (dsm-mesh)    39.0       YES          Low CPU usage (39%), plenty of headroom           
+build_dem_orthomosaic     buildOrthomosaic (dsm-ptcloud) 35.9       YES          Low CPU usage (36%), plenty of headroom           
+build_dem_orthomosaic     exportRaster (DSM-mesh)        12.5       YES          Low CPU usage (12%), plenty of headroom           
+build_dem_orthomosaic     exportRaster (DSM-ptcloud)     13.3       YES          Low CPU usage (13%), plenty of headroom           
+build_dem_orthomosaic     exportRaster (DTM-ptcloud)     13.3       YES          Low CPU usage (13%), plenty of headroom           
+build_dem_orthomosaic     exportRaster (ortho-dsm-mesh)  13.3       YES          Low CPU usage (13%), plenty of headroom           
+build_dem_orthomosaic     exportRaster (ortho-dsm-ptcloud) 13.3       YES          Low CPU usage (13%), plenty of headroom           
+build_depth_maps          buildDepthMaps                 18.1       YES          Low CPU usage (18%), plenty of headroom           
+build_mesh                buildModel                     51.6       MAYBE        Moderate CPU usage (52%), some risk of contention 
+build_mesh                exportModel                    8.3        YES          Low CPU usage (8%), plenty of headroom            
+build_point_cloud         buildPointCloud                73.3       NO           High CPU usage (73%), likely contention           
+build_point_cloud         classifyGroundPoints           80.0       NO           High CPU usage (80%), likely contention           
+finalize                  exportReport                   18.1       YES          Low CPU usage (18%), plenty of headroom           
+match_photos              matchPhotos                    57.3       MAYBE        Moderate CPU usage (57%), some risk of contention 
+setup                     addPhotos                      4.6        YES          Low CPU usage (5%), plenty of headroom            
+
+====================================================================================================
+SUMMARY RECOMMENDATION: 2 jobs on m3.xl
+====================================================================================================
+
+Overall average CPU utilization on 16 cores: 34.4%
+Steps with CPU < 50%: 14/20 (70%)
+
+✓ STRONG RECOMMENDATION: Run 2 jobs on m3.xl
+  - Most steps use < 50% CPU, so 2 jobs can coexist
+  - Expected performance: Each job ~same as m3.large
+  - Cost benefit: 2x throughput on same instance
+
+
+====================================================================================================
+PART 3: MIG GPU SCALING - DETAILED PER-STEP BREAKDOWN
+====================================================================================================
+
+====================================================================================================
+STEP: align_cameras / alignCameras
+====================================================================================================
+Number of projects tested: 3
+
+--- Scaling Efficiency (vs 1×1g baseline) ---
+
+1g→2g (2x slices):
+  Average speedup:     0.99x
+  Average efficiency:  49.6% (±0.2%)
+  → MODERATE scaling - this step has limited GPU parallelism
+
+1g→3g (3x slices):
+  Average speedup:     0.97x
+  Average efficiency:  32.4% (±1.7%)
+  → MODERATE scaling - this step has limited GPU parallelism
+
+--- Multiple small vs single large ---
+
+2×1g vs 1×2g:
+  Average ratio:       1.012
+  → Performance is EQUIVALENT
+  Per-project:
+    000404                    ratio=1.050 (1x2g)
+    000810                    ratio=0.976 (2x1g)
+    0068_000434_000440        ratio=1.009 (1x2g)
+
+3×1g vs 1×3g:
+  Average ratio:       0.980
+  → Performance is EQUIVALENT
+  Per-project:
+    000404                    ratio=0.936 (3x1g)
+    000810                    ratio=1.016 (1x3g)
+    0068_000434_000440        ratio=0.988 (3x1g)
+
+--- MIG vs Full GPU Performance ---
+
+====================================================================================================
+STEP: align_cameras / exportCameras
+====================================================================================================
+Number of projects tested: 3
+
+--- Scaling Efficiency (vs 1×1g baseline) ---
+
+--- Multiple small vs single large ---
+
+--- MIG vs Full GPU Performance ---
+
+====================================================================================================
+STEP: align_cameras / optimizeCameras
+====================================================================================================
+Number of projects tested: 3
+
+--- Scaling Efficiency (vs 1×1g baseline) ---
+
+1g→2g (2x slices):
+  Average speedup:     0.92x
+  Average efficiency:  46.0% (±3.7%)
+  → MODERATE scaling - this step has limited GPU parallelism
+
+1g→3g (3x slices):
+  Average speedup:     0.96x
+  Average efficiency:  31.9% (±4.4%)
+  → MODERATE scaling - this step has limited GPU parallelism
+
+--- Multiple small vs single large ---
+
+2×1g vs 1×2g:
+  Average ratio:       0.974
+  → Performance is EQUIVALENT
+  Per-project:
+    000404                    ratio=1.036 (1x2g)
+    000810                    ratio=0.980 (2x1g)
+    0068_000434_000440        ratio=0.907 (2x1g)
+
+3×1g vs 1×3g:
+  Average ratio:       1.040
+  → Performance is EQUIVALENT
+  Per-project:
+    000404                    ratio=1.049 (1x3g)
+    000810                    ratio=1.138 (1x3g)
+    0068_000434_000440        ratio=0.934 (3x1g)
+
+--- MIG vs Full GPU Performance ---
+
+====================================================================================================
+STEP: build_depth_maps / buildDepthMaps
+====================================================================================================
+Number of projects tested: 3
+
+--- Scaling Efficiency (vs 1×1g baseline) ---
+
+1g→2g (2x slices):
+  Average speedup:     1.57x
+  Average efficiency:  78.6% (±1.8%)
+  → GOOD scaling for this step
+
+1g→3g (3x slices):
+  Average speedup:     2.00x
+  Average efficiency:  66.6% (±1.6%)
+  → GOOD scaling for this step
+
+--- Multiple small vs single large ---
+
+2×1g vs 1×2g:
+  Average ratio:       0.917
+  → Multiple small slices are FASTER
+  Per-project:
+    000404                    ratio=0.935 (2x1g)
+    000810                    ratio=0.900 (2x1g)
+    0068_000434_000440        ratio=0.915 (2x1g)
+
+3×1g vs 1×3g:
+  Average ratio:       0.850
+  → Multiple small slices are FASTER
+  Per-project:
+    000404                    ratio=0.850 (3x1g)
+    000810                    ratio=0.840 (3x1g)
+    0068_000434_000440        ratio=0.859 (3x1g)
+
+--- MIG vs Full GPU Performance ---
+
+1x1g (expected 7.0x slower):
+  Actual slowdown:     2.97x
+  Efficiency:          235.9% (±14.3%)
+  → EXCEPTIONAL! Much better than linear scaling
+
+1x2g (expected 3.5x slower):
+  Actual slowdown:     1.89x
+  Efficiency:          185.2% (±7.3%)
+  → EXCEPTIONAL! Much better than linear scaling
+
+1x3g (expected 2.3x slower):
+  Actual slowdown:     1.49x
+  Efficiency:          156.9% (±7.9%)
+  → EXCEPTIONAL! Much better than linear scaling
+
+2x1g (expected 3.5x slower):
+  Actual slowdown:     1.73x
+  Efficiency:          202.0% (±5.1%)
+  → EXCEPTIONAL! Much better than linear scaling
+
+3x1g (expected 2.3x slower):
+  Actual slowdown:     1.26x
+  Efficiency:          184.6% (±7.2%)
+  → EXCEPTIONAL! Much better than linear scaling
+
+====================================================================================================
+STEP: finalize / exportReport
+====================================================================================================
+Number of projects tested: 3
+
+--- Scaling Efficiency (vs 1×1g baseline) ---
+
+1g→2g (2x slices):
+  Average speedup:     1.47x
+  Average efficiency:  73.5% (±21.9%)
+  → GOOD scaling for this step
+
+1g→3g (3x slices):
+  Average speedup:     1.54x
+  Average efficiency:  51.3% (±20.0%)
+  → MODERATE scaling - this step has limited GPU parallelism
+
+--- Multiple small vs single large ---
+
+2×1g vs 1×2g:
+  Average ratio:       1.014
+  → Performance is EQUIVALENT
+  Per-project:
+    000404                    ratio=0.812 (2x1g)
+    000810                    ratio=0.929 (2x1g)
+    0068_000434_000440        ratio=1.300 (1x2g)
+
+3×1g vs 1×3g:
+  Average ratio:       1.087
+  → Single large slice is FASTER
+  Per-project:
+    000404                    ratio=1.000 (same)
+    000810                    ratio=1.071 (1x3g)
+    0068_000434_000440        ratio=1.190 (1x3g)
+
+--- MIG vs Full GPU Performance ---
+
+====================================================================================================
+STEP: match_photos / matchPhotos
+====================================================================================================
+Number of projects tested: 3
+
+--- Scaling Efficiency (vs 1×1g baseline) ---
+
+1g→2g (2x slices):
+  Average speedup:     1.32x
+  Average efficiency:  65.8% (±4.5%)
+  → GOOD scaling for this step
+
+1g→3g (3x slices):
+  Average speedup:     1.40x
+  Average efficiency:  46.6% (±2.0%)
+  → MODERATE scaling - this step has limited GPU parallelism
+
+--- Multiple small vs single large ---
+
+2×1g vs 1×2g:
+  Average ratio:       0.857
+  → Multiple small slices are FASTER
+  Per-project:
+    000404                    ratio=0.947 (2x1g)
+    000810                    ratio=0.755 (2x1g)
+    0068_000434_000440        ratio=0.869 (2x1g)
+
+3×1g vs 1×3g:
+  Average ratio:       0.817
+  → Multiple small slices are FASTER
+  Per-project:
+    000404                    ratio=0.831 (3x1g)
+    000810                    ratio=0.809 (3x1g)
+    0068_000434_000440        ratio=0.812 (3x1g)
+
+--- MIG vs Full GPU Performance ---
+
+1x1g (expected 7.0x slower):
+  Actual slowdown:     1.53x
+  Efficiency:          462.8% (±51.8%)
+  → EXCEPTIONAL! Much better than linear scaling
+
+1x2g (expected 3.5x slower):
+  Actual slowdown:     1.16x
+  Efficiency:          303.1% (±18.2%)
+  → EXCEPTIONAL! Much better than linear scaling
+
+1x3g (expected 2.3x slower):
+  Actual slowdown:     1.09x
+  Efficiency:          215.2% (±20.9%)
+  → EXCEPTIONAL! Much better than linear scaling
+
+2x1g (expected 3.5x slower):
+  Actual slowdown:     0.99x
+  Efficiency:          355.2% (±21.2%)
+  → EXCEPTIONAL! Much better than linear scaling
+
+3x1g (expected 2.3x slower):
+  Actual slowdown:     0.89x
+  Efficiency:          263.3% (±26.9%)
+  → EXCEPTIONAL! Much better than linear scaling
+
+====================================================================================================
+STEP: setup / addPhotos
+====================================================================================================
+Number of projects tested: 3
+
+--- Scaling Efficiency (vs 1×1g baseline) ---
+
+1g→2g (2x slices):
+  Average speedup:     1.07x
+  Average efficiency:  53.4% (±15.7%)
+  → MODERATE scaling - this step has limited GPU parallelism
+
+1g→3g (3x slices):
+  Average speedup:     1.02x
+  Average efficiency:  33.9% (±3.3%)
+  → MODERATE scaling - this step has limited GPU parallelism
+
+--- Multiple small vs single large ---
+
+2×1g vs 1×2g:
+  Average ratio:       1.033
+  → Performance is EQUIVALENT
+  Per-project:
+    000404                    ratio=1.000 (same)
+    000810                    ratio=1.320 (1x2g)
+    0068_000434_000440        ratio=0.778 (2x1g)
+
+3×1g vs 1×3g:
+  Average ratio:       0.965
+  → Performance is EQUIVALENT
+  Per-project:
+    000404                    ratio=1.042 (1x3g)
+    000810                    ratio=0.934 (3x1g)
+    0068_000434_000440        ratio=0.920 (3x1g)
+
+--- MIG vs Full GPU Performance ---
+
+====================================================================================================
+END OF DETAILED ANALYSIS
+====================================================================================================
