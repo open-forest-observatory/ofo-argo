@@ -53,8 +53,8 @@ The step-based workflow executes **10 separate Metashape processing steps** as i
 
 ### Post-Processing Steps
 
-11. **rclone-upload** - Upload Metashape outputs to S3
-12. **postprocessing** - Generate CHMs, clip to boundaries, create COGs and thumbnails, upload to S3
+11. **rclone-upload-task** - Upload Metashape outputs to S3
+12. **postprocessing-task** - Generate CHMs, clip to boundaries, create COGs and thumbnails, upload to S3
 
 !!! info "Sequential Execution"
     Steps execute **sequentially within each mission** to prevent conflicts with shared Metashape project files. However, **multiple missions process in parallel**, each with its own step sequence.
@@ -124,7 +124,7 @@ Three steps support configurable GPU usage via `argo.<step>.gpu_enabled` paramet
 - `argo.build_mesh.gpu_enabled` - If `true`, runs on GPU node; if `false`, runs on CPU node (default: `true`)
 - `argo.match_photos_secondary.gpu_enabled` - Inherits from `match_photos` unless explicitly set
 
-The `build_depth_maps` step always runs on GPU nodes (no config option) as it always benefits from GPU acceleration.
+The `build_depth_maps` step always runs on GPU nodes (`gpu_enabled` cannot be disabled) as it always benefits from GPU acceleration. However, you can configure the GPU resource type and count using `gpu_resource` and `gpu_count`.
 
 ### GPU Resource Selection (MIG Support)
 
@@ -272,7 +272,7 @@ locally during processing. Our shared storage does not have the space to store a
 the same time. In addition, we have a limited number of Metashape licenses. So we need to restrict
 the number of parallel DAGs (metashape projects) it will attempt to run.
 
-The workflow controls this via the `parallelism` field in the `main` template (around line 79 in
+The workflow controls this via the `parallelism` field in the `main` template (line 66 in
 `photogrammetry-workflow-stepbased.yaml`). **To change the max parallel projects, edit this value
 directly in the workflow file before submitting.** The default is set to `10`.
 
@@ -372,7 +372,7 @@ The Argo UI is great for troubleshooting and checking individual step progress. 
 
 The **Workflows** tab on the left side menu shows all running workflows. Click a workflow to see a detailed DAG (directed acyclic graph) showing:
 
-- **Preprocessing task**: The `determine-datasets` step that reads config files
+- **Preprocessing task**: The `determine-projects` step that reads config files
 - **Per-mission columns**: Each mission shows as a separate column with all its processing steps
 - **Individual step status**: Each of the 10+ steps shown with color-coded status
 
@@ -411,17 +411,17 @@ When processing multiple missions, the Argo UI shows all missions side-by-side. 
 
 #### Understanding Step Names
 
-Task names in the Argo UI follow the pattern `process-datasets-N.<step-name>`:
+Task names in the Argo UI follow the pattern `process-projects-N.<step-name>`:
 
-- `process-datasets-0.setup` - Setup step for first mission (index 0)
-- `process-datasets-0.match-photos-gpu` - Match photos on GPU for first mission
-- `process-datasets-1.build-depth-maps` - Build depth maps for second mission (index 1)
+- `process-projects-0.setup` - Setup step for first mission (index 0)
+- `process-projects-0.match-photos-gpu` - Match photos on GPU for first mission
+- `process-projects-1.build-depth-maps` - Build depth maps for second mission (index 1)
 
 !!! tip "Finding Your Mission"
     To identify which mission corresponds to which index:
 
-    1. Check the `determine-datasets` step logs to see the order of missions in the JSON output
-    2. Click on any task (e.g., `process-datasets-0.setup`) and view the parameters to see the `project-name` value
+    1. Check the `determine-projects` step logs to see the order of missions in the JSON output
+    2. Click on any task (e.g., `process-projects-0.setup`) and view the parameters to see the `project-name` value
     3. The project name appears in all file paths, logs, and processing outputs
 
 GPU-capable steps show either `-gpu` or `-cpu` suffix depending on config.
@@ -438,16 +438,16 @@ argo watch <workflow-name>
 argo list
 
 # Get logs for preprocessing step
-argo logs <workflow-name> -c determine-datasets
+argo logs <workflow-name> -c determine-projects
 
 # Get logs for a specific mission's step
-# Format: process-datasets-<N>.<step-name>
-argo logs <workflow-name> -c process-datasets-0.setup
-argo logs <workflow-name> -c process-datasets-0.match-photos-gpu
-argo logs <workflow-name> -c process-datasets-1.build-depth-maps
+# Format: process-projects-<N>.<step-name>
+argo logs <workflow-name> -c process-projects-0.setup
+argo logs <workflow-name> -c process-projects-0.match-photos-gpu
+argo logs <workflow-name> -c process-projects-1.build-depth-maps
 
 # Follow logs in real-time
-argo logs <workflow-name> -c process-datasets-0.setup -f
+argo logs <workflow-name> -c process-projects-0.setup -f
 ```
 
 ## Workflow outputs
