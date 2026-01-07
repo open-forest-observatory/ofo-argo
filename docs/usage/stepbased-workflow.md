@@ -74,29 +74,9 @@ Before running the workflow, you need to prepare three types of inputs on the cl
 
 All inputs must be placed in `/ofo-share/argo-data/`.
 
-#### Directory structure
-
-Here is a schematic of the `/ofo-share/argo-data` directory:
-
-```bash
-/ofo-share/argo-data/
-├── argo-input/
-   ├── datasets/
-   │   ├──dataset_1/
-   │   │   ├── image_01.jpg
-   │   │   └── image_02.jpg
-   │   └──dataset_2/
-   │       ├── image_01.jpg
-   │       └── image_02.jpg
-   ├── configs/
-   │   ├──config_project_1.yml
-   │   └──config_project_2.yml
-   └── config_list.txt
-```
-
 #### Add drone imagery datasets
 
-To add new drone imagery datasets to be processed using Argo, transfer files from your local machine (or the cloud) to the `/ofo-share` volume. Put the drone imagery datasets to be processed in their own directory in `/ofo-share/argo-data/argo-input/datasets`.
+To add new drone imagery datasets to be processed using Argo, transfer files from your local machine (or the cloud) to the `/ofo-share` volume. Put the drone imagery datasets to be processed in their own directory in `/ofo-share/argo-data/argo-input/datasets` (or another folder within `argo-input`).
 
 One data transfer method is the `scp` command-line tool:
 
@@ -109,112 +89,22 @@ Replace `<vm.ip.address>` with the IP address of a cluster node that has the sha
 #### Specify Metashape parameters
 
 !!! warning "Config Structure Requirement"
-    The step-based workflow requires **Phase 2 config structure** with:
+    The step-based workflow requires an updated config structure with:
 
     - Global settings under `project:` section
     - Each operation as a top-level config section with `enabled` flag
     - Separate `match_photos` and `align_cameras` sections (not combined `alignPhotos`)
     - Separate `build_dem` and `build_orthomosaic` sections
 
-    See the [Phase 2 config example](https://github.com/open-forest-observatory/automate-metashape/blob/main/config/config-example.yml) for the full structure.
+    See the [updated config example](https://github.com/open-forest-observatory/automate-metashape/blob/main/config/config-example.yml) for the full structure.
 
-Metashape processing parameters are specified in configuration YAML files which need to be located at `/ofo-share/argo-data/argo-input/configs/`.
+Metashape processing parameters are specified in configuration YAML files which should be placed somewhere within `/ofo-share/argo-data/argo-input`.
 
 Every project to be processed needs to have its own standalone configuration file.
 
-<!-- **Naming convention:** Config files should be named to match the naming convention `<config_id>_<datasetname>.yml`. For example:
-
-- `01_benchmarking-greasewood.yml`
-- `02_benchmarking-greasewood.yml` -->
-
-**Required config structure:**
-
-```yaml
-# Global project settings
-project:
-  project_name: "my_project_name"
-  photo_path: "/data/argo-input/datasets/mission_001"
-  photo_path_secondary: ""  # Optional: path to secondary photos
-  project_crs: "EPSG::32610"
-  # Note: project_path and output_path (needed when running outside Argo) are handled by Argo.
-
-# Step configurations (each with enabled flag)
-add_photos:
-  enabled: true
-
-calibrate_reflectance:
-  enabled: false
-
-match_photos:
-  enabled: true
-  downscale: 1
-  # ... other match_photos parameters
-
-align_cameras:
-  enabled: true
-  adaptive_fitting: true
-  # ... other align_cameras parameters
-
-build_depth_maps:
-  enabled: true
-  # ... depth maps parameters
-
-build_point_cloud:
-  enabled: true
-  # ... point cloud parameters
-
-build_mesh:
-  enabled: false
-  # ... mesh parameters
-
-build_dem:
-  enabled: true
-  # ... DEM parameters
-
-build_orthomosaic:
-  enabled: true
-  # ... orthomosaic parameters
-
-# Argo workflow resource configuration (optional)
-# All parameters below are optional - if omitted, sensible defaults are used
-argo:
-  # Optional: Global defaults that apply to all steps unless overridden
-  defaults:
-    cpu_request: "10"                      # Default CPU cores for all steps
-    memory_request: "50Gi"                 # Default memory for all steps
-    gpu_resource: "nvidia.com/gpu"         # Default GPU type for GPU steps
-    gpu_count: 1                           # Default GPU count
-
-  # Per-step resource configuration (all parameters optional)
-  match_photos:
-    gpu_enabled: true                      # true=GPU node, false=CPU node (default: true)
-    gpu_resource: "nvidia.com/gpu"         # GPU type (default: nvidia.com/gpu)
-    gpu_count: 1                           # Number of GPUs (default: 1)
-    cpu_request: "4"                       # CPU cores (default: 4 for GPU, 18 for CPU)
-    memory_request: "16Gi"                 # Memory (default: 16Gi for GPU, 100Gi for CPU)
-
-  build_depth_maps:
-    gpu_resource: "nvidia.com/gpu"         # Always uses GPU
-    gpu_count: 1
-    cpu_request: "4"
-    memory_request: "16Gi"
-
-  build_mesh:
-    gpu_enabled: true                      # true=GPU node, false=CPU node (default: true)
-    gpu_resource: "nvidia.com/gpu"
-    gpu_count: 1
-    cpu_request: "4"
-    memory_request: "16Gi"
-
-  # CPU-only steps (align_cameras, build_point_cloud, build_dem_orthomosaic, etc.)
-  align_cameras:
-    cpu_request: "18"                      # Default: 18
-    memory_request: "100Gi"                # Default: 100Gi
-```
-
-**Setting the `photo_path`:** Within the `project:` section, you must specify `photo_path` which is
+**Setting the `photo_path`:** Within the `project:` section of the config YAML, you must specify `photo_path` which is
 the location of the drone imagery dataset. When running via Argo workflows, this path refers to the
-location **inside the docker container**. For example, if your drone images are at
+location **inside the docker container**. The `/ofo-share/argo-data` directory gets mounted at `/data` inside the container, so for example, if your drone images are at
 `/ofo-share/argo-data/argo-input/datasets/dataset_1`, then the `photo_path` should be written as:
 
 ```yaml
@@ -224,7 +114,7 @@ project:
 
 ## Resource Configuration
 
-All Argo workflow resource parameters (GPU, CPU, memory) are configured in the top-level `argo` section of your config file. This section is **completely optional** - if omitted, sensible defaults will be used.
+All Argo workflow resource parameters (GPU, CPU, memory) are configured in the top-level `argo` section of your config file. This section is optional -- if omitted, sensible defaults will be used. The defaults assume one or more m3.large CPU nodes and one or more `mig1` (7-slice MIG) GPU nodes (see [cluster access and resizing](cluster-access-and-resizing.md)).
 
 ### GPU Scheduling
 
@@ -266,10 +156,10 @@ Available GPU resources:
 | `nvidia.com/mig-2g.10gb` | 2/7 compute, 10GB VRAM | 3 |
 | `nvidia.com/mig-3g.20gb` | 3/7 compute, 20GB VRAM | 2 |
 
-Use `gpu_count` to request multiple MIG slices (e.g., `gpu_count: 2` with `mig-1g.5gb` to get 2/7 compute power). This is useful when you need more compute than a single small slice provides but don't need the full 20GB VRAM of a `mig-3g.20gb`.
+Use `gpu_count` to request multiple MIG slices (e.g., `gpu_count: 2` with `mig-1g.5gb` to get 2/7 compute power).
 
 !!! tip "When to use MIG"
-    Use MIG partitions when your GPU steps have low utilization. This allows multiple workflow steps to share a single physical GPU, reducing costs. Start with `mig-2g.10gb` for most workloads; use `mig-3g.20gb` for memory-intensive steps like `build_depth_maps`.
+    Use MIG partitions when your GPU steps have low utilization. This allows multiple workflow steps to share a single physical GPU, reducing costs. In extensive benchmarking, we have found that we get the greatest efficiency with mig-1g.5gb nodes, potentially providing more than one slice to GPU-intensive pods.
 
 !!! note "Nodegroup requirement"
     MIG resources are only available on MIG-enabled nodegroups. Create a MIG nodegroup with a name containing `mig1-`, `mig2-`, or `mig3-` (see [MIG nodegroups](cluster-access-and-resizing.md#mig-nodegroups)).
@@ -287,23 +177,19 @@ argo:
 
   # Override for specific steps
   match_photos:
-    cpu_request: "8"         # Override CPU for this step
-    memory_request: "32Gi"   # Override memory for this step
+    cpu_request: "8"         # Override default CPU request for this step
+    memory_request: "32Gi"   # Override default memory request for this step
 
   build_depth_maps:
     cpu_request: "6"
     memory_request: "24Gi"
 
   align_cameras:
-    cpu_request: "20"        # CPU-heavy step
-    memory_request: "120Gi"
+    cpu_request: "15"        # CPU-heavy step
+    memory_request: "50Gi"
 ```
 
-**Default values (if not specified):**
-
-- **GPU steps** (match_photos with GPU, build_depth_maps, build_mesh with GPU): `4` CPU cores, `16Gi` memory
-- **CPU steps** (setup, align_cameras, build_point_cloud, build_dem_orthomosaic, finalize): `18` CPU cores, `100Gi` memory
-- **Dual-mode steps** (match_photos, build_mesh): Defaults depend on `gpu_enabled` setting
+Default values (if not specified) are hard-coded into the workflow YAML under the CPU and GPU step templates.
 
 **Fallback order:**
 
@@ -351,7 +237,7 @@ This 4-level fallback applies: Secondary-specific → Primary step → User defa
 
 **Parameters handled by Argo:** The `project_path`, `output_path`, and `project_name` configuration parameters are handled automatically by the Argo workflow:
 
-- `project_path` and `output_path` are determined via CLI arguments passed to the automate-metashape container, derived from the `RUN_FOLDER` workflow parameter
+- `project_path` and `output_path` are determined via CLI arguments passed to the automate-metashape container, derived from the `TEMP_WORKING_DIR` Argo workflow parameter (passed by the user on the command line when invoking `argo submit`)
 - `project_name` is extracted from `project.project_name` in the config file (or from the filename
   of the config file if missing in the config) and passed by Argo via CLI to each step to ensure consistent project names per mission
 
@@ -372,12 +258,9 @@ For example:
 /data/argo-input/configs/02_benchmarking-emerald-subset.yml
 ```
 
-This allows you to organize your config files in subdirectories or different locations. The project name will be automatically derived from the config filename (e.g., `/data/argo-input/configs/project-name.yml` becomes project `project-name`).
+This allows you to organize your config files in subdirectories or different locations. The project name will be automatically derived from the config filename (e.g., `/data/argo-input/configs/project-name.yml` becomes project `project-name`), unless it is explicity set in the config file at `project.project_name` (which takes priority).
 
-You can create your own config list file and name it whatever you want, placing it anywhere within
-`/ofo-share/argo-data/`. Then specify the path to it within the container (using `/data/XYZ` to
-refer to `/ofo-share/argo-data/XYZ`) using the
-`CONFIG_LIST` parameter when submitting the workflow.
+You can create your own config list file and name it whatever you want, placing it anywhere within `/ofo-share/argo-data/`. Then specify the path to it within the container (using `/data/XYZ` to refer to `/ofo-share/argo-data/XYZ`) using the `CONFIG_LIST` parameter when submitting the workflow.
 
 ### Determine the maximum number of projects to process in parallel
 
@@ -398,15 +281,10 @@ directly in the workflow file before submitting.** The default is set to `10`.
     so this value must be hardcoded in the workflow file. This is an [known issue](https://github.com/argoproj/argo-workflows/issues/1780) with Argo and we
     should look for it to be resovled so we can implement it as a command line parameter.
 
-It makes sense to set this at or slightly below the max number of nodes available for processing
-(or more specifically, the max number of pods that can be hosted on the available nodes). So if
-you're using an auto-scaling cluster with a max of 8 nodes, set `parallelism` somewhere between 5
-and 8.
-
 ### Adjusting parallelism on a running workflow
 
 If you need to increase or decrease parallelism while a workflow is already running, you can patch
-the workflow directly. First, find your workflow name:
+the workflow in place. First, find your workflow name:
 
 ```bash
 argo list -n argo
@@ -619,6 +497,7 @@ The final outputs will be written to `S3:ofo-public` in the following directory 
 
 This directory structure should already exist prior to running the Argo workflow.
 
+<!-- Commenting out the AI-generated troubleshooting section since it may be misleading or not current.
 ## Troubleshooting
 
 ### Steps are skipped even though they should run
@@ -790,6 +669,7 @@ build_point_cloud:
   enabled: true
   remove_after_export: true  # Cleanup happens in finalize step
 ```
+-->
 
 <!--
 

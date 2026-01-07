@@ -267,7 +267,9 @@ All nodes with `cpu` in their name should show `feature.node.kubernetes.io/workl
 
 ### Enable mixed MIG strategy
 
-The GPU Operator defaults to "single" MIG strategy, which exposes MIG slices as generic `nvidia.com/gpu` resources. For MIG nodegroups to expose specific resources like `nvidia.com/mig-2g.10gb`, enable "mixed" strategy:
+The GPU Operator defaults to "single" MIG strategy, which exposes MIG slices as generic
+`nvidia.com/gpu` resources. For MIG nodegroups to expose specific (and mixed) resources like
+`nvidia.com/mig-2g.10gb` (optionally along with other MIG nodes or full nodes like `nvidia.com/gpu`), enable "mixed" strategy:
 
 ```bash
 # Add NVIDIA helm repo (if not already added)
@@ -323,12 +325,12 @@ kubectl get nodes -o custom-columns='NAME:.metadata.name,MIG-1G:.status.allocata
 
 ### How it works
 
-1. User creates nodegroup with MIG naming (e.g., `mig2-group`)
-2. Node joins cluster with name containing `-mig2-`
-3. NFD applies label `nvidia.com/mig.config=all-2g.10gb`
+1. User creates nodegroup with MIG naming (e.g., `mig1-group`)
+2. Node joins cluster with name containing `-mig1-`
+3. NFD applies label `nvidia.com/mig.config=all-1g.5gb`
 4. MIG manager detects label, configures GPU into 3 partitions
-5. Device plugin exposes `nvidia.com/mig-2g.10gb: 3` as allocatable resources
-6. Pods requesting `nvidia.com/mig-2g.10gb: 1` get one partition
+5. Device plugin exposes `nvidia.com/mig-1g.5gb: 3` as allocatable resources
+6. Pods requesting `nvidia.com/mig-1g.5gb: 1` get one partition
 
 
 ## Kubernetes management

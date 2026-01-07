@@ -138,40 +138,32 @@ source ~/.ofocluster/app-cred-ofocluster-openrc.sh
 
 Use OpenStack to create new nodegroups.
 
-**CPU nodegroups** must include `cpu` in the nodegroup name for automatic labeling to work:
+#### CPU nodegroups
+
+CPU nodegroups must include `cpu` in the nodegroup name for automatic labeling to work:
 
 ```bash
 openstack coe nodegroup create ofocluster2 cpu-group --min-nodes 1 --max-nodes 8 --flavor m3.xl
 ```
 
-The `cpu` substring triggers automatic labeling (`workload-type: cpu`) via NodeFeatureRule, which ensures CPU-only workflow pods schedule on these nodes.
+The `cpu` substring triggers automatic labeling (`workload-type: cpu`) via NodeFeatureRule, which is part of ensuring CPU-only workflow pods schedule on these nodes (the other part is the NodeSelector attribute specified for the CPU task template in the Argo workflow YAML).
 
-**GPU nodegroups** can use any name (GPU resource requests handle scheduling):
+#### GPU nodegroups
+
+GPU nodegroups consist of full-GPU nodes, and on JS2 must be an `xl` flavor. For automate-metashape runs via Argo, we now prefer MIG (split GPU) nodegroups (see below). Standard full-GPU nodegroups can use any name, as GPU resource requests handle scheduling:
 
 ```bash
 openstack coe nodegroup create ofocluster2 gpu-group --min-nodes 1 --max-nodes 8 --flavor g3.xl
 ```
 
-**Autoscaling behavior:** Due to OpenStack limitations, all nodegroups in the cluster are autoscaling. The cluster adds/removes nodes to schedule all pending pods while keeping nodes near full utilization. Set `--min-nodes` and `--max-nodes` to the same value for a fixed-size nodegroup. The `--node-count` parameter is essentially irrelevant and defaults to 1 if omitted.
+#### MIG nodegroups
 
-!!! note "GPU Node Scheduling"
-    CPU-only workflow pods use `nodeSelector` to target CPU nodes explicitly, preventing them from scheduling on expensive GPU nodes. GPU pods request GPU resources, which naturally constrains them to GPU nodes. See [GPU node scheduling](argo-usage.md#gpu-node-scheduling) for details.
+MIG (Multi-Instance GPU) partitions full (e.g. JS2 g3.xl A100) GPUs into smaller isolated slices, allowing multiple pods per GPU. Use MIG when your GPU workloads have low utilization (<50%) and don't need full GPU memory. This is the preferred way to provide GPU resources to automate-metashape runs via the OFO Argo step-based workflow, as it provides much greater compute efficiency.
 
-### MIG nodegroups
-
-MIG (Multi-Instance GPU) partitions A100 GPUs into smaller isolated slices, allowing multiple pods per GPU. Use MIG when your GPU workloads have low utilization (<30%) and don't need full GPU memory.
-
-**Create MIG nodegroups** by including `mig1-`, `mig2-`, or `mig3-` in the nodegroup name:
+Create MIG nodegroups by including `mig1-`, `mig2-`, or `mig3-` in the nodegroup name. Our benchmarking has shown that automate-metashape is most efficient with `mig1` nodes 7 slices (and you can provide more than one slice to a step).
 
 ```bash
-# 4 pods/GPU (10GB VRAM, 1/7 compute each) - best for low-utilization workloads
 openstack coe nodegroup create ofocluster2 mig1-group --min-nodes 1 --max-nodes 4 --flavor g3.xl
-
-# 3 pods/GPU (10GB VRAM, 2/7 compute each) - balanced
-openstack coe nodegroup create ofocluster2 mig2-group --min-nodes 1 --max-nodes 4 --flavor g3.xl
-
-# 2 pods/GPU (20GB VRAM, 3/7 compute each) - for memory-intensive workloads
-openstack coe nodegroup create ofocluster2 mig3-group --min-nodes 1 --max-nodes 4 --flavor g3.xl
 ```
 
 !!! note "Resource limits for MIG"
@@ -184,20 +176,42 @@ openstack coe nodegroup create ofocluster2 mig3-group --min-nodes 1 --max-nodes 
     | mig3 (2 slices) | `nvidia.com/mig-3g.20gb` | 2 | 15 | 55GB |
 
 !!! warning "Workflow compatibility"
-    MIG nodegroups require workflows that request MIG resources (e.g., `nvidia.com/mig-2g.10gb: 1`) instead of full GPUs (`nvidia.com/gpu: 1`). See [MIG workflow configuration](argo-usage.md#mig-multi-instance-gpu).
+    MIG nodegroups are only used by workflows that request MIG resources (e.g., `nvidia.com/mig-1g.5gb: 1`) instead of full GPUs (`nvidia.com/gpu: 1`). See [MIG workflow configuration](argo-usage.md#mig-multi-instance-gpu).
 
-### Check if the autoscaler is planning any upsizing or downsizing
+!!! note "GPU Node Scheduling"
+    CPU-only workflow pods use `nodeSelector` to target CPU nodes explicitly, preventing them from scheduling on expensive GPU nodes. GPU pods request GPU resources, which naturally constrains them to GPU nodes. See [GPU node scheduling](argo-usage.md#gpu-node-scheduling) for details.
+
+
+### Autoscaling
+
+Due to OpenStack limitations, all nodegroups in the cluster are autoscaling. The cluster adds/removes nodes to schedule all pending pods while keeping nodes near full utilization. Set `--min-nodes` and `--max-nodes` to the same value for a fixed-size nodegroup. (But note, if you delete nodes manually or via `openstack coe nodegroup delete`, the autoscaler will try to replace the deleted nodes with new ones until the nodegroup is fully deleted -- see below for workarounds.) The `--node-count` parameter is essentially irrelevant and defaults to 1 if omitted.
+
+By default, the autoscaler may delete undrerutilized nodes with running pods, in an effort to consolidate pods and minimize running nodes. While often acceptable in many k8s applications, this is unacceptable for automate-metashape because pods may take hours and cannot resume from where they were killed. Therefore, we have configured the Argo workflow controller to label pods as not evictable so this doesn't happen. In addition, we have configured it to prefer scheduling new pods on nodes that already have running pods (the opposite of default Kubernetes behavior) to increase the chances of empty nodes that can be scaled down.
+
+
+#### Check if the autoscaler is planning any upsizing or downsizing
 
 ```bash
 kubectl get configmap cluster-autoscaler-status -n kube-system -o yaml
 ```
 
+### Update a nodegroup's min/max node count bounds
 
+The autoscaler should take care of resizing to meet demand (within the node count bounds you
+specify). Downscaling has a delay of at least 10 min from triggering before being implemented in an
+effort to prevent cycling. You can change the min and max bounds on the number of nodes the
+autoscaler will request:
 
-### Drain nodes before manually downsizing or deleting
+```bash
+openstack coe nodegroup update ofocluster2 cpu-group replace min_node_count=1 max_node_count=1
+```
 
-**WORK IN PROGRESS:** It appears that draining will actually kill running pods. Still need to find a way
-to simply prevent scheduling of new pods, and confirm that nodes are empty, before deleting.
+### Drain/cordon nodes before downsizing or deleting
+
+**WORK IN PROGRESS**
+
+It appears that draining will actually kill running pods. Still need to find a way
+to simply prevent scheduling of new pods (possibly "cordoning"), and confirm that nodes are empty, before deleting.
 
 When decreasing the number of nodes in a nodegroup, it is best practice to drain the Kubernetes pods
 from them first. Given that we don't know which nodes OpenStack will delete when reducing the size, we
@@ -221,27 +235,6 @@ kubectl get nodes -l capi.stackhpc.com/node-group=$NODEGROUP_NAME \
 ```
 It will print the IDs of the nodes, which you can then explicitly delete (see below)
 
-### Resize a nodegroup
-
-The autoscaler should take care of resizing to meet demand (within the node count bounds you
-specify). Downscaling has a delay of at least 10 min from triggering before being implemented in an
-effort to prevent cycling. You can change the min and max bounds on the number of nodes the
-autoscaler will request:
-
-```bash
-openstack coe nodegroup update ofocluster2 cpu-group replace min_node_count=1 max_node_count=1
-```
-
-If you want to delete specific nodes of the nodegroup (recommended if you have drained some nodes,
-so that you only delete the drained ones and not ones with running processes), get their IDs.
-
-WORK IN PROGRESS: Instructions for getting IDs of drained nodes.
-
-Once you know which nodes you need to delete, delete them with:
-
-```bash
-openstack server delete <server-id-1> <server-id-2>
-```
 
 ### Delete a nodegroup
 
