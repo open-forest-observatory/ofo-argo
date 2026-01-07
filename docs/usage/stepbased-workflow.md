@@ -112,11 +112,13 @@ project:
   photo_path: /data/argo-input/datasets/dataset_1
 ```
 
-## Resource Configuration
+## Resource request configuration
 
-All Argo workflow resource parameters (GPU, CPU, memory) are configured in the top-level `argo` section of your config file. This section is optional -- if omitted, sensible defaults will be used. The defaults assume one or more m3.large CPU nodes and one or more `mig1` (7-slice MIG) GPU nodes (see [cluster access and resizing](cluster-access-and-resizing.md)).
+All Argo workflow resource requests (GPU, CPU, memory) are configured in the top-level `argo` section of your automate-metashape config file. The defaults assume one or more JS2 `m3.large` CPU nodes and one or more `mig1` (7-slice MIG `g3.xl`) GPU nodes (see [cluster access and resizing](cluster-access-and-resizing.md)).
 
-### GPU Scheduling
+Importantly, using well-selected resource requests may allow more than one workflow step to schedule simultaneously on the same compute node, without substantially extending the compute time of either, thus greatly increasing compute efficiency by requiring fewer compute nodes. The example config YAML includes suggested resource requests we have developed through extensive benchmarking.
+
+### GPU scheduling
 
 Three steps support configurable GPU usage via `argo.<step>.gpu_enabled` parameters:
 
@@ -126,7 +128,7 @@ Three steps support configurable GPU usage via `argo.<step>.gpu_enabled` paramet
 
 The `build_depth_maps` step always runs on GPU nodes (`gpu_enabled` cannot be disabled) as it always benefits from GPU acceleration. However, you can configure the GPU resource type and count using `gpu_resource` and `gpu_count`.
 
-### GPU Resource Selection (MIG Support)
+### GPU resource selection (MIG Support)
 
 For GPU steps, you can specify which GPU resource to request using `gpu_resource` and `gpu_count` in the `argo` section. This allows using MIG (Multi-Instance GPU) partitions instead of full GPUs:
 
@@ -164,7 +166,7 @@ Use `gpu_count` to request multiple MIG slices (e.g., `gpu_count: 2` with `mig-1
 !!! note "Nodegroup requirement"
     MIG resources are only available on MIG-enabled nodegroups. Create a MIG nodegroup with a name containing `mig1-`, `mig2-`, or `mig3-` (see [MIG nodegroups](cluster-access-and-resizing.md#mig-nodegroups)).
 
-### CPU and Memory Configuration
+### CPU and memory configuration
 
 You can configure CPU and memory requests for all workflow steps (both CPU and GPU steps) using `cpu_request` and `memory_request` parameters in the `argo` section:
 
@@ -215,7 +217,7 @@ Default values (if not specified) are hard-coded into the workflow YAML under th
         memory_request:   # Blank = uses defaults.memory_request → 40Gi
     ```
 
-### Secondary Photo Processing
+### Secondary photo processing
 
 The `match_photos_secondary` and `align_cameras_secondary` steps **inherit resource configuration** from their primary steps unless explicitly overridden:
 
@@ -400,7 +402,7 @@ Click on a specific step to see detailed information including:
     3. Click the "Logs" tab
     4. Logs will stream in real-time if the step is running
 
-#### Multi-Mission View
+#### Multi-mission miew
 
 When processing multiple missions, the Argo UI shows all missions side-by-side. This makes it easy to:
 
@@ -409,7 +411,7 @@ When processing multiple missions, the Argo UI shows all missions side-by-side. 
 - Compare processing times across missions
 - Monitor overall workflow progress
 
-#### Understanding Step Names
+#### Understanding step names
 
 Task names in the Argo UI follow the pattern `process-projects-N.<step-name>`:
 
