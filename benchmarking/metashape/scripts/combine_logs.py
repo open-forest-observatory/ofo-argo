@@ -8,26 +8,26 @@ import re
 
 # Mapping from original column names to R-friendly names
 COLUMN_MAP = {
-    'Step': 'step',
-    'API Call': 'api_call',
-    'Run Time': 'run_time_sec',
-    'CPU %': 'cpu_pct_mean',
-    'CPU%P90': 'cpu_pct_p90',
-    'GPU %': 'gpu_pct_mean',
-    'GPU%P90': 'gpu_pct_p90',
-    'CPU usage': 'cpu_usage_mean',
-    'CPUusgP90': 'cpu_usage_p90',
-    'PrcMem': 'mem_process',
-    'CtrLim': 'mem_container_limit',
-    'CtrUsd': 'mem_container_used',
-    'CtrAvl': 'mem_container_avail',
-    'SysTot': 'mem_system_total',
-    'SysUsd': 'mem_system_used',
-    'SysAvl': 'mem_system_avail',
-    'CPUs': 'cpus',
-    'GPUs': 'gpus',
-    'GPU Model': 'gpu_model',
-    'Node': 'node',
+    "Step": "step",
+    "API Call": "api_call",
+    "Run Time": "run_time_sec",
+    "CPU %": "cpu_pct_mean",
+    "CPU%P90": "cpu_pct_p90",
+    "GPU %": "gpu_pct_mean",
+    "GPU%P90": "gpu_pct_p90",
+    "CPU usage": "cpu_usage_mean",
+    "CPUusgP90": "cpu_usage_p90",
+    "PrcMem": "mem_process",
+    "CtrLim": "mem_container_limit",
+    "CtrUsd": "mem_container_used",
+    "CtrAvl": "mem_container_avail",
+    "SysTot": "mem_system_total",
+    "SysUsd": "mem_system_used",
+    "SysAvl": "mem_system_avail",
+    "CPUs": "cpus",
+    "GPUs": "gpus",
+    "GPU Model": "gpu_model",
+    "Node": "node",
 }
 
 
@@ -38,7 +38,7 @@ def make_r_friendly(name):
 
 def time_to_seconds(time_str):
     """Convert HH:MM:SS to seconds."""
-    parts = time_str.split(':')
+    parts = time_str.split(":")
     if len(parts) == 3:
         h, m, s = int(parts[0]), int(parts[1]), int(parts[2])
         return h * 3600 + m * 60 + s
@@ -64,7 +64,7 @@ def parse_log_file(filepath):
     rows = []
     headers = None
 
-    with open(filepath, 'r') as f:
+    with open(filepath, "r") as f:
         for line in f:
             line = line.strip()
 
@@ -77,8 +77,8 @@ def parse_log_file(filepath):
                 break
 
             # Check if this is a pipe-delimited table line
-            if '|' in line:
-                parts = [p.strip() for p in line.split('|')]
+            if "|" in line:
+                parts = [p.strip() for p in line.split("|")]
 
                 # First pipe-delimited line is the header
                 if headers is None:
@@ -89,12 +89,12 @@ def parse_log_file(filepath):
                     for orig_header, value in zip(headers, parts):
                         r_header = make_r_friendly(orig_header)
                         # Convert run time to seconds
-                        if r_header == 'run_time_sec':
+                        if r_header == "run_time_sec":
                             value = time_to_seconds(value)
                         row[r_header] = value
-                    row['filename'] = filename_no_ext
-                    row['node_type'] = node_type
-                    row['project'] = project
+                    row["filename"] = filename_no_ext
+                    row["node_type"] = node_type
+                    row["project"] = project
                     rows.append(row)
 
     # Convert headers to R-friendly names
@@ -132,10 +132,10 @@ def main():
         return
 
     # Add custom columns to headers
-    output_headers = headers + ['filename', 'node_type', 'project']
+    output_headers = headers + ["filename", "node_type", "project"]
 
     # Write CSV
-    with open(output_file, 'w', newline='') as f:
+    with open(output_file, "w", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=output_headers)
         writer.writeheader()
         writer.writerows(all_rows)
