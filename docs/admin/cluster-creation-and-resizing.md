@@ -127,44 +127,31 @@ openstack coe cluster template list
 Specify the deployment parameters and create the cluster. Choose the most recent Kubernetes version
 (highest number in the template list). The master node can be `m3.small`. We'll deploy a cluster
 with a single worker node that is also `m3.small`. When we need to scale up, we'll add nodegroups.
-This initial spec is just the base setup for when we're not running Argo workloads on it.
+This initial spec is just the base setup for when we're not running Argo workloads on it. We need to
+enable audo-scaling now, even though we don't want it for the default worker nodegroup, because
+these settings apply to child nodegroups and it appears the max node count cannot be overridden.
 
 ```bash
 # Set deployment parameters
 TEMPLATE="kubernetes-1-33-jammy"
-FLAVOR="m3.small"
-MASTER_FLAVOR="m3.small"
-BOOT_VOLUME_SIZE_GB=80
-
-# Number of instances
-N_MASTER=1  # Needs to be odd
-N_WORKER=1
-
-# Min and max number of worker nodes (if using autoscaling)
-AUTOSCALE=false
-N_WORKER_MIN=1
-N_WORKER_MAX=5
+KEYPAIR=my-openstack-keypair-name # what you created above
 
 # Network configuration
 NETWORK_ID=$(openstack network show --format value -c id auto_allocated_network)
 SUBNET_ID=$(openstack subnet show --format value -c id auto_allocated_subnet_v4)
-KEYPAIR=my-openstack-keypair-name
 
-# Deploy the cluster
 openstack coe cluster create \
     --cluster-template $TEMPLATE \
-    --master-count $N_MASTER --node-count $N_WORKER \
-    --master-flavor $MASTER_FLAVOR --flavor $FLAVOR \
+    --master-count 1 --node-count 1 \
+    --master-flavor m3.small --flavor m3.small \
     --merge-labels \
-    --labels auto_scaling_enabled=$AUTOSCALE \
-    --labels min_node_count=$N_WORKER_MIN \
-    --labels max_node_count=$N_WORKER_MAX \
-    --labels boot_volume_size=$BOOT_VOLUME_SIZE_GB \
+    --labels auto_scaling_enabled=true,min_node_count=1,boot_volume_size=80 \
     --keypair $KEYPAIR \
     --fixed-network "${NETWORK_ID}" \
     --fixed-subnet "${SUBNET_ID}" \
-    "ofocluster"
-```
+    "ofocluster2"
+
+
 
 ### Check cluster status (optional)
 
@@ -189,7 +176,7 @@ Once the `openstack coe cluster list` status (command above) changes to `CREATE_
 
 ```bash
 # Get cluster configuration
-openstack coe cluster config "ofocluster" --force
+openstack coe cluster config "ofocluster2" --force
 
 # Set permissions and move to appropriate location
 chmod 600 config
@@ -199,6 +186,15 @@ mv -i config ~/.ofocluster/ofocluster.kubeconfig
 # Set KUBECONFIG environment variable
 export KUBECONFIG=~/.ofocluster/ofocluster.kubeconfig
 ```
+
+## Create the Argo namespace
+
+We will install various resources into this namespace in this guide and subsequent ones.
+
+```bash
+kubectl create namespace argo
+```
+
 
 ## Create Kubernetes secrets
 
@@ -237,6 +233,105 @@ kubectl create secret generic agisoft-license \
 Replace `<LICENSE_SERVER_IP>` with the actual IP address from the credentials document.
 
 These secrets only need to be created once per cluster.
+
+## Configure CPU node labeling
+
+To prevent CPU workloads from being scheduled on expensive GPU nodes, CPU nodes are labeled based on their nodegroup naming pattern. CPU-only workflow templates use `nodeSelector` to explicitly target these labeled nodes, while GPU pods use resource requests that naturally constrain them to GPU nodes.
+
+### Apply CPU node labels
+
+Label CPU nodes automatically based on their nodegroup naming pattern:
+
+```bash
+kubectl apply -f setup/k8s/cpu-nodegroup-labels.yaml
+```
+
+This creates a NodeFeatureRule that automatically labels any node with `cpu` in its name with `feature.node.kubernetes.io/workload-type: cpu`. The label is applied by Node Feature Discovery (NFD) when the node joins the cluster.
+
+!!! important "Nodegroup naming requirement"
+    When creating CPU nodegroups, ensure the nodegroup name contains `cpu` (e.g., `cpu-group`, `cpu-m3xl`) so nodes are automatically labeled. See [nodegroup creation](../usage/cluster-access-and-resizing.md#add-a-new-nodegroup) for details.
+
+### Verify CPU node labels
+
+```bash
+kubectl get nodes -L feature.node.kubernetes.io/workload-type
+```
+
+All nodes with `cpu` in their name should show `feature.node.kubernetes.io/workload-type=cpu`.
+
+### How it works
+
+- **CPU pods**: Use `nodeSelector: feature.node.kubernetes.io/workload-type: cpu` to explicitly target CPU nodes
+- **GPU pods**: Request GPU resources (e.g., `nvidia.com/mig-1g.5gb`), which naturally constrains them to nodes advertising those resources
+- **System pods**: DaemonSets run on all nodes as needed
+
+### Enable mixed MIG strategy
+
+The GPU Operator defaults to "single" MIG strategy, which exposes MIG slices as generic
+`nvidia.com/gpu` resources. For MIG nodegroups to expose specific (and mixed) resources like
+`nvidia.com/mig-2g.10gb` (optionally along with other MIG nodes or full nodes like `nvidia.com/gpu`), enable "mixed" strategy:
+
+```bash
+# Add NVIDIA helm repo (if not already added)
+helm repo add nvidia https://helm.ngc.nvidia.com/nvidia
+helm repo update nvidia
+
+# Check current GPU Operator version
+helm list -n gpu-operator
+
+# Enable mixed MIG strategy (use the same version as currently installed)
+helm upgrade nvidia-gpu-operator nvidia/gpu-operator \
+  -n gpu-operator \
+  --version <CURRENT_VERSION> \
+  --reuse-values \
+  --set mig.strategy=mixed
+```
+
+!!! note "Cluster upgrades"
+    This setting may be reset if the cluster template is upgraded and Magnum redeploys the GPU Operator. Re-run this command after cluster upgrades if MIG resources stop appearing.
+
+
+## Configure MIG (Multi-Instance GPU)
+
+MIG partitions A100 GPUs into isolated slices, allowing multiple pods to share one physical GPU with hardware-level isolation. This is optional - standard GPU nodegroups work without MIG.
+
+### MIG profiles
+
+| Nodegroup pattern | MIG profile | Pods/GPU | VRAM each | Compute each |
+|-------------------|-------------|----------|-----------|--------------|
+| `mig1-*` | `all-1g.10gb` | 4 | 10GB | 1/7 |
+| `mig2-*` | `all-2g.10gb` | 3 | 10GB | 2/7 |
+| `mig3-*` | `all-3g.20gb` | 2 | 20GB | 3/7 |
+
+### Apply MIG configuration rule
+
+```bash
+kubectl apply -f setup/k8s/mig-nodegroup-labels.yaml
+```
+
+This creates a NodeFeatureRule that automatically labels GPU nodes based on their nodegroup name. The NVIDIA MIG manager watches for these labels and configures the GPU accordingly.
+
+### Verify MIG is working
+
+After creating a MIG nodegroup (see [MIG nodegroups](../usage/cluster-access-and-resizing.md#mig-nodegroups)):
+
+```bash
+# Check node MIG config label
+kubectl get nodes -l nvidia.com/mig.config -o custom-columns='NAME:.metadata.name,MIG_CONFIG:.metadata.labels.nvidia\.com/mig\.config'
+
+# Check MIG resources are available
+kubectl get nodes -o custom-columns='NAME:.metadata.name,MIG-1G:.status.allocatable.nvidia\.com/mig-1g\.10gb,MIG-2G:.status.allocatable.nvidia\.com/mig-2g\.10gb,MIG-3G:.status.allocatable.nvidia\.com/mig-3g\.20gb'
+```
+
+### How it works
+
+1. User creates nodegroup with MIG naming (e.g., `mig1-group`)
+2. Node joins cluster with name containing `-mig1-`
+3. NFD applies label `nvidia.com/mig.config=all-1g.5gb`
+4. MIG manager detects label, configures GPU into 3 partitions
+5. Device plugin exposes `nvidia.com/mig-1g.5gb: 3` as allocatable resources
+6. Pods requesting `nvidia.com/mig-1g.5gb: 1` get one partition
+
 
 ## Kubernetes management
 
@@ -282,6 +377,22 @@ Look for the `/dev/vda1` volume. Then delete the debugging pods:
 kubectl get pods -o name | grep node-debugger | xargs kubectl delete
 ```
 
+### Rotating secrets
+
+If you accidentally expose a secret, or for periodic rotation, delete, then re-create. Example for
+S3 (assuming your S3 is via JS2 Swift):
+
+List creds to get the ID of the cred you want to swap out: `openstack ec2 credentials list`
+Delete it: `openstack ec2 credentials delete <your-access-key-id>`
+Create a new one: `openstack ec2 credentials create`
+Update it in [Vaultwarden](http://vault.focal-lab.org).
+Delete the k8s secret: `kubectl delete secret -n argo s3-credentials`
+Re-create k8s secret following the instructions above.
+If you have already installed Argo on the cluster, restart the workflow controller so it picks up
+the new creds: `kubectl rollout restart deployment workflow-controller -n argo`
+
+
+
 ## Cluster resizing
 
 These instructions are for managing which nodes are in the cluster, not what software is running on them.
@@ -294,54 +405,9 @@ Resize the cluster by adding or removing nodes from the original worker group (n
 openstack coe cluster resize "ofocluster" 4
 ```
 
-### Add a new nodegroup
+### Add, resize, or delete nodegroups
 
-To add a new nodegroup, first specify its parameters and then use OpenStack to create it:
-
-```bash
-# Set nodegroup parameters
-NODEGROUP_NAME=cpu-group  # or gpu-group
-FLAVOR=m3.quad  # or "g3.medium" for GPU
-N_WORKER=1
-AUTOSCALE=false
-N_WORKER_MIN=1
-N_WORKER_MAX=5
-BOOT_VOLUME_SIZE_GB=80
-
-# Create the nodegroup
-openstack coe nodegroup create ofocluster $NODEGROUP_NAME \
-    --flavor $FLAVOR \
-    --node-count $N_WORKER \
-    --labels auto_scaling_enabled=$AUTOSCALE \
-    --labels min_node_count=$N_WORKER_MIN \
-    --labels max_node_count=$N_WORKER_MAX \
-    --labels boot_volume_size=$BOOT_VOLUME_SIZE_GB
-```
-
-### Drain nodes before downsizing or deleting
-
-When decreasing the number of nodes in a nodegroup, it's best practice to drain the Kubernetes pods from them first. Since we don't know which nodes OpenStack will delete when reducing the size, we have to drain the whole nodegroup. This is also what you'd do when deleting a nodegroup entirely.
-
-```bash
-NODEGROUP_NAME=cpu-group
-kubectl get nodes -l capi.stackhpc.com/node-group=$NODEGROUP_NAME -o name | xargs -I {} kubectl drain {} --ignore-daemonsets --delete-emptydir-data
-```
-
-### Resize a nodegroup
-
-Change the number of nodes in an existing nodegroup:
-
-```bash
-N_WORKER=2
-NODEGROUP_NAME=cpu-group
-openstack coe cluster resize ofocluster --nodegroup $NODEGROUP_NAME $N_WORKER
-```
-
-### Delete a nodegroup
-
-```bash
-openstack coe nodegroup delete ofocluster $NODEGROUP_NAME
-```
+For nodegroup management, see the corresponding [user guide](../usage/cluster-access-and-resizing.md).
 
 ### Delete the cluster
 
@@ -381,3 +447,47 @@ kubectl port-forward -n kubernetes-dashboard svc/kubernetes-dashboard 8443:443
 ```
 
 Then open https://localhost:8443 in your browser and use the token to log in.
+
+
+## Notes from testing and experimentation attempting to set up autoscaling and fixed nodegroups
+
+It seems impossible to set new (or override existing) labels when adding
+nodegroups. Labels only seem to be intended/used for overall cluster creation. Also if
+we deploy one nodegroup that violates the requirement for min_node_count to be specified, cannot
+deploy any others (they all fail), even if they would have succeeded otherwise.
+
+By not specifying a label `max_node_count` upon cluster creation, the default-worker nodegroup will
+not autoscale. But still we need to set the label `auto_scaling_enabled` to `true` upon cluster
+creation because cluster labels apparently cannot be overridden by nodegroups. This means that all
+nodegroups will autoscale, and we are required to specify `--min-nodes`, or nodegroup clreation will
+fail. If you don't specify `--max-nodes` when creating a nodegroup, it treats the `--node-count` as
+the max and may scale down to the min.
+
+I tried creating a cluster with no scaling (max nodes 1 and auto_scaling_enabled=false) and then
+overriding it at the nodegroup level with values that should enable scaling, but it didn't scale
+(apparently these values get overridden). Also tried not specifying
+auto_scale_enabled label at all, but then specifying it for nodegroups, but these nodegroups did not
+scale. Learned that `--node-count` needs to be within the range of the min and max (if omitted, it
+is assumed to be 1).
+
+### Testing/monitoring autoscaling behavior
+
+Deploy a bunch of pods that will need to get scheduled:
+```bash
+kubectl create deployment scale-test --image=nginx --replicas=20 -- sleep infinity && kubectl set resources deployment scale-test --requests=cpu=500m,memory=512Mi
+```
+
+Make sure some become pending (which should trigger a scale up):
+```bash
+kubectl get pods
+```
+
+Monitor the cluster autoscaler status to see if it is planning any scaling up or down:
+```bash
+kubectl get configmap cluster-autoscaler-status -n kube-system -o yaml
+```
+
+When finished, delete the test deployment:
+```bash
+kubectl delete deployment scale-test
+```

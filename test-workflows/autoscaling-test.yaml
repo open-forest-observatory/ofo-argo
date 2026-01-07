@@ -1,0 +1,68 @@
+# Autoscaling Test Workflow
+# Creates a user-specified number of parallel tasks, each counting upward for 30 minutes.
+# Designed to test cluster autoscaling by creating resource pressure that triggers node addition.
+#
+# Usage:
+#   argo submit autoscaling-test.yaml -p PARALLEL_TASKS=10
+#
+# Each task requests 1 CPU and 1Gi memory, counting from 1 to 360 (logging every 5 seconds)
+# to run for exactly 30 minutes. Adjust PARALLEL_TASKS to create the desired resource pressure.
+apiVersion: argoproj.io/v1alpha1
+kind: Workflow
+metadata:
+  generateName: autoscaling-test-
+spec:
+  serviceAccountName: argo
+  entrypoint: main
+
+  # Ensure pods are scheduled on non-GPU nodes
+  affinity:
+    nodeAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        nodeSelectorTerms:
+          - matchExpressions:
+              - key: nvidia.com/gpu.present
+                operator: DoesNotExist
+
+  arguments:
+    parameters:
+      - name: PARALLEL_TASKS
+        value: "5"
+
+  templates:
+    - name: main
+      steps:
+        - - name: parallel-counter
+            template: counter
+            arguments:
+              parameters:
+                - name: task-id
+                  value: "{{item}}"
+            withSequence:
+              count: "{{workflow.parameters.PARALLEL_TASKS}}"
+
+    - name: counter
+      inputs:
+        parameters:
+          - name: task-id
+      container:
+        image: alpine:latest
+        command: [sh, -c]
+        args:
+          - |
+            echo "Task {{inputs.parameters.task-id}}: Starting 30-minute counter (logging every 5 seconds)"
+            echo "Task {{inputs.parameters.task-id}}: This task will count to 360 over 30 minutes"
+
+            for i in $(seq 1 360); do
+              echo "Task {{inputs.parameters.task-id}}: Count $i / 360 ($(date '+%H:%M:%S'))"
+              sleep 5
+            done
+
+            echo "Task {{inputs.parameters.task-id}}: Completed all 360 counts!"
+        resources:
+          requests:
+            cpu: "1"
+            memory: "1Gi"
+          limits:
+            cpu: "1"
+            memory: "1Gi"

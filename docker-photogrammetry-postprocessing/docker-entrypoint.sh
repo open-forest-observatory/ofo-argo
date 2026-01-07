@@ -5,28 +5,28 @@ set -e
 # Default values for optional environment variables
 # These are the ONLY place defaults are set - entrypoint.py relies on these
 # =============================================================================
-export WORKING_DIR="${WORKING_DIR:-/tmp/processing}"
+export TEMP_WORKING_DIR_POSTPROCESSING="${TEMP_WORKING_DIR_POSTPROCESSING:-/tmp/processing}"
 export OUTPUT_MAX_DIM="${OUTPUT_MAX_DIM:-800}"
 export S3_PROVIDER="${S3_PROVIDER:-Other}"
-export S3_BUCKET_OUTPUT="${S3_BUCKET_OUTPUT:-${S3_BUCKET_INPUT_DATA}}"
-export OUTPUT_DIRECTORY="${OUTPUT_DIRECTORY:-processed}"
+export S3_BUCKET_POSTPROCESSED_OUTPUTS="${S3_BUCKET_POSTPROCESSED_OUTPUTS:-${S3_BUCKET_PHOTOGRAMMETRY_OUTPUTS}}"
+export S3_POSTPROCESSED_DIR="${S3_POSTPROCESSED_DIR:-processed}"
 
 # Validate environment variables
 echo "=== Python Post-Processing Container Starting ==="
 echo "S3 Endpoint: ${S3_ENDPOINT}"
-echo "Input Data Bucket: ${S3_BUCKET_INPUT_DATA}"
-echo "Run Folder: ${RUN_FOLDER}"
+echo "Photogrammetry Outputs Bucket: ${S3_BUCKET_PHOTOGRAMMETRY_OUTPUTS}"
+echo "Photogrammetry Directory: ${S3_PHOTOGRAMMETRY_DIR}"
 echo "Photogrammetry Config ID: ${PHOTOGRAMMETRY_CONFIG_ID}"
 echo "Input Boundary Bucket: ${S3_BUCKET_INPUT_BOUNDARY}"
 echo "Input Boundary Directory: ${INPUT_BOUNDARY_DIRECTORY}"
-echo "Output Bucket: ${S3_BUCKET_OUTPUT}"
-echo "Output Directory: ${OUTPUT_DIRECTORY}"
-echo "Dataset Name: ${DATASET_NAME}"
-echo "Working Directory: ${WORKING_DIR:-/tmp/processing}"
+echo "Postprocessed Outputs Bucket: ${S3_BUCKET_POSTPROCESSED_OUTPUTS}"
+echo "Postprocessed Directory: ${S3_POSTPROCESSED_DIR}"
+echo "Project Name: ${PROJECT_NAME}"
+echo "Working Directory: ${TEMP_WORKING_DIR_POSTPROCESSING:-/tmp/processing}"
 echo "Output Max Dimension: ${OUTPUT_MAX_DIM:-800}"
 
 # Check for required environment variables
-required_vars=("S3_ENDPOINT" "S3_ACCESS_KEY" "S3_SECRET_KEY" "S3_BUCKET_INPUT_DATA" "RUN_FOLDER" "S3_BUCKET_INPUT_BOUNDARY" "DATASET_NAME")
+required_vars=("S3_ENDPOINT" "S3_ACCESS_KEY" "S3_SECRET_KEY" "S3_BUCKET_PHOTOGRAMMETRY_OUTPUTS" "S3_PHOTOGRAMMETRY_DIR" "S3_BUCKET_INPUT_BOUNDARY" "PROJECT_NAME")
 missing_vars=()
 
 for var in "${required_vars[@]}"; do

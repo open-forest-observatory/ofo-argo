@@ -1,0 +1,40 @@
+# Workflow controller configuration for S3 artifact and log storage
+# Uses the existing s3-credentials secret for JS2 object store authentication
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: workflow-controller-configmap
+  namespace: argo
+data:
+  workflowDefaults: |
+    spec:
+      podGC:
+        strategy: OnPodCompletion
+      podMetadata:
+        annotations:
+          cluster-autoscaler.kubernetes.io/safe-to-evict: "false"
+      affinity:
+        podAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchExpressions:
+                    - key: workflows.argoproj.io/completed
+                      operator: In
+                      values:
+                        - "false"
+                topologyKey: kubernetes.io/hostname
+  artifactRepository: |
+    archiveLogs: true
+    s3:
+      bucket: ofo-internal
+      endpoint: js2.jetstream-cloud.org:8001
+      insecure: false
+      keyFormat: "argo-logs-artifacts/{{workflow.name}}/{{pod.name}}"
+      accessKeySecret:
+        name: s3-credentials
+        key: access_key
+      secretKeySecret:
+        name: s3-credentials
+        key: secret_key

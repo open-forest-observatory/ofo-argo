@@ -107,7 +107,7 @@ Get the Kubernetes configuration file (`kubeconfig`) and configure your environm
 
 ```bash
 # Get cluster configuration
-openstack coe cluster config "ofocluster" --force
+openstack coe cluster config "ofocluster2" --force
 
 # Set permissions and move to appropriate location
 chmod 600 config
@@ -136,43 +136,82 @@ source ~/.ofocluster/app-cred-ofocluster-openrc.sh
 
 ### Add a new nodegroup
 
-To add a new nodegroup, first specify its parameters and then use OpenStack to create it:
+Use OpenStack to create new nodegroups.
+
+#### CPU nodegroups
+
+CPU nodegroups must include `cpu` in the nodegroup name for automatic labeling to work:
 
 ```bash
-# Set nodegroup parameters
-NODEGROUP_NAME=cpu-group  # or gpu-group, or whatever is meaningful to you
-FLAVOR=m3.quad  # or "g3.medium" etc for GPU
-N_WORKER=1
-AUTOSCALE=false
-N_WORKER_MIN=1 # Only relevant for autoscale
-N_WORKER_MAX=5 # Only relevant for autoscale
-BOOT_VOLUME_SIZE_GB=80
-
-# Create the nodegroup
-openstack coe nodegroup create ofocluster $NODEGROUP_NAME \
-    --flavor $FLAVOR \
-    --node-count $N_WORKER \
-    --labels auto_scaling_enabled=$AUTOSCALE \
-    --labels min_node_count=$N_WORKER_MIN \
-    --labels max_node_count=$N_WORKER_MAX \
-    --labels boot_volume_size=$BOOT_VOLUME_SIZE_GB
+openstack coe nodegroup create ofocluster2 cpu-group --min-nodes 1 --max-nodes 8 --flavor m3.xl
 ```
 
-Quick access to create a CPU nodegroup:
+The `cpu` substring triggers automatic labeling (`workload-type: cpu`) via NodeFeatureRule, which is part of ensuring CPU-only workflow pods schedule on these nodes (the other part is the NodeSelector attribute specified for the CPU task template in the Argo workflow YAML).
+
+#### GPU nodegroups
+
+GPU nodegroups consist of full-GPU nodes, and on JS2 must be an `xl` flavor. For automate-metashape runs via Argo, we now prefer MIG (split GPU) nodegroups (see below). Standard full-GPU nodegroups can use any name, as GPU resource requests handle scheduling:
 
 ```bash
-openstack coe nodegroup create ofocluster --labels boot_volume_size=80 cpu-group --flavor m3.large --node-count 2
+openstack coe nodegroup create ofocluster2 gpu-group --min-nodes 1 --max-nodes 8 --flavor g3.xl
 ```
 
-Quick access to create a GPU nodegroup:
+#### MIG nodegroups
+
+MIG (Multi-Instance GPU) partitions full (e.g. JS2 g3.xl A100) GPUs into smaller isolated slices, allowing multiple pods per GPU. Use MIG when your GPU workloads have low utilization (<50%) and don't need full GPU memory. This is the preferred way to provide GPU resources to automate-metashape runs via the OFO Argo step-based workflow, as it provides much greater compute efficiency.
+
+Create MIG nodegroups by including `mig1-`, `mig2-`, or `mig3-` in the nodegroup name. Our benchmarking has shown that automate-metashape is most efficient with `mig1` nodes 7 slices (and you can provide more than one slice to a step).
 
 ```bash
-openstack coe nodegroup create ofocluster --labels boot_volume_size=80 gpu-group --flavor g3.xl --node-count 2
+openstack coe nodegroup create ofocluster2 mig1-group --min-nodes 1 --max-nodes 4 --flavor g3.xl
 ```
 
+!!! note "Resource limits for MIG"
+    When using MIG, reduce CPU/memory requests to fit multiple pods per node:
+
+    | Profile | MIG resource request | Max pods/node | CPU each | RAM each |
+    |---------|----------------------|---------------|----------|----------|
+    | mig1 (7 slices) | `nvidia.com/mig-1g.5gb` | 7 | 4 | 16GB |
+    | mig2 (3 slices) | `nvidia.com/mig-2g.10gb` | 3 | 10 | 38GB |
+    | mig3 (2 slices) | `nvidia.com/mig-3g.20gb` | 2 | 15 | 55GB |
+
+!!! warning "Workflow compatibility"
+    MIG nodegroups are only used by workflows that request MIG resources (e.g., `nvidia.com/mig-1g.5gb: 1`) instead of full GPUs (`nvidia.com/gpu: 1`). See [MIG workflow configuration](argo-usage.md#mig-multi-instance-gpu).
+
+!!! note "GPU Node Scheduling"
+    CPU-only workflow pods use `nodeSelector` to target CPU nodes explicitly, preventing them from scheduling on expensive GPU nodes. GPU pods request GPU resources, which naturally constrains them to GPU nodes. See [GPU node scheduling](argo-usage.md#gpu-node-scheduling) for details.
 
 
-### Drain nodes before downsizing or deleting
+### Autoscaling
+
+Due to OpenStack limitations, all nodegroups in the cluster are autoscaling. The cluster adds/removes nodes to schedule all pending pods while keeping nodes near full utilization. Set `--min-nodes` and `--max-nodes` to the same value for a fixed-size nodegroup. (But note, if you delete nodes manually or via `openstack coe nodegroup delete`, the autoscaler will try to replace the deleted nodes with new ones until the nodegroup is fully deleted -- see below for workarounds.) The `--node-count` parameter is essentially irrelevant and defaults to 1 if omitted.
+
+By default, the autoscaler may delete undrerutilized nodes with running pods, in an effort to consolidate pods and minimize running nodes. While often acceptable in many k8s applications, this is unacceptable for automate-metashape because pods may take hours and cannot resume from where they were killed. Therefore, we have configured the Argo workflow controller to label pods as not evictable so this doesn't happen. In addition, we have configured it to prefer scheduling new pods on nodes that already have running pods (the opposite of default Kubernetes behavior) to increase the chances of empty nodes that can be scaled down.
+
+
+#### Check if the autoscaler is planning any upsizing or downsizing
+
+```bash
+kubectl get configmap cluster-autoscaler-status -n kube-system -o yaml
+```
+
+### Update a nodegroup's min/max node count bounds
+
+The autoscaler should take care of resizing to meet demand (within the node count bounds you
+specify). Downscaling has a delay of at least 10 min from triggering before being implemented in an
+effort to prevent cycling. You can change the min and max bounds on the number of nodes the
+autoscaler will request:
+
+```bash
+openstack coe nodegroup update ofocluster2 cpu-group replace min_node_count=1 max_node_count=1
+```
+
+### Drain/cordon nodes before downsizing or deleting
+
+**WORK IN PROGRESS**
+
+It appears that draining will actually kill running pods. Still need to find a way
+to simply prevent scheduling of new pods (possibly "cordoning"), and confirm that nodes are empty, before deleting.
 
 When decreasing the number of nodes in a nodegroup, it is best practice to drain the Kubernetes pods
 from them first. Given that we don't know which nodes OpenStack will delete when reducing the size, we
@@ -183,20 +222,30 @@ NODEGROUP_NAME=cpu-group
 kubectl get nodes -l capi.stackhpc.com/node-group=$NODEGROUP_NAME -o name | xargs -I {} kubectl drain {} --ignore-daemonsets --delete-emptydir-data
 ```
 
-### Resize a nodegroup
-
-Change the number of nodes in an existing nodegroup:
+To drain only a specific number of nodes (prioritizing the least utilitzed), sort by utilization and add `head` to limit the
+selection:
 
 ```bash
 NODEGROUP_NAME=cpu-group
-N_WORKER=2
-openstack coe cluster resize ofocluster --nodegroup $NODEGROUP_NAME $N_WORKER
+NUM_TO_DRAIN=2
+kubectl get nodes -l capi.stackhpc.com/node-group=$NODEGROUP_NAME \
+  --sort-by='.status.allocatable.cpu' -o name | \
+  head -n $NUM_TO_DRAIN | \
+  xargs -I {} kubectl drain {} --ignore-daemonsets --delete-emptydir-data
 ```
+It will print the IDs of the nodes, which you can then explicitly delete (see below)
+
 
 ### Delete a nodegroup
 
+If you attempt to delete a nodegroup with many nodes and lots of pending compute jobs, the delete
+command can compete with the autoscaler, which will try to add nodes to restore the target node
+count. To prevent this, first reduce the max size of the nodegroup to 1 (the lowest allowed value),
+then delete.
+
 ```bash
-openstack coe nodegroup delete ofocluster $NODEGROUP_NAME
+openstack coe nodegroup update ofocluster2 $NODEGROUP_NAME min_node_count=1 max_node_count=1
+openstack coe nodegroup delete ofocluster2 $NODEGROUP_NAME
 ```
 
 

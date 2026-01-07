@@ -1,0 +1,138 @@
+Project: gpu-000810
+Agisoft Metashape Professional Version: 2.2.0
+Processing started: 20251228T1923
+
+Step                    | API Call                            | Run Time | CPU % | CPU%P90 | GPU % | GPU%P90 | CPU usage |  CPUusgP90 | PrcMem | CtrLim | CtrUsd | CtrAvl | SysTot | SysUsd | SysAvl | CPUs | GPUs | GPU Model       | Node           
+setup                   | addPhotos                           | 00:00:40 |     2 |      2 |   N/A |    N/A |       0.2 |        0.2 |    0.5 |  122.8 |   28.1 |   94.8 |  122.8 |    2.5 |  120.3 |   32 |    0 | N/A             | automate-metashape-workflow-g95x4-metashape-cpu-step-2330298699
+match_photos            | matchPhotos                         | 00:18:20 |     9 |     27 |    16 |     72 |       2.7 |        8.6 |    3.2 |  115.1 |   39.1 |   76.0 |  115.1 |    6.0 |  109.2 |   32 |    1 | NVIDIA A100-SXM4-40GB | automate-metashape-workflow-g95x4-metashape-gpu-step-3917160420
+align_cameras           | alignCameras                        | 00:17:55 |    63 |     99 |   N/A |    N/A |      20.2 |       31.6 |    4.2 |  122.8 |    5.3 |  117.6 |  122.8 |    6.2 |  116.7 |   32 |    0 | N/A             | automate-metashape-workflow-g95x4-metashape-cpu-step-3880741730
+align_cameras           | optimizeCameras                     | 00:01:28 |    45 |     94 |   N/A |    N/A |      14.5 |       30.1 |    4.5 |  122.8 |    5.5 |  117.4 |  122.8 |    6.4 |  116.4 |   32 |    0 | N/A             | automate-metashape-workflow-g95x4-metashape-cpu-step-3880741730
+align_cameras           | exportCameras                       | 00:00:00 |     7 |      7 |   N/A |    N/A |       2.3 |        2.3 |    1.4 |  122.8 |    2.4 |  120.4 |  122.8 |    3.3 |  119.5 |   32 |    0 | N/A             | automate-metashape-workflow-g95x4-metashape-cpu-step-3880741730
+build_depth_maps        | buildDepthMaps                      | 01:07:32 |    20 |     28 |    60 |     98 |       6.3 |        8.8 |    8.3 |  115.1 |   57.1 |   58.0 |  115.1 |   11.1 |  104.0 |   32 |    1 | NVIDIA A100-SXM4-40GB | automate-metashape-workflow-g95x4-metashape-gpu-step-217776058
+build_point_cloud       | buildPointCloud                     | 00:51:12 |    68 |     83 |   N/A |    N/A |      21.6 |       26.5 |   21.3 |  122.8 |   55.9 |   67.0 |  122.8 |   23.2 |   99.6 |   32 |    0 | N/A             | automate-metashape-workflow-g95x4-metashape-cpu-step-1387844129
+build_point_cloud       | classifyGroundPoints                | 00:17:49 |    77 |    100 |   N/A |    N/A |      24.7 |       32.0 |    6.9 |  122.8 |   44.0 |   78.9 |  122.8 |    8.8 |  114.0 |   32 |    0 | N/A             | automate-metashape-workflow-g95x4-metashape-cpu-step-1387844129
+build_mesh              | buildModel                          | 01:39:12 |    41 |     56 |     1 |      0 |      13.2 |       18.0 |   16.4 |  115.1 |   39.3 |   75.8 |  115.1 |   19.2 |   95.9 |   32 |    1 | NVIDIA A100-SXM4-40GB | automate-metashape-workflow-g95x4-metashape-gpu-step-4287158711
+build_mesh              | exportModel                         | 00:00:18 |     4 |      5 |     0 |      0 |       1.2 |        1.1 |    8.7 |  115.1 |   18.4 |   96.7 |  115.1 |   11.5 |  103.7 |   32 |    1 | NVIDIA A100-SXM4-40GB | automate-metashape-workflow-g95x4-metashape-gpu-step-4287158711
+build_dem_orthomosaic   | buildDem (DSM-ptcloud)              | 00:01:13 |    20 |     48 |   N/A |    N/A |       5.8 |       14.1 |    0.5 |  122.8 |    1.8 |  121.0 |  122.8 |    2.5 |  120.3 |   32 |    0 | N/A             | automate-metashape-workflow-g95x4-metashape-cpu-step-2596580650
+build_dem_orthomosaic   | exportRaster (DSM-ptcloud)          | 00:00:06 |     9 |     14 |   N/A |    N/A |       2.8 |        4.5 |    0.7 |  122.8 |    2.2 |  120.7 |  122.8 |    2.6 |  120.2 |   32 |    0 | N/A             | automate-metashape-workflow-g95x4-metashape-cpu-step-2596580650
+build_dem_orthomosaic   | buildDem (DTM-ptcloud)              | 00:01:02 |    17 |     48 |   N/A |    N/A |       5.2 |       15.3 |    0.6 |  122.8 |    2.2 |  120.6 |  122.8 |    2.6 |  120.3 |   32 |    0 | N/A             | automate-metashape-workflow-g95x4-metashape-cpu-step-2596580650
+build_dem_orthomosaic   | exportRaster (DTM-ptcloud)          | 00:00:06 |     8 |     11 |   N/A |    N/A |       2.7 |        3.6 |    0.7 |  122.8 |    2.5 |  120.3 |  122.8 |    2.6 |  120.2 |   32 |    0 | N/A             | automate-metashape-workflow-g95x4-metashape-cpu-step-2596580650
+build_dem_orthomosaic   | buildDem (DSM-mesh)                 | 00:01:28 |    16 |     46 |   N/A |    N/A |       5.1 |       14.6 |    1.0 |  122.8 |    3.2 |  119.7 |  122.8 |    2.9 |  120.0 |   32 |    0 | N/A             | automate-metashape-workflow-g95x4-metashape-cpu-step-2596580650
+build_dem_orthomosaic   | exportRaster (DSM-mesh)             | 00:00:09 |     8 |     15 |   N/A |    N/A |       2.5 |        4.7 |    0.8 |  122.8 |    3.3 |  119.5 |  122.8 |    2.7 |  120.1 |   32 |    0 | N/A             | automate-metashape-workflow-g95x4-metashape-cpu-step-2596580650
+build_dem_orthomosaic   | buildOrthomosaic (dsm-ptcloud)      | 01:43:20 |    24 |     56 |   N/A |    N/A |       7.7 |       17.9 |   16.0 |  122.8 |   67.8 |   55.0 |  122.8 |   17.9 |  104.9 |   32 |    0 | N/A             | automate-metashape-workflow-g95x4-metashape-cpu-step-2596580650
+build_dem_orthomosaic   | exportRaster (ortho-dsm-ptcloud)    | 00:01:23 |     8 |     15 |   N/A |    N/A |       2.5 |        4.7 |    1.8 |  122.8 |   55.2 |   67.6 |  122.8 |    3.7 |  119.1 |   32 |    0 | N/A             | automate-metashape-workflow-g95x4-metashape-cpu-step-2596580650
+build_dem_orthomosaic   | buildOrthomosaic (dsm-mesh)         | 01:29:48 |    28 |     62 |   N/A |    N/A |       8.9 |       19.9 |   16.4 |  122.8 |   98.0 |   24.8 |  122.8 |   18.4 |  104.5 |   32 |    0 | N/A             | automate-metashape-workflow-g95x4-metashape-cpu-step-2596580650
+build_dem_orthomosaic   | exportRaster (ortho-dsm-mesh)       | 00:01:57 |     7 |     13 |   N/A |    N/A |       2.3 |        4.0 |    2.2 |  122.8 |   66.4 |   56.4 |  122.8 |    4.3 |  118.6 |   32 |    0 | N/A             | automate-metashape-workflow-g95x4-metashape-cpu-step-2596580650
+finalize                | exportReport                        | 00:00:19 |     9 |     20 |   N/A |    N/A |       2.7 |        6.3 |    0.5 |  122.8 |    1.9 |  120.9 |  122.8 |    2.5 |  120.3 |   32 |    0 | N/A             | automate-metashape-workflow-g95x4-metashape-cpu-step-284070388
+Run Completed: 20251229T0417
+
+
+### CONFIGURATION ###
+add_gcps:
+  enabled: false
+  gcp_crs: EPSG::26910
+  marker_location_accuracy: 0.1
+  marker_projection_accuracy: 8
+  optimize_w_gcps_only: true
+add_photos:
+  enabled: true
+  fix_accuracy: 3
+  multispectral: false
+  nofix_accuracy: 25
+  sensor_type: Metashape.Sensor.Type.Frame
+  separate_calibration_per_path: false
+  use_rtk: false
+align_cameras:
+  adaptive_fitting: true
+  enabled: true
+  reset_alignment: false
+build_dem:
+  classify_ground_points: false
+  enabled: true
+  export: true
+  nodata: -32767
+  resolution: 0.12
+  surface:
+  - DTM-ptcloud
+  - DSM-mesh
+  - DSM-ptcloud
+  tiff_big: true
+  tiff_overviews: true
+  tiff_tiled: false
+build_depth_maps:
+  downscale: 4
+  enabled: true
+  filter_mode: Metashape.ModerateFiltering
+  max_neighbors: 60
+  reuse_depth: false
+build_mesh:
+  enabled: true
+  export: true
+  export_extension: ply
+  face_count: Metashape.MediumFaceCount
+  face_count_custom: 100000
+  gpu_enabled: true
+  shift_crs_to_cameras: false
+build_orthomosaic:
+  blending: Metashape.MosaicBlending
+  enabled: true
+  export: true
+  fill_holes: true
+  nodata: -32767
+  refine_seamlines: true
+  remove_after_export: true
+  surface:
+  - DSM-ptcloud
+  - DSM-mesh
+  tiff_big: true
+  tiff_overviews: true
+  tiff_tiled: true
+build_point_cloud:
+  classes: ALL
+  classify_ground_points: true
+  enabled: true
+  export: false
+  export_format: Metashape.PointCloudFormatCOPC
+  keep_depth: true
+  max_neighbors: 60
+  remove_after_export: false
+calibrate_reflectance:
+  enabled: false
+  panel_filename: RP04-1923118-OB.csv
+  use_reflectance_panels: true
+  use_sun_sensor: true
+classify_ground_points:
+  cell_size: 50.0
+  max_angle: 15.0
+  max_distance: 1.0
+export_cameras:
+  enabled: true
+filter_points_usgs:
+  enabled: false
+  proj_thresh_absolute: 2
+  proj_thresh_percent: 30
+  rec_thresh_absolute: 15
+  rec_thresh_percent: 20
+  reproj_thresh_absolute: 0.3
+  reproj_thresh_percent: 5
+match_photos:
+  downscale: 2
+  enabled: true
+  generic_preselection: true
+  gpu_enabled: true
+  keep_keypoints: true
+  reference_preselection: true
+  reference_preselection_mode: Metashape.ReferencePreselectionSource
+optimize_cameras:
+  adaptive_fitting: true
+  enabled: true
+project:
+  load_project: ''
+  output_path: ''
+  photo_path: /data/argo-input/datasets-testing/000810_images/
+  photo_path_secondary: ''
+  project_crs: EPSG::26910
+  project_name: ''
+  project_path: ''
+  subdivide_task: true
+### END CONFIGURATION ###

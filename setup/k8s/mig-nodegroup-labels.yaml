@@ -1,0 +1,36 @@
+apiVersion: nfd.k8s-sigs.io/v1alpha1
+kind: NodeFeatureRule
+metadata:
+  name: mig-nodegroup-labels
+spec:
+  rules:
+    - name: "MIG 1g nodes"
+      labels:
+        nvidia.com/mig.config: "all-1g.5gb"
+      matchFeatures:
+        - feature: system.name
+          matchExpressions:
+            nodename:
+              op: InRegexp
+              value:
+                - "-mig1-"
+    - name: "MIG 2g nodes"
+      labels:
+        nvidia.com/mig.config: "all-2g.10gb"
+      matchFeatures:
+        - feature: system.name
+          matchExpressions:
+            nodename:
+              op: InRegexp
+              value:
+                - "-mig2-"
+    - name: "MIG 3g nodes"
+      labels:
+        nvidia.com/mig.config: "all-3g.20gb"
+      matchFeatures:
+        - feature: system.name
+          matchExpressions:
+            nodename:
+              op: InRegexp
+              value:
+                - "-mig3-"

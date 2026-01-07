@@ -3,9 +3,21 @@ title: Running the photogrammetry workflow
 weight: 20
 ---
 
-# Running the photogrammetry workflow
+# Running the photogrammetry workflow (original monolithic version)
 
-This guide describes how to run the OFO photogrammetry workflow, which processes drone imagery using [automate-metashape](https://github.com/open-forest-observatory/automate-metashape) and performs post-processing steps.
+!!! warning "Step-Based Workflow Recommended"
+    A new **[step-based workflow](stepbased-workflow.md)** with optimized resource allocation is now available and **recommended for all new processing**.
+
+    **Benefits of step-based workflow:**
+
+    - 💰 60-80% reduction in GPU costs
+    - 📊 Individual step monitoring and debugging
+    - 🔧 Configurable GPU vs CPU scheduling
+    - ⚡ Disabled steps are completely skipped (no resource allocation)
+
+    **This page documents the original monolithic workflow for reference only.**
+
+This guide describes how to run the original OFO photogrammetry workflow, which processes drone imagery using [automate-metashape](https://github.com/open-forest-observatory/automate-metashape) in a single monolithic container and performs post-processing steps.
 
 ## Prerequisites
 
@@ -244,7 +256,7 @@ This directory structure should already exist prior to running the Argo workflow
 
 **THE DB LOGGING IS CURRENTLY DISABLED AND IS BEING MIGRATED TO A HOSTED SOLUTION THROUGH SUPABASE**
 
-Argo run status is logged into a PostGIS DB. This is done through an additional docker container (hosted on GitHub Container Registry `ghcr.io/open-forest-observatory/ofo-argo-utils:latest`) that is included in the argo workflow. The files to make the docker image are in the folder `ofo-argo-utils`.
+Argo run status is logged into a PostGIS DB. This is done through an additional docker container (hosted on GitHub Container Registry `ghcr.io/open-forest-observatory/argo-workflow-utils:latest`) that is included in the argo workflow. The files to make the docker image are in the folder `argo-workflow-utils`.
 
 ### Info on the PostGIS DB
 
