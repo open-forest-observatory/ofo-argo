@@ -1,0 +1,1492 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+      
+      
+        <link rel="canonical" href="https://open-forest-observatory.github.io/ofo-argo/admin/argo-installation-on-cluster/">
+      
+      
+        <link rel="prev" href="../manila-share-mounting/">
+      
+      
+      
+        
+      
+      
+      <link rel="icon" href="../../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.1">
+    
+    
+      
+        <title>Argo installation on cluster - OFO Argo Documentation</title>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/stylesheets/main.484c7ddc.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    <body dir="ltr">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#argo-installation-on-cluster" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="../.." title="OFO Argo Documentation" class="md-header__button md-logo" aria-label="OFO Argo Documentation" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            OFO Argo Documentation
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Argo installation on cluster
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+
+<nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../.." title="OFO Argo Documentation" class="md-nav__button md-logo" aria-label="OFO Argo Documentation" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    OFO Argo Documentation
+  </label>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../.." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    OFO Argo Workflows Documentation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../../usage/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    User guides
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_2" id="__nav_2_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    User guides
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../usage/cluster-access-and-resizing/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Cluster access and resizing
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../usage/argo-usage/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Using Argo on the OFO cluster
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../usage/photogrammetry-workflow/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Running the photogrammetry workflow
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../usage/stepbased-workflow/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Running the step-based photogrammetry workflow
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../usage/stepbased-quick-reference/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Step-based workflow quick reference
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" checked>
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Administrator guides
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_3" id="__nav_3_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Administrator guides
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../cluster-creation-and-resizing/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Cluster creation and resizing
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../manila-share-mounting/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Manila share mounting
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Argo installation on cluster
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Argo installation on cluster
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#prerequisites" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Prerequisites
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#clone-or-update-the-ofo-argo-repository" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Clone or update the ofo-argo repository
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#install-the-argo-cli-locally-one-time" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Install the Argo CLI locally (one-time)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#install-argo-workflow-manager-and-server-on-the-cluster" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Install Argo workflow manager and server on the cluster
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#configure-workflow-permissions" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Configure workflow permissions
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#configure-workflow-controller-delete-completed-pods-and-use-s3-for-artifact-and-log-storage" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Configure workflow controller: Delete completed pods, and use S3 for artifact and log storage
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Configure workflow controller: Delete completed pods, and use S3 for artifact and log storage">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#prerequisites_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Prerequisites
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#apply-the-workflow-controller-configuration" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Apply the workflow controller configuration
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#restart-the-workflow-controller" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Restart the workflow controller
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#verify-the-configuration" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Verify the configuration
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#test-the-installation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Test the installation
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#set-up-argo-server-with-https-access" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Set up Argo server with HTTPS access
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Set up Argo server with HTTPS access">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#verify-argo-server-is-clusterip" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Verify Argo server is ClusterIP
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#install-cert-manager" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Install cert-manager
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#install-nginx-ingress-controller" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Install nginx ingress controller
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#create-dns-a-record" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Create DNS A record
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#create-lets-encrypt-cluster-issuer" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Create Let's Encrypt cluster issuer
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#create-ingress-resource-for-argo-server" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Create ingress resource for Argo server
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#request-and-wait-for-certificate" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Request and wait for certificate
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#verify-argo-ui-access" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Verify Argo UI access
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#create-argo-ui-server-token" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Create Argo UI server token
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Create Argo UI server token">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#token-rotation-future" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Token rotation (future)
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#prerequisites" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Prerequisites
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#clone-or-update-the-ofo-argo-repository" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Clone or update the ofo-argo repository
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#install-the-argo-cli-locally-one-time" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Install the Argo CLI locally (one-time)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#install-argo-workflow-manager-and-server-on-the-cluster" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Install Argo workflow manager and server on the cluster
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#configure-workflow-permissions" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Configure workflow permissions
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#configure-workflow-controller-delete-completed-pods-and-use-s3-for-artifact-and-log-storage" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Configure workflow controller: Delete completed pods, and use S3 for artifact and log storage
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Configure workflow controller: Delete completed pods, and use S3 for artifact and log storage">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#prerequisites_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Prerequisites
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#apply-the-workflow-controller-configuration" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Apply the workflow controller configuration
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#restart-the-workflow-controller" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Restart the workflow controller
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#verify-the-configuration" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Verify the configuration
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#test-the-installation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Test the installation
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#set-up-argo-server-with-https-access" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Set up Argo server with HTTPS access
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Set up Argo server with HTTPS access">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#verify-argo-server-is-clusterip" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Verify Argo server is ClusterIP
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#install-cert-manager" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Install cert-manager
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#install-nginx-ingress-controller" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Install nginx ingress controller
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#create-dns-a-record" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Create DNS A record
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#create-lets-encrypt-cluster-issuer" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Create Let's Encrypt cluster issuer
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#create-ingress-resource-for-argo-server" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Create ingress resource for Argo server
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#request-and-wait-for-certificate" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Request and wait for certificate
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#verify-argo-ui-access" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Verify Argo UI access
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#create-argo-ui-server-token" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Create Argo UI server token
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Create Argo UI server token">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#token-rotation-future" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Token rotation (future)
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+
+<h1 id="argo-installation-on-cluster">Argo installation on cluster</h1>
+<p>This guide covers the installation of Argo Workflows, including the CLI on your local machine (required for all users) and the Kubernetes extension on the cluster (one-time admin installation).</p>
+<h2 id="prerequisites">Prerequisites</h2>
+<p>This guide assumes you already have:</p>
+<ul>
+<li>A Kubernetes cluster created (see <a href="../cluster-creation-and-resizing/">Cluster creation and resizing</a>)</li>
+<li>Manila share PV and PVC configured (see <a href="../manila-share-mounting/">Manila share mounting</a>)</li>
+<li><code>kubectl</code> configured to connect to the cluster</li>
+</ul>
+<h2 id="clone-or-update-the-ofo-argo-repository">Clone or update the ofo-argo repository</h2>
+<p>This repository contains files needed for deploying and testing Argo.</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="c1"># Clone the repository (first time)</span>
+<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="nb">cd</span><span class="w"> </span>~/repos
+<a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>git<span class="w"> </span>clone<span class="w"> </span>https://github.com/open-forest-observatory/ofo-argo
+<a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="nb">cd</span><span class="w"> </span>ofo-argo
+</code></pre></div>
+<p>Or, if you already have the repository cloned:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="c1"># Update existing repository</span>
+<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="nb">cd</span><span class="w"> </span>~/repos/ofo-argo
+<a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a>git<span class="w"> </span>pull
+</code></pre></div>
+<h2 id="install-the-argo-cli-locally-one-time">Install the Argo CLI locally (one-time)</h2>
+<p>The Argo CLI is a wrapper around <code>kubectl</code> that simplifies communication with Argo on the cluster.</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="nv">ARGO_WORKFLOWS_VERSION</span><span class="o">=</span><span class="s2">&quot;v3.7.6&quot;</span>
+<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="nv">ARGO_OS</span><span class="o">=</span><span class="s2">&quot;linux&quot;</span>
+<a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a>
+<a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a><span class="c1"># Download the binary</span>
+<a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a>wget<span class="w"> </span><span class="s2">&quot;https://github.com/argoproj/argo-workflows/releases/download/</span><span class="si">${</span><span class="nv">ARGO_WORKFLOWS_VERSION</span><span class="si">}</span><span class="s2">/argo-</span><span class="si">${</span><span class="nv">ARGO_OS</span><span class="si">}</span><span class="s2">-amd64.gz&quot;</span>
+<a id="__codelineno-2-6" name="__codelineno-2-6" href="#__codelineno-2-6"></a>
+<a id="__codelineno-2-7" name="__codelineno-2-7" href="#__codelineno-2-7"></a><span class="c1"># Unzip</span>
+<a id="__codelineno-2-8" name="__codelineno-2-8" href="#__codelineno-2-8"></a>gunzip<span class="w"> </span><span class="s2">&quot;argo-</span><span class="si">${</span><span class="nv">ARGO_OS</span><span class="si">}</span><span class="s2">-amd64.gz&quot;</span>
+<a id="__codelineno-2-9" name="__codelineno-2-9" href="#__codelineno-2-9"></a>
+<a id="__codelineno-2-10" name="__codelineno-2-10" href="#__codelineno-2-10"></a><span class="c1"># Make binary executable</span>
+<a id="__codelineno-2-11" name="__codelineno-2-11" href="#__codelineno-2-11"></a>chmod<span class="w"> </span>+x<span class="w"> </span><span class="s2">&quot;argo-</span><span class="si">${</span><span class="nv">ARGO_OS</span><span class="si">}</span><span class="s2">-amd64&quot;</span>
+<a id="__codelineno-2-12" name="__codelineno-2-12" href="#__codelineno-2-12"></a>
+<a id="__codelineno-2-13" name="__codelineno-2-13" href="#__codelineno-2-13"></a><span class="c1"># Move binary to path</span>
+<a id="__codelineno-2-14" name="__codelineno-2-14" href="#__codelineno-2-14"></a>sudo<span class="w"> </span>mv<span class="w"> </span><span class="s2">&quot;./argo-</span><span class="si">${</span><span class="nv">ARGO_OS</span><span class="si">}</span><span class="s2">-amd64&quot;</span><span class="w"> </span>/usr/local/bin/argo
+<a id="__codelineno-2-15" name="__codelineno-2-15" href="#__codelineno-2-15"></a>
+<a id="__codelineno-2-16" name="__codelineno-2-16" href="#__codelineno-2-16"></a><span class="c1"># Test installation</span>
+<a id="__codelineno-2-17" name="__codelineno-2-17" href="#__codelineno-2-17"></a>argo<span class="w"> </span>version
+</code></pre></div>
+<h2 id="install-argo-workflow-manager-and-server-on-the-cluster">Install Argo workflow manager and server on the cluster</h2>
+<p>Create the Argo namespace and install Argo components:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="c1"># Create namespace</span>
+<a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a>kubectl<span class="w"> </span>create<span class="w"> </span>namespace<span class="w"> </span>argo
+<a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a>
+<a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a><span class="c1"># Install Argo workflows on cluster</span>
+<a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a>kubectl<span class="w"> </span>apply<span class="w"> </span>-n<span class="w"> </span>argo<span class="w"> </span>-f<span class="w"> </span>https://github.com/argoproj/argo-workflows/releases/download/<span class="si">${</span><span class="nv">ARGO_WORKFLOWS_VERSION</span><span class="si">}</span>/install.yaml
+</code></pre></div>
+<p>Optionally, check that the pods are running:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>kubectl<span class="w"> </span>get<span class="w"> </span>pods<span class="w"> </span>-n<span class="w"> </span>argo
+<a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a>kubectl<span class="w"> </span>describe<span class="w"> </span>pod<span class="w"> </span>-n<span class="w"> </span>argo<span class="w"> </span>&lt;pod-name&gt;
+</code></pre></div>
+<h2 id="configure-workflow-permissions">Configure workflow permissions</h2>
+<p>The standard <code>install.yaml</code> configures permissions for the workflow controller, but does not configure permissions for the service accounts that workflow pods run as. Without these permissions, workflows will fail with an error like:</p>
+<blockquote>
+<p>workflowtaskresults.argoproj.io is forbidden: User "system:serviceaccount:argo:argo" cannot create resource "workflowtaskresults"</p>
+</blockquote>
+<p>This step grants the <code>argo</code> service account (used by all our workflows via <code>serviceAccountName: argo</code>) the minimal permissions needed to create and update workflowtaskresults.</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="c1"># Apply role and role binding</span>
+<a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a>kubectl<span class="w"> </span>apply<span class="w"> </span>-f<span class="w"> </span>setup/argo/workflow-executor-rbac.yaml
+<a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a>
+<a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a><span class="c1"># Confirm the necessary permission was granted (should return: yes)</span>
+<a id="__codelineno-5-5" name="__codelineno-5-5" href="#__codelineno-5-5"></a>kubectl<span class="w"> </span>auth<span class="w"> </span>can-i<span class="w"> </span>create<span class="w"> </span>workflowtaskresults.argoproj.io<span class="w"> </span>-n<span class="w"> </span>argo<span class="w"> </span>--as<span class="o">=</span>system:serviceaccount:argo:argo
+</code></pre></div>
+<h2 id="configure-workflow-controller-delete-completed-pods-and-use-s3-for-artifact-and-log-storage">Configure workflow controller: Delete completed pods, and use S3 for artifact and log storage</h2>
+<p>Argo Workflows can store workflow logs and artifacts in S3-compatible object storage. Also, it can
+be configured to delete pods once they are done running (whether successful or unsuccessful). Given
+we are storing pod logs in S3 (we don't require the pod to be in existence in order for Arto to access its logs
+through kubernetes), there is no reason to keep pods around after they finish running. This section
+configures Argo to use JS2 (Jetstream2) object storage for logs and to remove workflow pods that
+have completed running. All of this is in support of configuring workflows to preferentially
+schedule pods on nodes that have other running pods on them (to minimize the chances of being
+evicted from an underutilized node that is being deleted by the autoscaler).</p>
+<h3 id="prerequisites_1">Prerequisites</h3>
+<p>The S3 credentials secret must exist in the <code>argo</code> namespace. This secret should contain:
+- <code>access_key</code>: Your S3 access key
+- <code>secret_key</code>: Your S3 secret key</p>
+<p>To verify the secret exists:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a>kubectl<span class="w"> </span>get<span class="w"> </span>secret<span class="w"> </span>s3-credentials<span class="w"> </span>-n<span class="w"> </span>argo
+</code></pre></div>
+<p>If it doesn't exist, create it (replacing placeholders with your actual credentials):</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a>kubectl<span class="w"> </span>create<span class="w"> </span>secret<span class="w"> </span>generic<span class="w"> </span>s3-credentials<span class="w"> </span>-n<span class="w"> </span>argo<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a><span class="w">  </span>--from-literal<span class="o">=</span><span class="nv">access_key</span><span class="o">=</span><span class="s1">&#39;YOUR_ACCESS_KEY&#39;</span><span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a><span class="w">  </span>--from-literal<span class="o">=</span><span class="nv">secret_key</span><span class="o">=</span><span class="s1">&#39;YOUR_SECRET_KEY&#39;</span><span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-7-4" name="__codelineno-7-4" href="#__codelineno-7-4"></a><span class="w">  </span>--from-literal<span class="o">=</span><span class="nv">endpoint</span><span class="o">=</span><span class="s1">&#39;https://js2.jetstream-cloud.org:8001&#39;</span><span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-7-5" name="__codelineno-7-5" href="#__codelineno-7-5"></a><span class="w">  </span>--from-literal<span class="o">=</span><span class="nv">provider</span><span class="o">=</span><span class="s1">&#39;Other&#39;</span>
+</code></pre></div>
+<h3 id="apply-the-workflow-controller-configuration">Apply the workflow controller configuration</h3>
+<p>The workflow controller configmap tells Argo where to store artifacts and logs. Apply it:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a>kubectl<span class="w"> </span>apply<span class="w"> </span>-f<span class="w"> </span>setup/argo/workflow-controller-configmap.yaml
+</code></pre></div>
+<p>This configures:
+- <strong>Bucket</strong>: <code>ofo-internal</code>
+- <strong>Path prefix</strong>: <code>argo-logs-artifacts/</code>
+- <strong>Log archiving</strong>: Enabled (workflow logs are stored in S3)
+- <strong>Key format</strong>: <code>argo-logs-artifacts/{workflow-name}/{pod-name}</code></p>
+<h3 id="restart-the-workflow-controller">Restart the workflow controller</h3>
+<p>The workflow controller needs to be restarted to pick up the new configuration:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a>kubectl<span class="w"> </span>rollout<span class="w"> </span>restart<span class="w"> </span>deployment<span class="w"> </span>workflow-controller<span class="w"> </span>-n<span class="w"> </span>argo
+<a id="__codelineno-9-2" name="__codelineno-9-2" href="#__codelineno-9-2"></a>kubectl<span class="w"> </span>rollout<span class="w"> </span>status<span class="w"> </span>deployment<span class="w"> </span>workflow-controller<span class="w"> </span>-n<span class="w"> </span>argo
+</code></pre></div>
+<h3 id="verify-the-configuration">Verify the configuration</h3>
+<p>Check that the configmap was applied correctly:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a>kubectl<span class="w"> </span>get<span class="w"> </span>configmap<span class="w"> </span>workflow-controller-configmap<span class="w"> </span>-n<span class="w"> </span>argo<span class="w"> </span>-o<span class="w"> </span>yaml
+</code></pre></div>
+<p>You should see the <code>artifactRepository</code> section with the S3 configuration.</p>
+<h2 id="test-the-installation">Test the installation</h2>
+<p>Run a test workflow to verify everything is working:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a>argo<span class="w"> </span>submit<span class="w"> </span>-n<span class="w"> </span>argo<span class="w"> </span>test-workflows/dag-diamond.yaml<span class="w"> </span>--watch
+</code></pre></div>
+<h2 id="set-up-argo-server-with-https-access">Set up Argo server with HTTPS access</h2>
+<p>The following steps configure secure external access to the Argo UI.</p>
+<h3 id="verify-argo-server-is-clusterip">Verify Argo server is ClusterIP</h3>
+<p>Ensure <code>argo-server</code> is set to ClusterIP, which means it's only accessible from within the cluster's internal network. We'll configure a secure gateway to the internet next.</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-12-1" name="__codelineno-12-1" href="#__codelineno-12-1"></a><span class="c1"># Check current type</span>
+<a id="__codelineno-12-2" name="__codelineno-12-2" href="#__codelineno-12-2"></a>kubectl<span class="w"> </span>get<span class="w"> </span>svc<span class="w"> </span>argo-server<span class="w"> </span>-n<span class="w"> </span>argo
+<a id="__codelineno-12-3" name="__codelineno-12-3" href="#__codelineno-12-3"></a>
+<a id="__codelineno-12-4" name="__codelineno-12-4" href="#__codelineno-12-4"></a><span class="c1"># If it&#39;s LoadBalancer, change it back to ClusterIP</span>
+<a id="__codelineno-12-5" name="__codelineno-12-5" href="#__codelineno-12-5"></a>kubectl<span class="w"> </span>patch<span class="w"> </span>svc<span class="w"> </span>argo-server<span class="w"> </span>-n<span class="w"> </span>argo<span class="w"> </span>-p<span class="w"> </span><span class="s1">&#39;{&quot;spec&quot;:{&quot;type&quot;:&quot;ClusterIP&quot;}}&#39;</span>
+<a id="__codelineno-12-6" name="__codelineno-12-6" href="#__codelineno-12-6"></a>
+<a id="__codelineno-12-7" name="__codelineno-12-7" href="#__codelineno-12-7"></a><span class="c1"># Verify (should show: TYPE = ClusterIP)</span>
+<a id="__codelineno-12-8" name="__codelineno-12-8" href="#__codelineno-12-8"></a>kubectl<span class="w"> </span>get<span class="w"> </span>svc<span class="w"> </span>argo-server<span class="w"> </span>-n<span class="w"> </span>argo
+</code></pre></div>
+<h3 id="install-cert-manager">Install cert-manager</h3>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-13-1" name="__codelineno-13-1" href="#__codelineno-13-1"></a><span class="c1"># Install cert-manager</span>
+<a id="__codelineno-13-2" name="__codelineno-13-2" href="#__codelineno-13-2"></a>kubectl<span class="w"> </span>apply<span class="w"> </span>-f<span class="w"> </span>https://github.com/cert-manager/cert-manager/releases/download/v1.13.0/cert-manager.yaml
+<a id="__codelineno-13-3" name="__codelineno-13-3" href="#__codelineno-13-3"></a>
+<a id="__codelineno-13-4" name="__codelineno-13-4" href="#__codelineno-13-4"></a><span class="c1"># Wait for cert-manager to be ready (takes 5-60 seconds)</span>
+<a id="__codelineno-13-5" name="__codelineno-13-5" href="#__codelineno-13-5"></a>kubectl<span class="w"> </span><span class="nb">wait</span><span class="w"> </span>--for<span class="o">=</span><span class="nv">condition</span><span class="o">=</span>available<span class="w"> </span>--timeout<span class="o">=</span>300s<span class="w"> </span>deployment/cert-manager<span class="w"> </span>-n<span class="w"> </span>cert-manager
+<a id="__codelineno-13-6" name="__codelineno-13-6" href="#__codelineno-13-6"></a>kubectl<span class="w"> </span><span class="nb">wait</span><span class="w"> </span>--for<span class="o">=</span><span class="nv">condition</span><span class="o">=</span>available<span class="w"> </span>--timeout<span class="o">=</span>300s<span class="w"> </span>deployment/cert-manager-webhook<span class="w"> </span>-n<span class="w"> </span>cert-manager
+<a id="__codelineno-13-7" name="__codelineno-13-7" href="#__codelineno-13-7"></a>kubectl<span class="w"> </span><span class="nb">wait</span><span class="w"> </span>--for<span class="o">=</span><span class="nv">condition</span><span class="o">=</span>available<span class="w"> </span>--timeout<span class="o">=</span>300s<span class="w"> </span>deployment/cert-manager-cainjector<span class="w"> </span>-n<span class="w"> </span>cert-manager
+</code></pre></div>
+<h3 id="install-nginx-ingress-controller">Install nginx ingress controller</h3>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-14-1" name="__codelineno-14-1" href="#__codelineno-14-1"></a><span class="c1"># Install nginx ingress controller</span>
+<a id="__codelineno-14-2" name="__codelineno-14-2" href="#__codelineno-14-2"></a>kubectl<span class="w"> </span>apply<span class="w"> </span>-f<span class="w"> </span>https://raw.githubusercontent.com/kubernetes/ingress-nginx/controller-v1.8.1/deploy/static/provider/cloud/deploy.yaml
+<a id="__codelineno-14-3" name="__codelineno-14-3" href="#__codelineno-14-3"></a>
+<a id="__codelineno-14-4" name="__codelineno-14-4" href="#__codelineno-14-4"></a><span class="c1"># Wait for LoadBalancer IP to be assigned (may take 1-3 minutes)</span>
+<a id="__codelineno-14-5" name="__codelineno-14-5" href="#__codelineno-14-5"></a>kubectl<span class="w"> </span>get<span class="w"> </span>svc<span class="w"> </span>-n<span class="w"> </span>ingress-nginx<span class="w"> </span>ingress-nginx-controller<span class="w"> </span>-w
+<a id="__codelineno-14-6" name="__codelineno-14-6" href="#__codelineno-14-6"></a>
+<a id="__codelineno-14-7" name="__codelineno-14-7" href="#__codelineno-14-7"></a><span class="c1"># Press Ctrl+C once you see an EXTERNAL-IP appear. Save this IP - you&#39;ll need it for DNS.</span>
+</code></pre></div>
+<h3 id="create-dns-a-record">Create DNS A record</h3>
+<p>Go to your DNS provider (GoDaddy, Cloudflare, Route53, etc.) and create:</p>
+<ul>
+<li><strong>Type</strong>: A</li>
+<li><strong>Name</strong>: argo (or your preferred subdomain) (in Netlify DNS, replace the <code>@</code> with <code>argo</code>)</li>
+<li><strong>Value</strong>: <code>&lt;IP from previous step&gt;</code></li>
+<li><strong>TTL</strong>: 300 (or auto/default)</li>
+</ul>
+<h3 id="create-lets-encrypt-cluster-issuer">Create Let's Encrypt cluster issuer</h3>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-15-1" name="__codelineno-15-1" href="#__codelineno-15-1"></a>kubectl<span class="w"> </span>apply<span class="w"> </span>-f<span class="w"> </span>setup/argo/clusterissuer-letsencrypt.yaml
+</code></pre></div>
+<h3 id="create-ingress-resource-for-argo-server">Create ingress resource for Argo server</h3>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-16-1" name="__codelineno-16-1" href="#__codelineno-16-1"></a>kubectl<span class="w"> </span>apply<span class="w"> </span>-f<span class="w"> </span>setup/argo/ingress-argo.yaml
+</code></pre></div>
+<p>Wait 1-10 minutes for DNS records to propagate, then verify:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-17-1" name="__codelineno-17-1" href="#__codelineno-17-1"></a>nslookup<span class="w"> </span>argo.focal-lab.org
+</code></pre></div>
+<p>This should return the ingress controller IP. A "non-authoritative answer" from DNS queries is OK.</p>
+<h3 id="request-and-wait-for-certificate">Request and wait for certificate</h3>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-18-1" name="__codelineno-18-1" href="#__codelineno-18-1"></a><span class="c1"># Watch certificate being issued (usually 1-3 minutes)</span>
+<a id="__codelineno-18-2" name="__codelineno-18-2" href="#__codelineno-18-2"></a>kubectl<span class="w"> </span>get<span class="w"> </span>certificate<span class="w"> </span>-n<span class="w"> </span>argo<span class="w"> </span>-w
+<a id="__codelineno-18-3" name="__codelineno-18-3" href="#__codelineno-18-3"></a>
+<a id="__codelineno-18-4" name="__codelineno-18-4" href="#__codelineno-18-4"></a><span class="c1"># Wait until you see READY show True:</span>
+<a id="__codelineno-18-5" name="__codelineno-18-5" href="#__codelineno-18-5"></a><span class="c1"># NAME              READY   SECRET           AGE</span>
+<a id="__codelineno-18-6" name="__codelineno-18-6" href="#__codelineno-18-6"></a><span class="c1"># argo-server-tls   True    argo-server-tls  2m</span>
+<a id="__codelineno-18-7" name="__codelineno-18-7" href="#__codelineno-18-7"></a>
+<a id="__codelineno-18-8" name="__codelineno-18-8" href="#__codelineno-18-8"></a><span class="c1"># Press Ctrl+C when READY shows True</span>
+</code></pre></div>
+<h3 id="verify-argo-ui-access">Verify Argo UI access</h3>
+<p>The Argo UI should now be accessible at https://argo.focal-lab.org</p>
+<p>Verification commands:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-19-1" name="__codelineno-19-1" href="#__codelineno-19-1"></a><span class="c1"># Check all components are ready</span>
+<a id="__codelineno-19-2" name="__codelineno-19-2" href="#__codelineno-19-2"></a>kubectl<span class="w"> </span>get<span class="w"> </span>pods<span class="w"> </span>-n<span class="w"> </span>cert-manager
+<a id="__codelineno-19-3" name="__codelineno-19-3" href="#__codelineno-19-3"></a>kubectl<span class="w"> </span>get<span class="w"> </span>pods<span class="w"> </span>-n<span class="w"> </span>ingress-nginx
+<a id="__codelineno-19-4" name="__codelineno-19-4" href="#__codelineno-19-4"></a>kubectl<span class="w"> </span>get<span class="w"> </span>pods<span class="w"> </span>-n<span class="w"> </span>argo
+<a id="__codelineno-19-5" name="__codelineno-19-5" href="#__codelineno-19-5"></a>
+<a id="__codelineno-19-6" name="__codelineno-19-6" href="#__codelineno-19-6"></a><span class="c1"># Check ingress created</span>
+<a id="__codelineno-19-7" name="__codelineno-19-7" href="#__codelineno-19-7"></a>kubectl<span class="w"> </span>get<span class="w"> </span>ingress<span class="w"> </span>-n<span class="w"> </span>argo
+<a id="__codelineno-19-8" name="__codelineno-19-8" href="#__codelineno-19-8"></a>
+<a id="__codelineno-19-9" name="__codelineno-19-9" href="#__codelineno-19-9"></a><span class="c1"># Check certificate issued</span>
+<a id="__codelineno-19-10" name="__codelineno-19-10" href="#__codelineno-19-10"></a>kubectl<span class="w"> </span>get<span class="w"> </span>certificate<span class="w"> </span>-n<span class="w"> </span>argo
+<a id="__codelineno-19-11" name="__codelineno-19-11" href="#__codelineno-19-11"></a>
+<a id="__codelineno-19-12" name="__codelineno-19-12" href="#__codelineno-19-12"></a><span class="c1"># Check DNS resolves</span>
+<a id="__codelineno-19-13" name="__codelineno-19-13" href="#__codelineno-19-13"></a>nslookup<span class="w"> </span>argo.focal-lab.org
+</code></pre></div>
+<h2 id="create-argo-ui-server-token">Create Argo UI server token</h2>
+<p>Create a token that lasts one year. This token will need to be re-created annually.</p>
+<p>We're creating this for the <code>default</code> service account. In the future, we may want to create a dedicated service account for argo-server tokens, or separate accounts for each user to allow individual permission management.</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-20-1" name="__codelineno-20-1" href="#__codelineno-20-1"></a><span class="c1"># Create token (valid for 1 year)</span>
+<a id="__codelineno-20-2" name="__codelineno-20-2" href="#__codelineno-20-2"></a>kubectl<span class="w"> </span>create<span class="w"> </span>token<span class="w"> </span>argo-server<span class="w"> </span>-n<span class="w"> </span>argo<span class="w"> </span>--duration<span class="o">=</span>8760h
+</code></pre></div>
+<p>Copy the token, preface it with <code>Bearer</code>, and add/update it in <a href="http://vault.focal-lab.org">Vaultwarden</a>.</p>
+<h3 id="token-rotation-future">Token rotation (future)</h3>
+<p>To rotate the token in the future:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-21-1" name="__codelineno-21-1" href="#__codelineno-21-1"></a><span class="c1"># Delete all tokens for the service account</span>
+<a id="__codelineno-21-2" name="__codelineno-21-2" href="#__codelineno-21-2"></a>kubectl<span class="w"> </span>delete<span class="w"> </span>secret<span class="w"> </span>-n<span class="w"> </span>argo<span class="w"> </span>-l<span class="w"> </span>kubernetes.io/service-account.name<span class="o">=</span>argo-server
+</code></pre></div>
+<p>Then recreate it with the command above.</p>
+
+
+
+
+
+
+
+  
+  
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+    
+      
+      <nav class="md-footer__inner md-grid" aria-label="Footer" >
+        
+          
+          <a href="../manila-share-mounting/" class="md-footer__link md-footer__link--prev" aria-label="Previous: Manila share mounting">
+            <div class="md-footer__button md-icon">
+              
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+            </div>
+            <div class="md-footer__title">
+              <span class="md-footer__direction">
+                Previous
+              </span>
+              <div class="md-ellipsis">
+                Manila share mounting
+              </div>
+            </div>
+          </a>
+        
+        
+      </nav>
+    
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["navigation.footer", "navigation.indexes"], "search": "../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../../assets/javascripts/bundle.79ae519e.min.js"></script>
+      
+    
+  </body>
+</html>
