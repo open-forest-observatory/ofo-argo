@@ -58,7 +58,9 @@ def setup_working_directory():
             os.makedirs(working_dir, exist_ok=True)
             print(f"Created working directory: {working_dir}")
         except Exception as e:
-            print(f"ERROR: Cannot create TEMP_WORKING_DIR_POSTPROCESSING '{working_dir}': {e}")
+            print(
+                f"ERROR: Cannot create TEMP_WORKING_DIR_POSTPROCESSING '{working_dir}': {e}"
+            )
             sys.exit(1)
 
     # Validate TEMP_WORKING_DIR_POSTPROCESSING is writable
@@ -121,8 +123,8 @@ def download_photogrammetry_products():
     # Build remote path - always inject subfolder, rstrip handles empty string case
     # Empty: "bucket/s3_dir/" -> "bucket/s3_dir"
     # Non-empty: "bucket/s3_dir/photogrammetry_01" -> "bucket/s3_dir/photogrammetry_01"
-    remote_base_path = (
-        f":s3:{input_bucket}/{s3_photogrammetry_dir}/{photogrammetry_config_subfolder}".rstrip("/")
+    remote_base_path = f":s3:{input_bucket}/{s3_photogrammetry_dir}/{photogrammetry_config_subfolder}".rstrip(
+        "/"
     )
     local_mission_dir = os.path.join(local_input_dir, project_name)
     # Create mission-specific subdirectory (base input/ directory already exists from setup)

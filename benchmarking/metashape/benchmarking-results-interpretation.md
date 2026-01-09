@@ -1,10 +1,3 @@
-***Need to check how many matchPhotos pods we could run on a m3.xl, since we could probably run 3
-(or more) on one MIG GPU node -- also ask Claude if we can have one GPU node that can be scheuled on
-as a full or partial depending on the need.
-
-
-
-
 GPU benefits
 Overall, on average:
 
