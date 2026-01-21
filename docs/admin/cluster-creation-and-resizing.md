@@ -303,7 +303,7 @@ MIG partitions A100 GPUs into isolated slices, allowing multiple pods to share o
 
 ### MIG profiles
 
-| Nodegroup pattern | MIG profile | Pods/GPU | VRAM each | Compute each |
+| Nodegroup pattern | MIG profile | Pods/GPU | VRAM each | GPU compute each |
 |-------------------|-------------|----------|-----------|--------------|
 | `mig1-*` | `all-1g.5gb` | 7 | 10GB | 1/7 |
 | `mig2-*` | `all-2g.10gb` | 3 | 10GB | 2/7 |
