@@ -4,12 +4,11 @@ This repository contains [Argo Workflows](https://argoproj.github.io/workflows) 
 
 ## Documentation
 
-**For complete documentation, visit [https://open-forest-observatory.github.io/ofo-argo/](https://open-forest-observatory.github.io/ofo-argo/)**
+**For complete documentation, visit [https://ofo-argo-docs.netlify.app/](https://ofo-argo-docs.netlify.app/)**
 
 Quick links:
-- [Running the photogrammetry workflow](https://open-forest-observatory.github.io/ofo-argo/usage/photogrammetry-workflow/)
-- [Cluster access and resizing](https://open-forest-observatory.github.io/ofo-argo/usage/cluster-access-and-resizing/)
-- [Admin guides](https://open-forest-observatory.github.io/ofo-argo/admin/)
+- [Running the photogrammetry workflow](https://ofo-argo-docs.netlify.app/usage/)
+- [Admin guides](https://ofo-argo-docs.netlify.app/admin/)
 
 ## Overview
 
@@ -33,8 +32,8 @@ The **step-based workflow** (`photogrammetry-workflow-stepbased.yaml`) provides 
 - 🔧 **Flexible GPU usage** - Configure whether GPU-capable steps use GPU or CPU nodes
 
 **Documentation:**
-- 📖 [Complete Guide](https://open-forest-observatory.github.io/ofo-argo/usage/stepbased-workflow/) - Full usage instructions, troubleshooting, and advanced topics
-- ⚡ [Quick Reference](https://open-forest-observatory.github.io/ofo-argo/usage/stepbased-quick-reference/) - Command cheat sheet and common patterns
+- 📖 [Complete Guide](https://ofo-argo-docs.netlify.app/usage/stepbased-workflow/) - Full usage instructions, troubleshooting, and advanced topics
+- ⚡ [Quick Reference](https://ofo-argo-docs.netlify.app/usage/stepbased-quick-reference/) - Command cheat sheet and common patterns
 
 ## Files & Directories In this Repository
 
@@ -42,22 +41,10 @@ The **step-based workflow** (`photogrammetry-workflow-stepbased.yaml`) provides 
 |  --- | ----  |
 | photogrammetry-workflow.yaml | Original Argo Workflows configuration (monolithic, kept as reference) |
 | photogrammetry-workflow-stepbased.yaml | **Step-based workflow** - Individual step execution with optimized CPU/GPU allocation |
-| docs/ | Documentation site source (published to [GitHub Pages](https://open-forest-observatory.github.io/ofo-argo/)) |
+| docs/ | Documentation site source (published as a [Netlify App](https://ofo-argo-docs.netlify.app/)) |
 | mkdocs.yml | Configuration for the MkDocs documentation site |
 | docker-workflow-utils/ | Utility docker container for workflow scripts (preprocessing, DB logging) |
 | docker-photogrammetry-postprocessing/ | Files defining custom docker containers performing core workflow tasks (e.g. postprocessing) |
-| setup/ | Kubernetes and Argo setup configurations (described in [admin docs](https://open-forest-observatory.github.io/ofo-argo/admin)) |
+| setup/ | Kubernetes and Argo setup configurations (described in [admin docs](https://ofo-argo-docs.netlify.app/usage/stepbased-quick-reference/admin/)) |
 | test-workflows/ | Test workflow definitions for development and validation |
 | implementation-plans/ | Technical implementation plans for workflow development |
-
-## Getting Started
-
-For complete setup and usage instructions, please visit the [full documentation site](https://open-forest-observatory.github.io/ofo-argo/).
-
-**Quick start guide:**
-
-1. [Access the cluster](https://open-forest-observatory.github.io/ofo-argo/usage/cluster-access-and-resizing/)
-1. [Get set up with Argo](https://open-forest-observatory.github.io/ofo-argo/usage/argo-usage/)
-2. [Run the photogrammetry workflow](https://open-forest-observatory.github.io/ofo-argo/usage/photogrammetry-workflow/)
-
-For cluster administration, see the [admin guides](https://open-forest-observatory.github.io/ofo-argo/admin/).
