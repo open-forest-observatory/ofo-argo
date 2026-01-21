@@ -287,6 +287,12 @@ helm upgrade nvidia-gpu-operator nvidia/gpu-operator \
   --set mig.strategy=mixed
 ```
 
+To check whether it took (or in the future to make sure it remained set), run the following and look for `strategy: mixed`.
+
+```bash
+helm get values nvidia-gpu-operator -n gpu-operator | grep -A1 "mig:"
+```
+
 !!! note "Cluster upgrades"
     This setting may be reset if the cluster template is upgraded and Magnum redeploys the GPU Operator. Re-run this command after cluster upgrades if MIG resources stop appearing.
 
@@ -299,7 +305,7 @@ MIG partitions A100 GPUs into isolated slices, allowing multiple pods to share o
 
 | Nodegroup pattern | MIG profile | Pods/GPU | VRAM each | Compute each |
 |-------------------|-------------|----------|-----------|--------------|
-| `mig1-*` | `all-1g.10gb` | 4 | 10GB | 1/7 |
+| `mig1-*` | `all-1g.5gb` | 7 | 10GB | 1/7 |
 | `mig2-*` | `all-2g.10gb` | 3 | 10GB | 2/7 |
 | `mig3-*` | `all-3g.20gb` | 2 | 20GB | 3/7 |
 
