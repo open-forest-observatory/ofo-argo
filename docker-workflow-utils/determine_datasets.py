@@ -97,12 +97,13 @@ def sanitize_dns1123(name: str) -> str:
     return sanitized
 
 
-def process_config_file(config_path: str) -> Dict[str, Any]:
+def process_config_file(config_path: str, index: int) -> Dict[str, Any]:
     """
     Process a single mission config file and extract mission parameters.
 
     Args:
         config_path: Absolute path to config file
+        index: Zero-based index of this config in the processing list (used for iteration_id)
 
     Returns:
         Dictionary of mission parameters with enabled flags
@@ -139,6 +140,29 @@ def process_config_file(config_path: str) -> Dict[str, Any]:
     # The original project_name is preserved for file paths and processing
     project_name_sanitized = sanitize_dns1123(project_name)
 
+    # Generate unique iteration ID: 3-digit zero-padded index + underscore + sanitized project name
+    # Example: "000_mission_001", "001_mission_001" (for duplicates), "002_other_project"
+    # This provides uniqueness even with duplicate project names and easy identification
+    iteration_id = f"{index:03d}_{project_name_sanitized}"
+
+    # Extract argo config section for easy access
+    argo_config = config.get("argo", {})
+
+    # Extract imagery download settings from argo section
+    # FUTURE: Could implement download sharing between projects to save bandwidth.
+    # Would require: (1) download coordination/locking, (2) reference counting for cleanup,
+    # (3) handling projects that start days apart. Current approach downloads per-project
+    # to avoid these complexities and prevent storage issues from long-running workflows.
+    imagery_downloads = argo_config.get("s3_imagery_zip_download", [])
+    # Normalize single string to list
+    if isinstance(imagery_downloads, str):
+        imagery_downloads = [imagery_downloads] if imagery_downloads.strip() else []
+    # Ensure it's a list (handle None case)
+    if imagery_downloads is None:
+        imagery_downloads = []
+
+    cleanup_imagery = argo_config.get("cleanup_downloaded_imagery", True)
+
     # Default GPU resource (full GPU). Can be overridden per-step with MIG resources like:
     # "nvidia.com/mig-1g.5gb", "nvidia.com/mig-2g.10gb", "nvidia.com/mig-3g.20gb"
     DEFAULT_GPU_RESOURCE = "nvidia.com/gpu"
@@ -162,6 +186,14 @@ def process_config_file(config_path: str) -> Dict[str, Any]:
         "project_name": project_name,
         "project_name_sanitized": project_name_sanitized,
         "config": config_path,
+        # Iteration ID for unique per-project isolation (used in download paths, etc.)
+        "iteration_id": iteration_id,
+        # S3 imagery download settings
+        # imagery_zip_downloads is a JSON-encoded array for Argo to parse
+        "imagery_zip_downloads": json.dumps(imagery_downloads),
+        # Boolean flags as lowercase strings for Argo workflow conditionals
+        "imagery_download_enabled": str(len(imagery_downloads) > 0).lower(),
+        "cleanup_downloaded_imagery": str(str_to_bool(cleanup_imagery)).lower(),
         # Setup step resources
         "setup_cpu_request": (
             get_nested(config, ["argo", "setup", "cpu_request"])
@@ -407,18 +439,17 @@ def main(config_list_path: str) -> None:
     missions: List[Dict[str, Any]] = []
 
     # Read config list file (expecting absolute path)
+    # Collect non-empty config paths first, then enumerate for stable indices
     with open(config_list_path, "r") as f:
-        for line in f:
-            config_path = line.strip()
-            if not config_path:
-                continue
+        config_paths = [line.strip() for line in f if line.strip()]
 
-            try:
-                mission = process_config_file(config_path)
-                missions.append(mission)
-            except Exception as e:
-                print(f"Error processing config {config_path}: {e}", file=sys.stderr)
-                raise
+    for index, config_path in enumerate(config_paths):
+        try:
+            mission = process_config_file(config_path, index)
+            missions.append(mission)
+        except Exception as e:
+            print(f"Error processing config {config_path}: {e}", file=sys.stderr)
+            raise
 
     # Output as JSON list to stdout
     json.dump(missions, sys.stdout)
