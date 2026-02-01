@@ -112,6 +112,193 @@ project:
   photo_path: /data/argo-input/datasets/dataset_1
 ```
 
+## Downloading imagery from S3 (optional)
+
+Instead of pre-staging imagery on the shared PVC, you can have the workflow automatically download and extract imagery zip files from S3 at runtime. This is useful for:
+
+- **Cloud-native workflows**: Process imagery stored in S3 without manual uploads
+- **One-time processing**: Imagery that doesn't need to persist after the workflow
+- **Remote collaboration**: Team members can trigger workflows without PVC access
+
+### When to use S3 imagery download
+
+Use this feature when:
+
+- Your imagery is already stored as zip files in S3
+- You want to avoid manual file transfers to the cluster
+- You're processing imagery that won't be reused
+
+**Don't use this feature when:**
+
+- Your imagery is already on the PVC (use direct paths instead)
+- You need to reprocess the same imagery multiple times (pre-staging is more efficient)
+- Your zip files are very large and bandwidth is a concern
+
+### Configuration
+
+Add the following to the `argo:` section of your config file:
+
+```yaml
+argo:
+  # List of S3 zip files to download (can also be a single string)
+  s3_imagery_zip_download:
+    - js2s3:ofo-public/drone/missions_01/000558/images/000558_images.zip
+    - js2s3:ofo-public/drone/missions_01/000559/images/000559_images.zip
+
+  # Whether to delete downloaded imagery after workflow completes (default: true)
+  cleanup_downloaded_imagery: true
+```
+
+| Parameter | Description | Default |
+|-----------|-------------|---------|
+| `s3_imagery_zip_download` | S3 URL(s) of zip files to download. Can be a single string or a list. Uses rclone URL format (e.g., `js2s3:bucket/path/file.zip`) | (none) |
+| `cleanup_downloaded_imagery` | If `true`, downloaded imagery is deleted after photogrammetry completes to free disk space | `true` |
+
+### Path syntax: The `__DOWNLOADED__` prefix
+
+When using S3 imagery download, reference downloaded files in `photo_path` using the `__DOWNLOADED__` prefix:
+
+```yaml
+project:
+  project_name: my_forest_plot
+  photo_path:
+    - __DOWNLOADED__/000558_images/000558-01
+    - __DOWNLOADED__/000558_images/000558-02
+    - __DOWNLOADED__/000559_images/000559-01
+```
+
+The workflow automatically replaces `__DOWNLOADED__` with the actual download location before photogrammetry begins.
+
+### Zip file structure requirements
+
+The zip filename (without `.zip` extension) becomes the extraction folder name. Plan your `photo_path` entries accordingly:
+
+**Example:** Downloading `000558_images.zip` containing:
+```
+000558_images.zip
+├── 000558-01/
+│   ├── IMG_0001.jpg
+│   └── IMG_0002.jpg
+└── 000558-02/
+    ├── IMG_0001.jpg
+    └── IMG_0002.jpg
+```
+
+Results in this structure after extraction:
+```
+{download_dir}/
+└── 000558_images/          ← folder name from zip filename
+    ├── 000558-01/
+    │   ├── IMG_0001.jpg
+    │   └── IMG_0002.jpg
+    └── 000558-02/
+        ├── IMG_0001.jpg
+        └── IMG_0002.jpg
+```
+
+Reference these paths as:
+```yaml
+photo_path:
+  - __DOWNLOADED__/000558_images/000558-01
+  - __DOWNLOADED__/000558_images/000558-02
+```
+
+### Complete example configuration
+
+```yaml
+argo:
+  # S3 imagery download settings
+  s3_imagery_zip_download:
+    - js2s3:ofo-public/drone/missions_01/000558/images/000558_images.zip
+  cleanup_downloaded_imagery: true
+
+  # Standard workflow settings
+  match_photos:
+    gpu_enabled: true
+    gpu_resource: "nvidia.com/mig-1g.5gb"
+    cpu_request: "4"
+    memory_request: "16Gi"
+
+  build_depth_maps:
+    gpu_resource: "nvidia.com/mig-2g.10gb"
+
+project:
+  project_name: mission_000558
+  # Reference downloaded imagery with __DOWNLOADED__ prefix
+  photo_path:
+    - __DOWNLOADED__/000558_images/000558-01
+    - __DOWNLOADED__/000558_images/000558-02
+
+# ... rest of Metashape config sections ...
+match_photos:
+  enabled: true
+  # ...
+```
+
+### How it works
+
+When `s3_imagery_zip_download` is specified, the workflow adds these steps before photogrammetry:
+
+1. **download-imagery**: Downloads each zip file from S3 using rclone and extracts it
+2. **transform-config**: Replaces `__DOWNLOADED__` in `photo_path` with the actual download location
+
+After all processing completes (including upload and postprocessing):
+
+3. **cleanup-imagery** (if enabled): Deletes the downloaded imagery to free disk space
+
+Each project gets its own isolated download directory to prevent collisions when processing multiple projects in parallel.
+
+### Troubleshooting S3 imagery download
+
+#### "Config validation failed: __DOWNLOADED__ prefix used but no downloads specified"
+
+**Cause:** Your `photo_path` contains `__DOWNLOADED__` but `s3_imagery_zip_download` is empty or missing.
+
+**Solution:** Either add `s3_imagery_zip_download` entries, or change `photo_path` to use direct paths (e.g., `/data/...`).
+
+#### "Config validation failed: Downloads specified but no __DOWNLOADED__ paths found"
+
+**Cause:** You specified `s3_imagery_zip_download` but your `photo_path` entries don't use the `__DOWNLOADED__` prefix.
+
+**Solution:** Update `photo_path` to use `__DOWNLOADED__/...` paths that reference your downloaded zip contents.
+
+#### Download fails with "Failed to copy" or timeout errors
+
+**Possible causes:**
+
+- Incorrect S3 URL format (should be `js2s3:bucket/path/file.zip`)
+- S3 credentials not configured in the cluster
+- Network issues or S3 endpoint unavailable
+- Zip file doesn't exist at the specified path
+
+**Debug steps:**
+
+1. Check the `download-imagery` step logs in Argo UI
+2. Verify the S3 URL works with rclone manually:
+   ```bash
+   rclone ls js2s3:ofo-public/drone/missions_01/000558/images/
+   ```
+
+#### "Photo path not found" errors in setup step
+
+**Cause:** The extracted zip structure doesn't match your `photo_path` entries.
+
+**Solution:**
+
+1. Check what's actually inside your zip file
+2. Ensure `photo_path` matches the extracted folder structure
+3. Remember: zip filename (minus `.zip`) becomes the top-level folder
+
+#### Disk space issues
+
+**Cause:** Downloaded imagery fills up the shared storage.
+
+**Solutions:**
+
+- Ensure `cleanup_downloaded_imagery: true` (default) to auto-delete after completion
+- Process fewer projects in parallel to reduce concurrent disk usage
+- Monitor disk usage during workflow execution
+
 ## Resource request configuration
 
 All Argo workflow resource requests (GPU, CPU, memory) are configured in the top-level `argo` section of your automate-metashape config file. The defaults assume one or more JS2 `m3.large` CPU nodes and one or more `mig1` (7-slice MIG `g3.xl`) GPU nodes (see [cluster access and resizing](cluster-access-and-resizing.md)).
