@@ -159,6 +159,15 @@ spec:
                   value: "{{item.finalize_cpu_request}}"
                 - name: finalize_memory_request
                   value: "{{item.finalize_memory_request}}"
+                # S3 imagery download parameters
+                - name: iteration-id
+                  value: "{{item.iteration_id}}"
+                - name: imagery-zip-downloads
+                  value: "{{item.imagery_zip_downloads}}"
+                - name: imagery-download-enabled
+                  value: "{{item.imagery_download_enabled}}"
+                - name: cleanup-downloaded-imagery
+                  value: "{{item.cleanup_downloaded_imagery}}"
             withParam: "{{steps.determine-projects.outputs.result}}"
 
     ## Here we define what the main steps actually do
@@ -244,17 +253,53 @@ spec:
           - name: align_cameras_secondary_memory_request
           - name: finalize_cpu_request
           - name: finalize_memory_request
+          # S3 imagery download parameters
+          - name: iteration-id
+          - name: imagery-zip-downloads
+            default: "[]"
+          - name: imagery-download-enabled
+            default: "false"
+          - name: cleanup-downloaded-imagery
+            default: "true"
       dag:
         tasks:
+          # Step 0a: Download imagery from S3 (conditional, runs first if enabled)
+          - name: download-imagery
+            template: download-imagery
+            when: "{{inputs.parameters.imagery-download-enabled}} == true"
+            arguments:
+              parameters:
+                - name: imagery-zip-downloads
+                  value: "{{inputs.parameters.imagery-zip-downloads}}"
+                - name: iteration-id
+                  value: "{{inputs.parameters.iteration-id}}"
+
+          # Step 0b: Transform config to resolve __DOWNLOADED__ paths (conditional, depends on download)
+          - name: transform-config
+            template: transform-config
+            when: "{{inputs.parameters.imagery-download-enabled}} == true"
+            depends: "download-imagery.Succeeded"
+            arguments:
+              parameters:
+                - name: config-file
+                  value: "{{inputs.parameters.config-file}}"
+                - name: iteration-id
+                  value: "{{inputs.parameters.iteration-id}}"
+                - name: project-name
+                  value: "{{inputs.parameters.project-name}}"
+
           # Step 1: Setup (always runs, CPU only)
+          # Depends on transform-config if downloads enabled, otherwise runs immediately
           - name: setup
             template: metashape-cpu-step
+            depends: "transform-config.Succeeded || transform-config.Skipped"
             arguments:
               parameters:
                 - name: project-name
                   value: "{{inputs.parameters.project-name}}"
                 - name: config-file
-                  value: "{{inputs.parameters.config-file}}"
+                  # Use transformed config if downloads enabled, otherwise use original config
+                  value: "{{=inputs.parameters['imagery-download-enabled'] == 'true' ? tasks['transform-config'].outputs.parameters['transformed-config-path'] : inputs.parameters['config-file']}}"
                 - name: step
                   value: "setup"
                 - name: cpu-request
@@ -272,7 +317,7 @@ spec:
                 - name: project-name
                   value: "{{inputs.parameters.project-name}}"
                 - name: config-file
-                  value: "{{inputs.parameters.config-file}}"
+                  value: "{{=inputs.parameters['imagery-download-enabled'] == 'true' ? tasks['transform-config'].outputs.parameters['transformed-config-path'] : inputs.parameters['config-file']}}"
                 - name: step
                   value: "match_photos"
                 - name: gpu-resource
@@ -293,7 +338,7 @@ spec:
                 - name: project-name
                   value: "{{inputs.parameters.project-name}}"
                 - name: config-file
-                  value: "{{inputs.parameters.config-file}}"
+                  value: "{{=inputs.parameters['imagery-download-enabled'] == 'true' ? tasks['transform-config'].outputs.parameters['transformed-config-path'] : inputs.parameters['config-file']}}"
                 - name: step
                   value: "match_photos"
                 - name: cpu-request
@@ -311,7 +356,7 @@ spec:
                 - name: project-name
                   value: "{{inputs.parameters.project-name}}"
                 - name: config-file
-                  value: "{{inputs.parameters.config-file}}"
+                  value: "{{=inputs.parameters['imagery-download-enabled'] == 'true' ? tasks['transform-config'].outputs.parameters['transformed-config-path'] : inputs.parameters['config-file']}}"
                 - name: step
                   value: "align_cameras"
                 - name: cpu-request
@@ -329,7 +374,7 @@ spec:
                 - name: project-name
                   value: "{{inputs.parameters.project-name}}"
                 - name: config-file
-                  value: "{{inputs.parameters.config-file}}"
+                  value: "{{=inputs.parameters['imagery-download-enabled'] == 'true' ? tasks['transform-config'].outputs.parameters['transformed-config-path'] : inputs.parameters['config-file']}}"
                 - name: step
                   value: "build_depth_maps"
                 - name: gpu-resource
@@ -351,7 +396,7 @@ spec:
                 - name: project-name
                   value: "{{inputs.parameters.project-name}}"
                 - name: config-file
-                  value: "{{inputs.parameters.config-file}}"
+                  value: "{{=inputs.parameters['imagery-download-enabled'] == 'true' ? tasks['transform-config'].outputs.parameters['transformed-config-path'] : inputs.parameters['config-file']}}"
                 - name: step
                   value: "build_point_cloud"
                 - name: cpu-request
@@ -369,7 +414,7 @@ spec:
                 - name: project-name
                   value: "{{inputs.parameters.project-name}}"
                 - name: config-file
-                  value: "{{inputs.parameters.config-file}}"
+                  value: "{{=inputs.parameters['imagery-download-enabled'] == 'true' ? tasks['transform-config'].outputs.parameters['transformed-config-path'] : inputs.parameters['config-file']}}"
                 - name: step
                   value: "build_mesh"
                 - name: gpu-resource
@@ -390,7 +435,7 @@ spec:
                 - name: project-name
                   value: "{{inputs.parameters.project-name}}"
                 - name: config-file
-                  value: "{{inputs.parameters.config-file}}"
+                  value: "{{=inputs.parameters['imagery-download-enabled'] == 'true' ? tasks['transform-config'].outputs.parameters['transformed-config-path'] : inputs.parameters['config-file']}}"
                 - name: step
                   value: "build_mesh"
                 - name: cpu-request
@@ -408,7 +453,7 @@ spec:
                 - name: project-name
                   value: "{{inputs.parameters.project-name}}"
                 - name: config-file
-                  value: "{{inputs.parameters.config-file}}"
+                  value: "{{=inputs.parameters['imagery-download-enabled'] == 'true' ? tasks['transform-config'].outputs.parameters['transformed-config-path'] : inputs.parameters['config-file']}}"
                 - name: step
                   value: "build_dem_orthomosaic"
                 - name: cpu-request
@@ -426,7 +471,7 @@ spec:
                 - name: project-name
                   value: "{{inputs.parameters.project-name}}"
                 - name: config-file
-                  value: "{{inputs.parameters.config-file}}"
+                  value: "{{=inputs.parameters['imagery-download-enabled'] == 'true' ? tasks['transform-config'].outputs.parameters['transformed-config-path'] : inputs.parameters['config-file']}}"
                 - name: step
                   value: "match_photos_secondary"
                 - name: gpu-resource
@@ -447,7 +492,7 @@ spec:
                 - name: project-name
                   value: "{{inputs.parameters.project-name}}"
                 - name: config-file
-                  value: "{{inputs.parameters.config-file}}"
+                  value: "{{=inputs.parameters['imagery-download-enabled'] == 'true' ? tasks['transform-config'].outputs.parameters['transformed-config-path'] : inputs.parameters['config-file']}}"
                 - name: step
                   value: "match_photos_secondary"
                 - name: cpu-request
@@ -465,7 +510,7 @@ spec:
                 - name: project-name
                   value: "{{inputs.parameters.project-name}}"
                 - name: config-file
-                  value: "{{inputs.parameters.config-file}}"
+                  value: "{{=inputs.parameters['imagery-download-enabled'] == 'true' ? tasks['transform-config'].outputs.parameters['transformed-config-path'] : inputs.parameters['config-file']}}"
                 - name: step
                   value: "align_cameras_secondary"
                 - name: cpu-request
@@ -482,7 +527,7 @@ spec:
                 - name: project-name
                   value: "{{inputs.parameters.project-name}}"
                 - name: config-file
-                  value: "{{inputs.parameters.config-file}}"
+                  value: "{{=inputs.parameters['imagery-download-enabled'] == 'true' ? tasks['transform-config'].outputs.parameters['transformed-config-path'] : inputs.parameters['config-file']}}"
                 - name: step
                   value: "finalize"
                 - name: cpu-request
@@ -511,6 +556,16 @@ spec:
                   value: "{{inputs.parameters.project-name}}"
                 - name: photogrammetry-config-subfolder
                   value: "{{inputs.parameters.photogrammetry-config-subfolder}}"
+
+          # Cleanup downloaded imagery (conditional, runs after all processing completes)
+          - name: cleanup-imagery
+            template: cleanup-imagery
+            when: "{{inputs.parameters.imagery-download-enabled}} == true && {{inputs.parameters.cleanup-downloaded-imagery}} == true"
+            depends: "postprocessing-task.Succeeded"
+            arguments:
+              parameters:
+                - name: iteration-id
+                  value: "{{inputs.parameters.iteration-id}}"
 
     ## Here we define what each step does in 'process-project-workflow' step
 
@@ -605,6 +660,110 @@ spec:
               secretKeyRef:
                 name: agisoft-license
                 key: license_server
+
+    # --------- S3 IMAGERY DOWNLOAD ---------
+    # Downloads and extracts zip files containing imagery from S3
+    - name: download-imagery
+      inputs:
+        parameters:
+          - name: imagery-zip-downloads
+          - name: iteration-id
+      # Ensure CPU pods only schedule on CPU nodes (labeled by NFD based on nodegroup name)
+      nodeSelector:
+        feature.node.kubernetes.io/workload-type: cpu
+      container:
+        image: ghcr.io/open-forest-observatory/argo-workflow-utils:{{workflow.parameters.UTILS_IMAGE_TAG}}
+        volumeMounts:
+          - name: data
+            mountPath: /data
+        command: ["python3", "/app/download_imagery.py"]
+        env:
+          - name: IMAGERY_ZIP_URLS
+            value: "{{inputs.parameters.imagery-zip-downloads}}"
+          - name: DOWNLOAD_BASE_DIR
+            value: "{{workflow.parameters.TEMP_WORKING_DIR}}/downloaded_imagery"
+          - name: ITERATION_ID
+            value: "{{inputs.parameters.iteration-id}}"
+          - name: S3_PROVIDER
+            valueFrom:
+              secretKeyRef:
+                name: s3-credentials
+                key: provider
+          - name: S3_ENDPOINT
+            valueFrom:
+              secretKeyRef:
+                name: s3-credentials
+                key: endpoint
+          - name: S3_ACCESS_KEY
+            valueFrom:
+              secretKeyRef:
+                name: s3-credentials
+                key: access_key
+          - name: S3_SECRET_KEY
+            valueFrom:
+              secretKeyRef:
+                name: s3-credentials
+                key: secret_key
+        resources:
+          requests:
+            cpu: "2"
+            memory: "2Gi"
+
+    # --------- TRANSFORM CONFIG ---------
+    # Replaces __DOWNLOADED__ prefix in config's photo_path with actual download path
+    - name: transform-config
+      inputs:
+        parameters:
+          - name: config-file
+          - name: iteration-id
+          - name: project-name
+      # Ensure CPU pods only schedule on CPU nodes (labeled by NFD based on nodegroup name)
+      nodeSelector:
+        feature.node.kubernetes.io/workload-type: cpu
+      container:
+        image: ghcr.io/open-forest-observatory/argo-workflow-utils:{{workflow.parameters.UTILS_IMAGE_TAG}}
+        volumeMounts:
+          - name: data
+            mountPath: /data
+        command: ["python3", "/app/transform_config.py"]
+        env:
+          - name: CONFIG_FILE
+            value: "{{inputs.parameters.config-file}}"
+          - name: OUTPUT_CONFIG_FILE
+            value: "{{workflow.parameters.TEMP_WORKING_DIR}}/configs/{{inputs.parameters.iteration-id}}-transformed.yml"
+          - name: DOWNLOADED_IMAGERY_PATH
+            value: "{{workflow.parameters.TEMP_WORKING_DIR}}/downloaded_imagery/{{inputs.parameters.iteration-id}}"
+        resources:
+          requests:
+            cpu: "1"
+            memory: "256Mi"
+      outputs:
+        parameters:
+          - name: transformed-config-path
+            value: "{{workflow.parameters.TEMP_WORKING_DIR}}/configs/{{inputs.parameters.iteration-id}}-transformed.yml"
+
+    # --------- CLEANUP DOWNLOADED IMAGERY ---------
+    # Removes downloaded imagery after photogrammetry completes to free up space
+    - name: cleanup-imagery
+      inputs:
+        parameters:
+          - name: iteration-id
+      # Ensure CPU pods only schedule on CPU nodes (labeled by NFD based on nodegroup name)
+      nodeSelector:
+        feature.node.kubernetes.io/workload-type: cpu
+      container:
+        image: ghcr.io/open-forest-observatory/argo-workflow-utils:{{workflow.parameters.UTILS_IMAGE_TAG}}
+        volumeMounts:
+          - name: data
+            mountPath: /data
+        command: ["python3", "/app/cleanup_imagery.py"]
+        env:
+          - name: DOWNLOAD_DIR
+            value: "{{workflow.parameters.TEMP_WORKING_DIR}}/downloaded_imagery/{{inputs.parameters.iteration-id}}"
+        resources:
+          requests:
+            cpu: "1"
+            memory: "256Mi"
 
     # --------- RCLONE UPLOAD (Docker image) ---------
     - name: rclone-upload-template
