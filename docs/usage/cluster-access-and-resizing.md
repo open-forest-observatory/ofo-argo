@@ -143,7 +143,7 @@ Use OpenStack to create new nodegroups.
 CPU nodegroups must include `cpu` in the nodegroup name for automatic labeling to work:
 
 ```bash
-openstack coe nodegroup create ofocluster2 cpu-group --min-nodes 1 --max-nodes 8 --flavor m3.xl
+openstack coe nodegroup create ofocluster2 cpu-group --min-nodes 1 --max-nodes 8 --flavor m3.large
 ```
 
 The `cpu` substring triggers automatic labeling (`workload-type: cpu`) via NodeFeatureRule, which is part of ensuring CPU-only workflow pods schedule on these nodes (the other part is the NodeSelector attribute specified for the CPU task template in the Argo workflow YAML).
