@@ -65,7 +65,7 @@ spec:
     - name: main
       # Max concurrent projects to process in parallel. Edit this value directly to change.
       # (Argo doesn't support parameter substitution for integer fields like parallelism)
-      parallelism: 10
+      parallelism: 18
       steps:
         - - name: compute-photogrammetry-config-subfolder
             template: compute-photogrammetry-config-subfolder
