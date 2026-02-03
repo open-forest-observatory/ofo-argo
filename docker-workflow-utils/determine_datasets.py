@@ -434,14 +434,29 @@ def main(config_list_path: str) -> None:
     Main entry point for preprocessing script.
 
     Args:
-        config_list_path: Absolute path to text file listing config files (each line should be an absolute path)
+        config_list_path: Absolute path to text file listing config files.
+            Each line can be either a filename (resolved relative to the config list's directory)
+            or an absolute path (starting with /). Lines starting with # are comments.
+            Inline comments (# after filename) are also supported.
     """
     missions: List[Dict[str, Any]] = []
 
-    # Read config list file (expecting absolute path)
-    # Collect non-empty config paths first, then enumerate for stable indices
+    # Get directory containing the config list for resolving relative filenames
+    config_list_dir = os.path.dirname(config_list_path)
+
+    # Read config list file and resolve paths
+    # Supports: comments (#), inline comments, filenames, and absolute paths
+    config_paths = []
     with open(config_list_path, "r") as f:
-        config_paths = [line.strip() for line in f if line.strip()]
+        for line in f:
+            line = line.split("#")[0].strip()  # Remove inline comments and whitespace
+            if not line:  # Skip empty lines and comment-only lines
+                continue
+            # Resolve path: absolute paths used as-is, filenames joined with config list dir
+            if line.startswith("/"):
+                config_paths.append(line)
+            else:
+                config_paths.append(os.path.join(config_list_dir, line))
 
     for index, config_path in enumerate(config_paths):
         try:
@@ -459,7 +474,15 @@ if __name__ == "__main__":
     if len(sys.argv) != 2:
         print("Usage: determine_datasets.py <config_list_path>", file=sys.stderr)
         print(
-            "  config_list_path: Absolute path to text file listing config files (each line should be an absolute path)",
+            "  config_list_path: Absolute path to text file listing config files.",
+            file=sys.stderr,
+        )
+        print(
+            "                    Each line can be a filename (resolved relative to config list dir)",
+            file=sys.stderr,
+        )
+        print(
+            "                    or an absolute path. Lines starting with # are comments.",
             file=sys.stderr,
         )
         sys.exit(1)

@@ -434,20 +434,32 @@ Any values specified for `project_path` and `output_path` in the config.yml will
 
 #### Create a config list file
 
-We use a text file, for example `config_list.txt`, to tell the Argo workflow which config files
-should be processed in the current run. This text file should list the paths to each config.yml file
-you want to process within the container (for example, use `/data/XYZ` to specity the path `/ofo-share/argo-data/XYZ`), one config file path per line.
+We use a text file, for example `config-list.txt`, to tell the Argo workflow which config files
+should be processed in the current run. Place this file in the **same directory as your config files**, then list just the **filenames** (not full paths), one per line.
 
-For example:
+**Example:** If your configs are in `/ofo-share/argo-data/argo-input/configs/`, create a file at `/ofo-share/argo-data/argo-input/configs/config-list.txt`:
 
 ```
-/data/argo-input/configs/01_benchmarking-greasewood.yml
-/data/argo-input/configs/02_benchmarking-greasewood.yml
-/data/argo-input/configs/01_benchmarking-emerald-subset.yml
-/data/argo-input/configs/02_benchmarking-emerald-subset.yml
+# Benchmarking missions
+01_benchmarking-greasewood.yml
+02_benchmarking-greasewood.yml
+
+# Skipping emerald for now
+# 01_benchmarking-emerald-subset.yml
+# 02_benchmarking-emerald-subset.yml
+
+03_production-run.yml  # high priority
 ```
 
-This allows you to organize your config files in subdirectories or different locations. The project name will be automatically derived from the config filename (e.g., `/data/argo-input/configs/project-name.yml` becomes project `project-name`), unless it is explicity set in the config file at `project.project_name` (which takes priority).
+**Features:**
+
+- **Filenames only**: List just the config filename; the directory is inferred from the config list's location
+- **Comments**: Lines starting with `#` (after whitespace) are skipped
+- **Inline comments**: Text after `#` on any line is ignored (e.g., `config.yml # note`)
+- **Blank lines**: Empty lines are ignored for readability
+- **Backward compatibility**: Absolute paths (starting with `/`) still work if needed
+
+The project name will be automatically derived from the config filename (e.g., `project-name.yml` becomes project `project-name`), unless explicitly set in the config file at `project.project_name` (which takes priority).
 
 You can create your own config list file and name it whatever you want, placing it anywhere within `/ofo-share/argo-data/`. Then specify the path to it within the container (using `/data/XYZ` to refer to `/ofo-share/argo-data/XYZ`) using the `CONFIG_LIST` parameter when submitting the workflow.
 
@@ -530,7 +542,7 @@ Database parameters (not currently functional):
 
 | Parameter | Description |
 |-----------|-------------|
-| `CONFIG_LIST` | **Absolute path** to text file listing metashape config file paths (each line should be an absolute path starting with `/data/`). Example: `/data/argo-input/config-lists/config_list.txt` |
+| `CONFIG_LIST` | **Absolute path** to text file listing metashape config files. Each line should be a config filename (resolved relative to the config list's directory) or an absolute path. Lines starting with `#` are comments. Example: `/data/argo-input/configs/config-list.txt` |
 | `TEMP_WORKING_DIR` | **Absolute path** for temporary workflow files (both photogrammetry and postprocessing). Workflow creates `photogrammetry/` and `postprocessing/` subdirectories automatically. All files are deleted after successful S3 upload. Example: `/data/argo-output/temp-runs/gillan_june27` |
 | `PHOTOGRAMMETRY_CONFIG_ID` | Two-digit configuration ID (e.g., `01`, `02`) used to organize outputs into `photogrammetry_NN` subdirectories in S3 for both raw and postprocessed products. If not specified or set to `NONE`, both raw and postprocessed products are stored without the `photogrammetry_NN` subfolder. |
 | `S3_BUCKET_INTERNAL` | S3 bucket for internal/intermediate outputs where raw Metashape products (orthomosaics, point clouds, DEMs) are uploaded (typically `ofo-internal`). |
