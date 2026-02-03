@@ -265,7 +265,7 @@ def postprocess_photogrammetry_containerized(
         )
 
     # Create mission-specific output directories
-    working_dir = os.environ.get("WORKING_DIR", "/tmp/processing")
+    working_dir = os.environ.get("TEMP_WORKING_DIR_POSTPROCESSING", "/tmp/processing")
     postprocessed_path = f"{working_dir}/output/{mission_id}"
     create_dir(os.path.join(postprocessed_path, "full"))
     create_dir(os.path.join(postprocessed_path, "thumbnails"))
