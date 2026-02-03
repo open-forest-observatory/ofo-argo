@@ -583,6 +583,15 @@ spec:
                 - name: photogrammetry-config-subfolder
                   value: "{{inputs.parameters.photogrammetry-config-subfolder}}"
 
+          # Cleanup task (runs after postprocessing completes)
+          - name: cleanup-iteration
+            depends: "postprocessing-task.Succeeded"
+            template: cleanup-iteration-template
+            arguments:
+              parameters:
+                - name: iteration-id
+                  value: "{{inputs.parameters.iteration-id}}"
+
     ## Here we define what each step does in 'process-project-workflow' step
 
     # CPU step template for Metashape processing
@@ -913,3 +922,27 @@ spec:
             memory: "48Gi"
           limits:
             memory: "56Gi"
+
+    #--------- CLEANUP ITERATION DIRECTORY ---------
+    - name: cleanup-iteration-template
+      inputs:
+        parameters:
+          - name: iteration-id
+      nodeSelector:
+        feature.node.kubernetes.io/workload-type: cpu
+      container:
+        image: alpine:latest
+        volumeMounts:
+          - name: data
+            mountPath: /data
+        command: ["/bin/sh", "-c"]
+        args:
+          - |
+            ITERATION_DIR="{{workflow.parameters.TEMP_WORKING_DIR}}/{{workflow.name}}/{{inputs.parameters.iteration-id}}"
+            echo "[cleanup] Removing iteration directory: $ITERATION_DIR"
+            rm -rf "$ITERATION_DIR"
+            echo "[cleanup] Done"
+        resources:
+          requests:
+            cpu: "100m"
+            memory: "64Mi"
