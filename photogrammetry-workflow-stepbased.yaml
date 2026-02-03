@@ -611,15 +611,18 @@ spec:
           set -e
 
           # For setup step, clean up any leftover products from a previous incomplete run
+          # Only remove project/ and output/ directories, preserve downloaded-raw-imagery/ which was added prior to this
           if [ "{{inputs.parameters.step}}" = "setup" ]; then
-            PROJECT_DIR="{{workflow.parameters.TEMP_WORKING_DIR}}/{{workflow.name}}/{{inputs.parameters.iteration-id}}/photogrammetry"
-            if [ -d "$PROJECT_DIR" ]; then
-              echo "[cleanup] Removing leftover data from previous run: $PROJECT_DIR"
-              rm -rf "$PROJECT_DIR"
-              echo "[cleanup] Successfully removed: $PROJECT_DIR"
-            else
-              echo "[cleanup] No previous data found at: $PROJECT_DIR"
-            fi
+            PHOTOGRAMMETRY_DIR="{{workflow.parameters.TEMP_WORKING_DIR}}/{{workflow.name}}/{{inputs.parameters.iteration-id}}/photogrammetry"
+            for subdir in project output; do
+              TARGET_DIR="$PHOTOGRAMMETRY_DIR/$subdir"
+              if [ -d "$TARGET_DIR" ]; then
+                echo "[cleanup] Removing leftover data from previous run: $TARGET_DIR"
+                rm -rf "$TARGET_DIR"
+                echo "[cleanup] Successfully removed: $TARGET_DIR"
+              fi
+            done
+            echo "[cleanup] Cleanup complete (preserved downloaded-raw-imagery if present)"
           fi
 
           # Run the Metashape step
