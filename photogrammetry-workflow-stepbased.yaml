@@ -825,7 +825,7 @@ spec:
 
         resources:
           requests:
-            cpu: "18" # was 100m
+            cpu: 500m
             memory: "256Mi"
           limits:
             memory: "1Gi"
@@ -911,8 +911,7 @@ spec:
             value: "{{workflow.parameters.TEMP_WORKING_DIR}}/postprocessing"
         resources:
           requests:
-            cpu: "18"
-            memory: "80Gi"
-          # limits:
-          #   cpu: "4"
-          #   memory: "16Gi"
+            cpu: "12"
+            memory: "48Gi"
+          limits:
+            memory: "56Gi"
