@@ -10,7 +10,7 @@ Usage:
     python cleanup_imagery.py
 
 Environment Variables:
-    DOWNLOAD_DIR: Directory to delete (e.g., '/ofo-share/argo-working/wf-abc/downloaded_imagery/000_my_project')
+    DOWNLOAD_DIR: Directory to delete (e.g., '{TEMP_WORKING_DIR}/downloaded_imagery/{iteration_id}')
 
 Output:
     Prints status messages to stdout.
@@ -23,7 +23,8 @@ import sys
 
 
 # Required path components for safety validation
-REQUIRED_PATH_COMPONENTS = ["downloaded_imagery", "argo-working"]
+# Path must contain 'downloaded_imagery' to confirm it's the correct directory type
+REQUIRED_PATH_COMPONENTS = ["downloaded_imagery"]
 
 
 def validate_path_safety(path: str) -> bool:
@@ -51,7 +52,7 @@ def validate_path_safety(path: str) -> bool:
             return False
 
     # Additional safety: don't allow deletion of root-level directories
-    # The path should have sufficient depth (at least /ofo-share/argo-working/xxx/downloaded_imagery/yyy)
+    # The path should have sufficient depth (e.g., /data/.../downloaded_imagery/{iteration_id})
     path_parts = [p for p in normalized_path.split(os.sep) if p]
     if len(path_parts) < 5:
         print(f"ERROR: Path appears too shallow to be a valid download directory")

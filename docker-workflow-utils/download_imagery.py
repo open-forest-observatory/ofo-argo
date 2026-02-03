@@ -13,7 +13,7 @@ Environment Variables:
     IMAGERY_ZIP_URLS: JSON array of S3 paths to download (e.g., '["bucket/path/file.zip"]')
                       Paths should be in format 'bucket/path/to/file.zip' without remote prefix.
                       The S3 connection is configured via the credentials below.
-    DOWNLOAD_BASE_DIR: Base directory for downloads (e.g., '/ofo-share/argo-working/wf-abc/downloaded_imagery')
+    DOWNLOAD_BASE_DIR: Base directory for downloads (e.g., '{TEMP_WORKING_DIR}/downloaded_imagery')
     ITERATION_ID: Unique identifier for this project iteration (e.g., '000_my_project')
     S3_PROVIDER: S3 provider for rclone (e.g., 'Ceph', 'AWS')
     S3_ENDPOINT: S3 endpoint URL
