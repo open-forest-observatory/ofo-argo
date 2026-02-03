@@ -189,8 +189,8 @@ def process_config_file(config_path: str, index: int) -> Dict[str, Any]:
         # Iteration ID for unique per-project isolation (used in download paths, etc.)
         "iteration_id": iteration_id,
         # S3 imagery download settings
-        # imagery_zip_downloads is a JSON-encoded array for Argo to parse
-        "imagery_zip_downloads": json.dumps(imagery_downloads),
+        # imagery_zip_downloads is a list that Argo will serialize to JSON when needed
+        "imagery_zip_downloads": imagery_downloads,
         # Boolean flags as lowercase strings for Argo workflow conditionals
         "imagery_download_enabled": str(len(imagery_downloads) > 0).lower(),
         "cleanup_downloaded_imagery": str(str_to_bool(cleanup_imagery)).lower(),
