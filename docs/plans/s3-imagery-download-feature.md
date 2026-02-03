@@ -38,9 +38,11 @@ Users need the ability to have the workflow automatically download imagery from 
 ```yaml
 argo:
   # New: List of S3 zip files to download (can also be a single string)
+  # Format: bucket/path/file.zip (no remote prefix needed)
+  # S3 credentials come from the cluster's s3-credentials Kubernetes secret
   s3_imagery_zip_download:
-    - js2s3:ofo-public/drone/missions_01/000558/images/000558_images.zip
-    - js2s3:ofo-public/drone/missions_01/000559/images/000559_images.zip
+    - ofo-public/drone/missions_01/000558/images/000558_images.zip
+    - ofo-public/drone/missions_01/000559/images/000559_images.zip
 
   # New: Whether to delete downloaded imagery after workflow (default: true)
   cleanup_downloaded_imagery: true
@@ -167,7 +169,7 @@ mission_params['cleanup_downloaded_imagery'] = str(cleanup_imagery).lower()
 **Purpose:** Download and extract zip files from S3, preparing imagery for photogrammetry.
 
 **Inputs (via environment variables or arguments):**
-- `IMAGERY_ZIP_URLS`: JSON array of S3 URLs
+- `IMAGERY_ZIP_URLS`: JSON array of S3 paths (format: `bucket/path/file.zip`, no remote prefix)
 - `DOWNLOAD_BASE_DIR`: Base directory for downloads (e.g., `{TEMP_WORKING_DIR}/downloaded_imagery`)
 - `ITERATION_ID`: Unique ID for this project iteration
 - S3 credentials: `S3_PROVIDER`, `S3_ENDPOINT`, `S3_ACCESS_KEY`, `S3_SECRET_KEY`
@@ -204,10 +206,13 @@ def get_s3_flags():
         "--s3-secret-access-key", os.environ.get("S3_SECRET_KEY"),
     ]
 
-# Download command matching existing workflow patterns:
+# Download command using rclone's on-the-fly backend syntax (:s3:)
+# This avoids needing a pre-configured remote - credentials come from flags
+# User specifies just "bucket/path/file.zip", we prepend ":s3:"
+rclone_url = f":s3:{s3_path}"
 rclone_cmd = [
     "rclone", "copyto",
-    url,
+    rclone_url,
     f"{download_dir}/{filename}",
     "--progress",
     "--transfers", "8",

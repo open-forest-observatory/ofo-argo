@@ -10,7 +10,9 @@ Usage:
     python download_imagery.py
 
 Environment Variables:
-    IMAGERY_ZIP_URLS: JSON array of S3 URLs to download (e.g., '["js2s3:bucket/path/file.zip"]')
+    IMAGERY_ZIP_URLS: JSON array of S3 paths to download (e.g., '["bucket/path/file.zip"]')
+                      Paths should be in format 'bucket/path/to/file.zip' without remote prefix.
+                      The S3 connection is configured via the credentials below.
     DOWNLOAD_BASE_DIR: Base directory for downloads (e.g., '/ofo-share/argo-working/wf-abc/downloaded_imagery')
     ITERATION_ID: Unique identifier for this project iteration (e.g., '000_my_project')
     S3_PROVIDER: S3 provider for rclone (e.g., 'Ceph', 'AWS')
@@ -47,25 +49,25 @@ def get_s3_flags() -> List[str]:
 
 def extract_filename_from_url(url: str) -> str:
     """
-    Extract the filename from an S3 URL.
+    Extract the filename from an S3 path.
 
     Args:
-        url: S3 URL in format 'remote:bucket/path/to/file.zip'
+        url: S3 path in format 'bucket/path/to/file.zip'
 
     Returns:
         The filename (e.g., 'file.zip')
     """
-    # URL format: js2s3:bucket/path/to/filename.zip
+    # Path format: bucket/path/to/filename.zip
     # Extract the last path component
     return url.rstrip("/").split("/")[-1]
 
 
-def download_zip(url: str, download_dir: str) -> str:
+def download_zip(s3_path: str, download_dir: str) -> str:
     """
     Download a zip file from S3 using rclone.
 
     Args:
-        url: S3 URL to download
+        s3_path: S3 path to download (format: 'bucket/path/to/file.zip')
         download_dir: Local directory to download to
 
     Returns:
@@ -74,16 +76,21 @@ def download_zip(url: str, download_dir: str) -> str:
     Raises:
         subprocess.CalledProcessError: If download fails
     """
-    filename = extract_filename_from_url(url)
+    filename = extract_filename_from_url(s3_path)
     local_path = os.path.join(download_dir, filename)
 
-    print(f"Downloading: {url}")
+    # Use rclone's on-the-fly backend syntax (:s3:) which configures the
+    # S3 backend using command-line flags rather than a config file.
+    # This avoids needing a pre-configured remote like "js2s3:".
+    rclone_url = f":s3:{s3_path}"
+
+    print(f"Downloading: {s3_path}")
     print(f"  -> {local_path}")
 
     cmd = [
         "rclone",
         "copyto",
-        url,
+        rclone_url,
         local_path,
         "--progress",
         "--transfers",
@@ -187,7 +194,7 @@ def main() -> None:
         sys.exit(1)
 
     if not imagery_urls:
-        print("WARNING: No imagery URLs provided, nothing to download")
+        print("WARNING: No imagery paths provided, nothing to download")
         # Still create the directory and output the path for consistency
         download_dir = os.path.join(download_base_dir, iteration_id)
         os.makedirs(download_dir, exist_ok=True)
@@ -198,19 +205,19 @@ def main() -> None:
     download_dir = os.path.join(download_base_dir, iteration_id)
     os.makedirs(download_dir, exist_ok=True)
     print(f"Download directory: {download_dir}")
-    print(f"URLs to download: {len(imagery_urls)}")
+    print(f"Paths to download: {len(imagery_urls)}")
 
-    # Process each URL
-    failed_urls = []
-    for i, url in enumerate(imagery_urls, 1):
-        print(f"\n[{i}/{len(imagery_urls)}] Processing: {url}")
+    # Process each S3 path
+    failed_paths = []
+    for i, s3_path in enumerate(imagery_urls, 1):
+        print(f"\n[{i}/{len(imagery_urls)}] Processing: {s3_path}")
 
         try:
             # Download the zip file
-            zip_path = download_zip(url, download_dir)
+            zip_path = download_zip(s3_path, download_dir)
 
             # Determine extraction folder name (filename without .zip extension)
-            filename = extract_filename_from_url(url)
+            filename = extract_filename_from_url(s3_path)
             if filename.lower().endswith(".zip"):
                 folder_name = filename[:-4]
             else:
@@ -223,24 +230,24 @@ def main() -> None:
             # Delete the zip file to save space
             delete_zip(zip_path)
 
-            print(f"  Successfully processed: {url}")
+            print(f"  Successfully processed: {s3_path}")
 
         except subprocess.CalledProcessError as e:
-            print(f"ERROR: Command failed for {url}: {e}")
-            failed_urls.append(url)
+            print(f"ERROR: Command failed for {s3_path}: {e}")
+            failed_paths.append(s3_path)
         except FileNotFoundError as e:
-            print(f"ERROR: File not found for {url}: {e}")
-            failed_urls.append(url)
+            print(f"ERROR: File not found for {s3_path}: {e}")
+            failed_paths.append(s3_path)
         except Exception as e:
-            print(f"ERROR: Unexpected error for {url}: {e}")
-            failed_urls.append(url)
+            print(f"ERROR: Unexpected error for {s3_path}: {e}")
+            failed_paths.append(s3_path)
 
     # Report results
     print("\n" + "=" * 60)
-    if failed_urls:
-        print(f"FAILED: {len(failed_urls)} of {len(imagery_urls)} downloads failed:")
-        for url in failed_urls:
-            print(f"  - {url}")
+    if failed_paths:
+        print(f"FAILED: {len(failed_paths)} of {len(imagery_urls)} downloads failed:")
+        for s3_path in failed_paths:
+            print(f"  - {s3_path}")
         sys.exit(1)
     else:
         print(f"SUCCESS: All {len(imagery_urls)} downloads completed")

@@ -142,8 +142,8 @@ Add the following to the `argo:` section of your config file:
 argo:
   # List of S3 zip files to download (can also be a single string)
   s3_imagery_zip_download:
-    - js2s3:ofo-public/drone/missions_01/000558/images/000558_images.zip
-    - js2s3:ofo-public/drone/missions_01/000559/images/000559_images.zip
+    - ofo-public/drone/missions_01/000558/images/000558_images.zip
+    - ofo-public/drone/missions_01/000559/images/000559_images.zip
 
   # Whether to delete downloaded imagery after workflow completes (default: true)
   cleanup_downloaded_imagery: true
@@ -151,7 +151,7 @@ argo:
 
 | Parameter | Description | Default |
 |-----------|-------------|---------|
-| `s3_imagery_zip_download` | S3 URL(s) of zip files to download. Can be a single string or a list. Uses rclone URL format (e.g., `js2s3:bucket/path/file.zip`) | (none) |
+| `s3_imagery_zip_download` | S3 path(s) of zip files to download. Can be a single string or a list. Format: `bucket/path/file.zip`. The S3 endpoint and credentials are configured in the cluster's `s3-credentials` Kubernetes secret. | (none) |
 | `cleanup_downloaded_imagery` | If `true`, downloaded imagery is deleted after photogrammetry completes to free disk space | `true` |
 
 ### Path syntax: The `__DOWNLOADED__` prefix
@@ -209,7 +209,7 @@ photo_path:
 argo:
   # S3 imagery download settings
   s3_imagery_zip_download:
-    - js2s3:ofo-public/drone/missions_01/000558/images/000558_images.zip
+    - ofo-public/drone/missions_01/000558/images/000558_images.zip
   cleanup_downloaded_imagery: true
 
   # Standard workflow settings
@@ -266,17 +266,17 @@ Each project gets its own isolated download directory to prevent collisions when
 
 **Possible causes:**
 
-- Incorrect S3 URL format (should be `js2s3:bucket/path/file.zip`)
-- S3 credentials not configured in the cluster
+- Incorrect S3 path format (should be `bucket/path/file.zip` without a remote prefix)
+- S3 credentials not configured in the cluster's `s3-credentials` secret
 - Network issues or S3 endpoint unavailable
 - Zip file doesn't exist at the specified path
 
 **Debug steps:**
 
 1. Check the `download-imagery` step logs in Argo UI
-2. Verify the S3 URL works with rclone manually:
+2. Verify the S3 path is correct by listing files (requires rclone configured with the same credentials):
    ```bash
-   rclone ls js2s3:ofo-public/drone/missions_01/000558/images/
+   rclone ls :s3:ofo-public/drone/missions_01/000558/images/ --s3-provider=Ceph --s3-endpoint=<endpoint>
    ```
 
 #### "Photo path not found" errors in setup step
@@ -502,13 +502,13 @@ Once your cluster authentication is set up and your inputs are prepared, run:
 argo submit -n argo photogrammetry-workflow-stepbased.yaml \
   --name "my-run-$(date +%Y%m%d)" \
   -p CONFIG_LIST=/data/argo-input/config-lists/config_list.txt \
-  -p TEMP_WORKING_DIR=/data/argo-output/temp-runs/gillan_june27 \
-  -p S3_PHOTOGRAMMETRY_DIR=gillan_june27 \
-  -p PHOTOGRAMMETRY_CONFIG_ID=01 \
+  -p TEMP_WORKING_DIR=/data/argo-output/tmp/derek-0202 \
   -p S3_BUCKET_PHOTOGRAMMETRY_OUTPUTS=ofo-internal \
-  -p S3_POSTPROCESSED_DIR=jgillan_test \
+  -p S3_PHOTOGRAMMETRY_DIR=photogrammetry-outputs_dytest02 \
+  -p PHOTOGRAMMETRY_CONFIG_ID=03 \
   -p S3_BUCKET_POSTPROCESSED_OUTPUTS=ofo-public \
-  -p BOUNDARY_DIRECTORY=jgillan_test \
+  -p S3_POSTPROCESSED_DIR=drone_dytest02 \
+  -p S3_BOUNDARY_DIRECTORY=jgillan_test \
   -p POSTPROCESSING_IMAGE_TAG=latest \
   -p UTILS_IMAGE_TAG=latest \
   -p AUTOMATE_METASHAPE_IMAGE_TAG=latest
