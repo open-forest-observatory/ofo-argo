@@ -13,8 +13,7 @@ Environment Variables:
     IMAGERY_ZIP_URLS: JSON array of S3 paths to download (e.g., '["bucket/path/file.zip"]')
                       Paths should be in format 'bucket/path/to/file.zip' without remote prefix.
                       The S3 connection is configured via the credentials below.
-    DOWNLOAD_BASE_DIR: Base directory for downloads (e.g., '{TEMP_WORKING_DIR}/downloaded_imagery')
-    ITERATION_ID: Unique identifier for this project iteration (e.g., '000_my_project')
+    DOWNLOAD_DIR: Directory for downloads (e.g., '{TEMP_WORKING_DIR}/{workflow_name}/{iteration_id}/photogrammetry/downloaded-raw-imagery')
     S3_PROVIDER: S3 provider for rclone (e.g., 'Ceph', 'AWS')
     S3_ENDPOINT: S3 endpoint URL
     S3_ACCESS_KEY: S3 access key ID
@@ -169,16 +168,11 @@ def main() -> None:
 
     # Get environment variables
     imagery_urls_json = os.environ.get("IMAGERY_ZIP_URLS", "[]")
-    download_base_dir = os.environ.get("DOWNLOAD_BASE_DIR", "")
-    iteration_id = os.environ.get("ITERATION_ID", "")
+    download_dir = os.environ.get("DOWNLOAD_DIR", "")
 
     # Validate required environment variables
-    if not download_base_dir:
-        print("ERROR: DOWNLOAD_BASE_DIR environment variable is required")
-        sys.exit(1)
-
-    if not iteration_id:
-        print("ERROR: ITERATION_ID environment variable is required")
+    if not download_dir:
+        print("ERROR: DOWNLOAD_DIR environment variable is required")
         sys.exit(1)
 
     # Parse URLs
@@ -196,13 +190,11 @@ def main() -> None:
     if not imagery_urls:
         print("WARNING: No imagery paths provided, nothing to download")
         # Still create the directory and output the path for consistency
-        download_dir = os.path.join(download_base_dir, iteration_id)
         os.makedirs(download_dir, exist_ok=True)
         print(f"DOWNLOAD_PATH={download_dir}")
         sys.exit(0)
 
-    # Create project-specific download directory
-    download_dir = os.path.join(download_base_dir, iteration_id)
+    # Create download directory
     os.makedirs(download_dir, exist_ok=True)
     print(f"Download directory: {download_dir}")
     print(f"Paths to download: {len(imagery_urls)}")

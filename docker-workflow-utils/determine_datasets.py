@@ -161,8 +161,6 @@ def process_config_file(config_path: str, index: int) -> Dict[str, Any]:
     if imagery_downloads is None:
         imagery_downloads = []
 
-    cleanup_imagery = argo_config.get("cleanup_downloaded_imagery", True)
-
     # Default GPU resource (full GPU). Can be overridden per-step with MIG resources like:
     # "nvidia.com/mig-1g.5gb", "nvidia.com/mig-2g.10gb", "nvidia.com/mig-3g.20gb"
     DEFAULT_GPU_RESOURCE = "nvidia.com/gpu"
@@ -193,7 +191,6 @@ def process_config_file(config_path: str, index: int) -> Dict[str, Any]:
         "imagery_zip_downloads": imagery_downloads,
         # Boolean flags as lowercase strings for Argo workflow conditionals
         "imagery_download_enabled": str(len(imagery_downloads) > 0).lower(),
-        "cleanup_downloaded_imagery": str(str_to_bool(cleanup_imagery)).lower(),
         # Setup step resources
         "setup_cpu_request": (
             get_nested(config, ["argo", "setup", "cpu_request"])
