@@ -513,14 +513,14 @@ Once your cluster authentication is set up and your inputs are prepared, run:
 ```bash
 argo submit -n argo photogrammetry-workflow-stepbased.yaml \
   --name "my-run-$(date +%Y%m%d)" \
-  -p CONFIG_LIST=/data/argo-input/config-lists/config_list.txt \
+  -p CONFIG_LIST=/data/argo-input/configs/config-list.txt \
   -p TEMP_WORKING_DIR=/data/argo-output/tmp/derek-0202 \
   -p S3_BUCKET_INTERNAL=ofo-internal \
   -p S3_PHOTOGRAMMETRY_DIR=photogrammetry-outputs_dytest02 \
   -p PHOTOGRAMMETRY_CONFIG_ID=03 \
   -p S3_BUCKET_PUBLIC=ofo-public \
   -p S3_POSTPROCESSED_DIR=drone_dytest02 \
-  -p S3_BOUNDARY_DIR=jgillan_test \
+  -p S3_BOUNDARY_DIR=drone_dytest02 \
   -p POSTPROCESSING_IMAGE_TAG=latest \
   -p UTILS_IMAGE_TAG=latest \
   -p AUTOMATE_METASHAPE_IMAGE_TAG=latest
