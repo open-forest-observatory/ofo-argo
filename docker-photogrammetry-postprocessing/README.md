@@ -41,12 +41,12 @@ docker run --rm \
   -e S3_PROVIDER=Other \
   -e S3_ACCESS_KEY=<your_access_key> \
   -e S3_SECRET_KEY=<your_secret_key> \
-  -e S3_BUCKET_PHOTOGRAMMETRY_OUTPUTS=ofo-internal \
+  -e S3_BUCKET_INTERNAL=ofo-internal \
   -e S3_PHOTOGRAMMETRY_DIR=gillan_oct10 \
   -e PHOTOGRAMMETRY_CONFIG_SUBFOLDER=photogrammetry_01 \
   -e S3_BUCKET_INPUT_BOUNDARY=ofo-public \
-  -e INPUT_BOUNDARY_DIRECTORY=jgillan_test \
-  -e S3_BUCKET_POSTPROCESSED_OUTPUTS=ofo-public \
+  -e INPUT_BOUNDARY_DIR=jgillan_test \
+  -e S3_BUCKET_PUBLIC=ofo-public \
   -e S3_POSTPROCESSED_DIR=jgillan_test \
   -e PROJECT_NAME=benchmarking-greasewood \
   -e OUTPUT_MAX_DIM=800 \
@@ -62,17 +62,17 @@ docker run --rm \
 
 *S3_SECRET_KEY* is the secret key for OFOs S3 buckets
 
-*S3_BUCKET_PHOTOGRAMMETRY_OUTPUTS* is the S3 bucket where existing Metashape products reside. Currently on 'ofo-internal'
+*S3_BUCKET_INTERNAL* is the S3 bucket for internal/intermediate outputs where raw Metashape products (orthomosaics, point clouds, DEMs) reside. Currently `ofo-internal`.
 
 *S3_PHOTOGRAMMETRY_DIR* is the parent directory in S3 where existing Metashape products reside. When combined with PHOTOGRAMMETRY_CONFIG_SUBFOLDER, the full path becomes `{S3_PHOTOGRAMMETRY_DIR}/{PHOTOGRAMMETRY_CONFIG_SUBFOLDER}/`.
 
 *PHOTOGRAMMETRY_CONFIG_SUBFOLDER* **optional** parameter specifying the photogrammetry configuration subfolder name (e.g., `photogrammetry_01`, `photogrammetry_02`). Used to construct the input path (`{S3_PHOTOGRAMMETRY_DIR}/{PHOTOGRAMMETRY_CONFIG_SUBFOLDER}/`) and output directory (`{S3_POSTPROCESSED_DIR}/{mission_name}/{PHOTOGRAMMETRY_CONFIG_SUBFOLDER}/`). If not specified or set to empty string, products are read from and written to directories without the subfolder (e.g., `{S3_PHOTOGRAMMETRY_DIR}/` and `{S3_POSTPROCESSED_DIR}/{mission_name}/`).
 
-*S3_BUCKET_INPUT_BOUNDARY* is the bucket where the mission boundary polygons reside. These are used to clip imagery products. Currently in `ofo-public`
+*S3_BUCKET_INPUT_BOUNDARY* is the bucket where the mission boundary polygons reside. These are used to clip imagery products. Currently in `ofo-public` (same as S3_BUCKET_PUBLIC).
 
-*INPUT_BOUNDARY_DIRECTORY* is the parent directory where the mission boundary polygons reside.
+*INPUT_BOUNDARY_DIR* is the parent directory in S3_BUCKET_PUBLIC where the mission boundary polygons reside. Expected subdirectory structure: `<INPUT_BOUNDARY_DIR>/<mission_name>/metadata-mission/<mission_name>_mission-metadata.gpkg`.
 
-*S3_BUCKET_POSTPROCESSED_OUTPUTS* is the bucket where the postprocessed products will be stored. 'ofo-public'
+*S3_BUCKET_PUBLIC* is the S3 bucket for public/final outputs (postprocessed, clipped products ready for distribution). Currently `ofo-public`.
 
 *S3_POSTPROCESSED_DIR* is the parent directory where the postprocessed products will be stored. Products are organized as `{S3_POSTPROCESSED_DIR}/{mission_name}/{PHOTOGRAMMETRY_CONFIG_SUBFOLDER}/` when the subfolder is specified, or `{S3_POSTPROCESSED_DIR}/{mission_name}/` when not specified.
 
@@ -156,7 +156,7 @@ When the container starts, it follows this three-phase execution sequence:
 │    ├─> TEMP_WORKING_DIR_POSTPROCESSING (default: /tmp/processing) │
 │    ├─> OUTPUT_MAX_DIM (default: 800)                        │
 │    ├─> S3_PROVIDER (default: Other)                         │
-│    ├─> S3_BUCKET_POSTPROCESSED_OUTPUTS (default: S3_BUCKET_PHOTOGRAMMETRY_OUTPUTS) │
+│    ├─> S3_BUCKET_PUBLIC (default: S3_BUCKET_INTERNAL)          │
 │    └─> S3_POSTPROCESSED_DIR (default: processed)            │
 │                                                             │
 │ 2. Print environment variables                              │
@@ -165,7 +165,7 @@ When the container starts, it follows this three-phase execution sequence:
 │    ├─> S3_ENDPOINT                                          │
 │    ├─> S3_ACCESS_KEY                                        │
 │    ├─> S3_SECRET_KEY                                        │
-│    ├─> S3_BUCKET_PHOTOGRAMMETRY_OUTPUTS                     │
+│    ├─> S3_BUCKET_INTERNAL                                   │
 │    ├─> S3_BUCKET_INPUT_BOUNDARY                             │
 │    └─> PROJECT_NAME                                         │
 │                                                             │
@@ -291,7 +291,7 @@ The bash script performs initial validation and sets up the environment before h
 - `S3_ENDPOINT` - S3 service endpoint URL
 - `S3_ACCESS_KEY` - S3 access key
 - `S3_SECRET_KEY` - S3 secret key
-- `S3_BUCKET_PHOTOGRAMMETRY_OUTPUTS` - Bucket containing Metashape outputs
+- `S3_BUCKET_INTERNAL` - Bucket containing raw Metashape outputs (internal/intermediate)
 - `S3_BUCKET_INPUT_BOUNDARY` - Bucket containing mission boundary files
 - `PROJECT_NAME` - Specific project to process
 
@@ -300,7 +300,7 @@ The bash script performs initial validation and sets up the environment before h
 - `OUTPUT_MAX_DIM` → `800`
 - `PHOTOGRAMMETRY_CONFIG_SUBFOLDER` → `""` (empty string, skips subfolder)
 - `S3_PROVIDER` → `Other`
-- `S3_BUCKET_POSTPROCESSED_OUTPUTS` → `{S3_BUCKET_PHOTOGRAMMETRY_OUTPUTS}`
+- `S3_BUCKET_PUBLIC` → `{S3_BUCKET_INTERNAL}`
 - `S3_POSTPROCESSED_DIR` → `processed`
 
 ---
@@ -486,7 +486,7 @@ $TEMP_WORKING_DIR_POSTPROCESSING/
 Processed products are uploaded to mission-specific directories:
 
 ```
-S3:{S3_BUCKET_POSTPROCESSED_OUTPUTS}/{S3_POSTPROCESSED_DIR}/
+S3:{S3_BUCKET_PUBLIC}/{S3_POSTPROCESSED_DIR}/
 └── {mission_name}/
     ├── photogrammetry_00/
     │   ├── full/

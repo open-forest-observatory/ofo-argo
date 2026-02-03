@@ -15,7 +15,7 @@ argo submit photogrammetry-workflow-stepbased.yaml \
   --name "my-run-name" \
   -p CONFIG_LIST="argo-input/config-lists/my_missions.txt" \
   -p RUN_FOLDER="2024-12-19-run" \
-  -p S3_BUCKET_PHOTOGRAMMETRY_OUTPUTS="ofo-photogrammetry-outputs"
+  -p S3_BUCKET_INTERNAL="ofo-internal"
 ```
 
 ### Full Submission with All Parameters
@@ -25,10 +25,10 @@ argo submit photogrammetry-workflow-stepbased.yaml \
   -p CONFIG_LIST="argo-input/config-lists/december_missions.txt" \
   -p RUN_FOLDER="2024-12-19-production" \
   -p PHOTOGRAMMETRY_CONFIG_ID="v2" \
-  -p S3_BUCKET_PHOTOGRAMMETRY_OUTPUTS="ofo-photogrammetry-outputs" \
-  -p S3_BUCKET_POSTPROCESSED_OUTPUTS="ofo-public" \
+  -p S3_BUCKET_INTERNAL="ofo-internal" \
+  -p S3_BUCKET_PUBLIC="ofo-public" \
   -p OUTPUT_DIRECTORY="processed-outputs/december-2024" \
-  -p BOUNDARY_DIRECTORY="boundaries" \
+  -p S3_BOUNDARY_DIR="boundaries" \
   -p POSTPROCESSING_IMAGE_TAG="latest" \
   -p AUTOMATE_METASHAPE_IMAGE_TAG="latest"
 ```

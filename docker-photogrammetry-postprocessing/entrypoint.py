@@ -99,7 +99,7 @@ def download_photogrammetry_products():
     Returns:
         str: The project name
     """
-    input_bucket = os.environ.get("S3_BUCKET_PHOTOGRAMMETRY_OUTPUTS")
+    input_bucket = os.environ.get("S3_BUCKET_INTERNAL")
     s3_photogrammetry_dir = os.environ.get("S3_PHOTOGRAMMETRY_DIR")
     # PHOTOGRAMMETRY_CONFIG_SUBFOLDER may be empty string (skip subfolder) or "photogrammetry_NN"
     # If empty, we inject it and strip the trailing slash to get clean paths
@@ -185,7 +185,7 @@ def download_boundary_polygons(mission_name):
         bool: True if boundary file was downloaded successfully
     """
     boundary_bucket = os.environ.get("S3_BUCKET_INPUT_BOUNDARY")
-    boundary_base_dir = os.environ.get("INPUT_BOUNDARY_DIRECTORY")
+    boundary_base_dir = os.environ.get("INPUT_BOUNDARY_DIR")
     working_dir = os.environ.get("TEMP_WORKING_DIR_POSTPROCESSING")
     local_boundary_dir = f"{working_dir}/boundary"
 
@@ -300,7 +300,7 @@ def upload_processed_products(mission_id):
     Args:
         mission_id: Mission identifier
     """
-    output_bucket = os.environ.get("S3_BUCKET_POSTPROCESSED_OUTPUTS")
+    output_bucket = os.environ.get("S3_BUCKET_PUBLIC")
     s3_postprocessed_dir = os.environ.get("S3_POSTPROCESSED_DIR")
     working_dir = os.environ.get("TEMP_WORKING_DIR_POSTPROCESSING")
 

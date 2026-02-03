@@ -503,12 +503,12 @@ argo submit -n argo photogrammetry-workflow-stepbased.yaml \
   --name "my-run-$(date +%Y%m%d)" \
   -p CONFIG_LIST=/data/argo-input/config-lists/config_list.txt \
   -p TEMP_WORKING_DIR=/data/argo-output/tmp/derek-0202 \
-  -p S3_BUCKET_PHOTOGRAMMETRY_OUTPUTS=ofo-internal \
+  -p S3_BUCKET_INTERNAL=ofo-internal \
   -p S3_PHOTOGRAMMETRY_DIR=photogrammetry-outputs_dytest02 \
   -p PHOTOGRAMMETRY_CONFIG_ID=03 \
-  -p S3_BUCKET_POSTPROCESSED_OUTPUTS=ofo-public \
+  -p S3_BUCKET_PUBLIC=ofo-public \
   -p S3_POSTPROCESSED_DIR=drone_dytest02 \
-  -p S3_BOUNDARY_DIRECTORY=jgillan_test \
+  -p S3_BOUNDARY_DIR=jgillan_test \
   -p POSTPROCESSING_IMAGE_TAG=latest \
   -p UTILS_IMAGE_TAG=latest \
   -p AUTOMATE_METASHAPE_IMAGE_TAG=latest
@@ -532,12 +532,12 @@ Database parameters (not currently functional):
 |-----------|-------------|
 | `CONFIG_LIST` | **Absolute path** to text file listing metashape config file paths (each line should be an absolute path starting with `/data/`). Example: `/data/argo-input/config-lists/config_list.txt` |
 | `TEMP_WORKING_DIR` | **Absolute path** for temporary workflow files (both photogrammetry and postprocessing). Workflow creates `photogrammetry/` and `postprocessing/` subdirectories automatically. All files are deleted after successful S3 upload. Example: `/data/argo-output/temp-runs/gillan_june27` |
-| `S3_PHOTOGRAMMETRY_DIR` | S3 directory name for raw Metashape outputs. When `PHOTOGRAMMETRY_CONFIG_ID` is set, products upload to `{bucket}/{S3_PHOTOGRAMMETRY_DIR}/photogrammetry_{PHOTOGRAMMETRY_CONFIG_ID}/`. When not set, products go to `{bucket}/{S3_PHOTOGRAMMETRY_DIR}/`. Example: `gillan_june27` |
 | `PHOTOGRAMMETRY_CONFIG_ID` | Two-digit configuration ID (e.g., `01`, `02`) used to organize outputs into `photogrammetry_NN` subdirectories in S3 for both raw and postprocessed products. If not specified or set to `NONE`, both raw and postprocessed products are stored without the `photogrammetry_NN` subfolder. |
-| `S3_BUCKET_PHOTOGRAMMETRY_OUTPUTS` | S3 bucket where raw Metashape products (orthomosaics, point clouds, etc.) are uploaded (typically `ofo-internal`). |
-| `S3_POSTPROCESSED_DIR` | S3 directory name for postprocessed outputs. When `PHOTOGRAMMETRY_CONFIG_ID` is set, products are organized as `{S3_POSTPROCESSED_DIR}/{mission_name}/photogrammetry_{PHOTOGRAMMETRY_CONFIG_ID}/`. When not set, products go to `{S3_POSTPROCESSED_DIR}/{mission_name}/`. Example: `jgillan_test` |
-| `S3_BUCKET_POSTPROCESSED_OUTPUTS` | S3 bucket for final postprocessed outputs and where boundary files are stored (typically `ofo-public`) |
-| `BOUNDARY_DIRECTORY` | Parent directory in S3 where mission boundary polygons reside (used to clip imagery). Example: `jgillan_test` |
+| `S3_BUCKET_INTERNAL` | S3 bucket for internal/intermediate outputs where raw Metashape products (orthomosaics, point clouds, DEMs) are uploaded (typically `ofo-internal`). |
+| `S3_PHOTOGRAMMETRY_DIR` | S3 directory name for raw Metashape outputs. When `PHOTOGRAMMETRY_CONFIG_ID` is set, products upload to `{S3_BUCKET_INTERNAL}/{S3_PHOTOGRAMMETRY_DIR}/photogrammetry_{PHOTOGRAMMETRY_CONFIG_ID}/`. When `PHOTOGRAMMETRY_CONFIG_ID` is not set, products go to `{bucket}/{S3_PHOTOGRAMMETRY_DIR}/`. Example: `photogrammetry-outputs` |
+| `S3_BUCKET_PUBLIC` | S3 bucket for public/final outputs (postprocessed, clipped products ready for distribution) and where boundary files are stored (typically `ofo-public`). |
+| `S3_POSTPROCESSED_DIR` | S3 directory name for postprocessed outputs. When `PHOTOGRAMMETRY_CONFIG_ID` is set, products are organized as `{S3_POSTPROCESSED_DIR}/{mission_name}/photogrammetry_{PHOTOGRAMMETRY_CONFIG_ID}/`. When not set, products go to `{S3_POSTPROCESSED_DIR}/{mission_name}/`. Example: `drone/missions_03` |
+| `S3_BOUNDARY_DIR` | Parent directory in `S3_BUCKET_PUBLIC` where mission boundary polygons reside (used to clip imagery). The structure beneath this directory is assumed to be: `<S3_BOUNDARY_DIR>/<mission_name>/metadata-mission/<mission_name>_mission-metadata.gpkg`. Example: `drone/missions_03` |
 | `POSTPROCESSING_IMAGE_TAG` | Docker image tag for the postprocessing container (default: `latest`). Use a specific branch name or tag to test development versions (e.g., `dy-manila`) |
 | `UTILS_IMAGE_TAG` | Docker image tag for the argo-workflow-utils container (default: `latest`). Use a specific branch name or tag to test development versions (e.g., `dy-manila`) |
 | `AUTOMATE_METASHAPE_IMAGE_TAG` | Docker image tag for the automate-metashape container (default: `latest`). Use a specific branch name or tag to test development versions |

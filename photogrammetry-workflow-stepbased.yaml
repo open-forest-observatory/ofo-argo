@@ -30,15 +30,17 @@ spec:
         value: "default-run"
       - name: PHOTOGRAMMETRY_CONFIG_ID
         value: "NONE"
-      # S3 / rclone upload parameters
-      - name: S3_BUCKET_PHOTOGRAMMETRY_OUTPUTS
+      # S3 bucket for internal/intermediate outputs (raw Metashape products like orthomosaics, point clouds, DEMs)
+      - name: S3_BUCKET_INTERNAL
         value: ""
-      # Post-processing parameters
-      - name: S3_BUCKET_POSTPROCESSED_OUTPUTS
+      # S3 bucket for public/final outputs (postprocessed, clipped products ready for distribution)
+      - name: S3_BUCKET_PUBLIC
         value: "ofo-public"
       - name: S3_POSTPROCESSED_DIR
         value: ""
-      - name: BOUNDARY_DIRECTORY
+      # Parent directory in S3_BUCKET_PUBLIC where mission boundary polygons reside.
+      # Expected structure: <S3_BOUNDARY_DIR>/<mission_name>/metadata-mission/<mission_name>_mission-metadata.gpkg
+      - name: S3_BOUNDARY_DIR
         value: ""
       # - name: OUTPUT_MAX_DIM
       #   value: "800"
@@ -788,9 +790,9 @@ spec:
 
             # Build S3 destination path with optional photogrammetry config subfolder
             if [ -n "{{inputs.parameters.photogrammetry-config-subfolder}}" ]; then
-              DST="s3:{{workflow.parameters.S3_BUCKET_PHOTOGRAMMETRY_OUTPUTS}}/{{workflow.parameters.S3_PHOTOGRAMMETRY_DIR}}/{{inputs.parameters.photogrammetry-config-subfolder}}"
+              DST="s3:{{workflow.parameters.S3_BUCKET_INTERNAL}}/{{workflow.parameters.S3_PHOTOGRAMMETRY_DIR}}/{{inputs.parameters.photogrammetry-config-subfolder}}"
             else
-              DST="s3:{{workflow.parameters.S3_BUCKET_PHOTOGRAMMETRY_OUTPUTS}}/{{workflow.parameters.S3_PHOTOGRAMMETRY_DIR}}"
+              DST="s3:{{workflow.parameters.S3_BUCKET_INTERNAL}}/{{workflow.parameters.S3_PHOTOGRAMMETRY_DIR}}"
             fi
 
             echo "[rclone] Uploading $SRC -> $DST"
@@ -889,8 +891,8 @@ spec:
               secretKeyRef:
                 name: s3-credentials
                 key: secret_key
-          - name: S3_BUCKET_PHOTOGRAMMETRY_OUTPUTS
-            value: "{{workflow.parameters.S3_BUCKET_PHOTOGRAMMETRY_OUTPUTS}}"
+          - name: S3_BUCKET_INTERNAL
+            value: "{{workflow.parameters.S3_BUCKET_INTERNAL}}"
           - name: S3_PHOTOGRAMMETRY_DIR
             value: "{{workflow.parameters.S3_PHOTOGRAMMETRY_DIR}}"
           - name: PHOTOGRAMMETRY_CONFIG_SUBFOLDER
@@ -898,11 +900,11 @@ spec:
           - name: PROJECT_NAME
             value: "{{inputs.parameters.project-name}}"
           - name: S3_BUCKET_INPUT_BOUNDARY
-            value: "{{workflow.parameters.S3_BUCKET_POSTPROCESSED_OUTPUTS}}"
-          - name: INPUT_BOUNDARY_DIRECTORY
-            value: "{{workflow.parameters.BOUNDARY_DIRECTORY}}"
-          - name: S3_BUCKET_POSTPROCESSED_OUTPUTS
-            value: "{{workflow.parameters.S3_BUCKET_POSTPROCESSED_OUTPUTS}}"
+            value: "{{workflow.parameters.S3_BUCKET_PUBLIC}}"
+          - name: INPUT_BOUNDARY_DIR
+            value: "{{workflow.parameters.S3_BOUNDARY_DIR}}"
+          - name: S3_BUCKET_PUBLIC
+            value: "{{workflow.parameters.S3_BUCKET_PUBLIC}}"
           - name: S3_POSTPROCESSED_DIR
             value: "{{workflow.parameters.S3_POSTPROCESSED_DIR}}"
           #- name: OUTPUT_MAX_DIM

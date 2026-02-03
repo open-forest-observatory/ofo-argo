@@ -144,10 +144,10 @@ argo submit -n argo photogrammetry-workflow.yaml \
 -p CONFIG_LIST=argo-input/config-lists/config_list.txt \
 -p RUN_FOLDER=gillan_june27 \
 -p PHOTOGRAMMETRY_CONFIG_ID=01 \
--p S3_BUCKET_PHOTOGRAMMETRY_OUTPUTS=ofo-internal \
--p S3_BUCKET_POSTPROCESSED_OUTPUTS=ofo-public \
+-p S3_BUCKET_INTERNAL=ofo-internal \
+-p S3_BUCKET_PUBLIC=ofo-public \
 -p OUTPUT_DIRECTORY=jgillan_test \
--p BOUNDARY_DIRECTORY=jgillan_test \
+-p S3_BOUNDARY_DIR=jgillan_test \
 -p WORKING_DIR=/argo-output/temp-working-dir \
 -p POSTPROCESSING_IMAGE_TAG=latest
 ```
@@ -168,10 +168,10 @@ Database parameters (not currently functional):
 | `CONFIG_LIST` | Path to text file listing paths to metashape config files (all paths relative to `/ofo-share-2/argo-data`) |
 | `RUN_FOLDER` | Name for the parent directory of the Metashape outputs (locally under `argo-data/argo-outputs` **and** at the top level of the S3 bucket). Example: `photogrammetry-outputs`. |
 | `PHOTOGRAMMETRY_CONFIG_ID` | Two-digit configuration ID (e.g., `01`, `02`) used to organize outputs into `photogrammetry_NN` subdirectories in S3 for both raw and postprocessed products. If not specified, both raw and postprocessed products are stored directly in `RUN_FOLDER` (no `photogrammetry_NN` subfolder). |
-| `S3_BUCKET_PHOTOGRAMMETRY_OUTPUTS` | S3 bucket where raw Metashape products (orthomosaics, point clouds, etc.) are uploaded (typically `ofo-internal`). When `PHOTOGRAMMETRY_CONFIG_ID` is set, products are uploaded to `{bucket}/{RUN_FOLDER}/photogrammetry_{PHOTOGRAMMETRY_CONFIG_ID}/`. When not set, products go to `{bucket}/{RUN_FOLDER}/`. |
-| `S3_BUCKET_POSTPROCESSED_OUTPUTS` | S3 bucket for final postprocessed outputs and where boundary files are stored (typically `ofo-public`) |
+| `S3_BUCKET_INTERNAL` | S3 bucket for internal/intermediate outputs where raw Metashape products (orthomosaics, point clouds, DEMs) are uploaded (typically `ofo-internal`). When `PHOTOGRAMMETRY_CONFIG_ID` is set, products are uploaded to `{bucket}/{RUN_FOLDER}/photogrammetry_{PHOTOGRAMMETRY_CONFIG_ID}/`. When not set, products go to `{bucket}/{RUN_FOLDER}/`. |
+| `S3_BUCKET_PUBLIC` | S3 bucket for public/final outputs (postprocessed, clipped products ready for distribution) and where boundary files are stored (typically `ofo-public`). |
 | `OUTPUT_DIRECTORY` | Name of parent folder where postprocessed products are uploaded. When `PHOTOGRAMMETRY_CONFIG_ID` is set, products are organized as `{OUTPUT_DIRECTORY}/{mission_name}/photogrammetry_{PHOTOGRAMMETRY_CONFIG_ID}/`. When not set, products go to `{OUTPUT_DIRECTORY}/{mission_name}/`. |
-| `BOUNDARY_DIRECTORY` | Parent directory where mission boundary polygons reside (used to clip imagery) |
+| `S3_BOUNDARY_DIR` | Parent directory in `S3_BUCKET_PUBLIC` where mission boundary polygons reside (used to clip imagery). Expected structure: `<S3_BOUNDARY_DIR>/<mission_name>/metadata-mission/<mission_name>_mission-metadata.gpkg`. |
 | `WORKING_DIR` | Directory within container for downloading and postprocessing (typically `/tmp/processing` which downloads data to the processing computer; can be changed to a persistent volume) |
 | `POSTPROCESSING_IMAGE_TAG` | Docker image tag for the postprocessing container (default: `latest`). Use a specific branch name or tag to test development versions (e.g., `dy-manila`) |
 | `DB_*` | Database parameters for logging Argo status (not currently functional; credentials in [OFO credentials document](https://docs.google.com/document/d/155AP0P3jkVa-yT53a-QLp7vBAfjRa78gdST1Dfb4fls/edit?tab=t.0)) |
