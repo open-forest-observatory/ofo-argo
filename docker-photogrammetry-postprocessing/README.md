@@ -23,12 +23,12 @@ For the standalone docker image to work, there needs to exist a directory in the
         ├── dataset1_dsm-ptcloud.tif
         ├── dataset1_dtm-ptcloud.tif
         ├── dataset1_ortho-dtm-ptcloud.tif
-        ├── dataset1_points-copc.laz
+        ├── dataset1_points.copc.laz
         └── dataset1_report.pdf
         ├── dataset2_dsm-ptcloud.tif
         ├── dataset2_dtm-ptcloud.tif
         ├── dataset2_ortho-dtm-ptcloud.tif
-        ├── dataset2_points-copc.laz
+        ├── dataset2_points.copc.laz
         └── dataset2_report.pdf
 ```
 
@@ -96,7 +96,7 @@ S3:ofo-public/S3_POSTPROCESSED_DIR/dataset1/photogrammetry_01/
 │   ├── mission_dsm-ptcloud.tif
 │   ├── mission_dtm-ptcloud.tif
 │   ├── mission_chm-ptcloud.tif
-│   └── mission_points-copc.laz
+│   └── mission_points.copc.laz
 └── thumbnails/
     ├── mission_ortho-dtm-ptcloud.png
     ├── mission_dsm-ptcloud.png
@@ -495,7 +495,7 @@ S3:{S3_BUCKET_PUBLIC}/{S3_POSTPROCESSED_DIR}/
     │   │   ├── mission_dtm-ptcloud.tif
     │   │   ├── mission_chm-ptcloud.tif
     │   │   ├── mission_chm-mesh.tif
-    │   │   └── mission_points-copc.laz
+    │   │   └── mission_points.copc.laz
     │   └── thumbnails/
     │       ├── mission_ortho-dtm-ptcloud.png
     │       ├── mission_dsm-ptcloud.png

@@ -669,7 +669,7 @@ The final outputs will be written to `S3:ofo-public` in the following directory 
                ├── dataset1_dtm-ptcloud.tif
                ├── dataset1_log.txt
                ├── dataset1_ortho-dtm-ptcloud.tif
-               ├── dataset1_points-copc.laz
+               ├── dataset1_points.copc.laz
                └── dataset1_report.pdf
             ├── thumbnails/
                ├── dataset1_chm-ptcloud.png
@@ -684,7 +684,7 @@ The final outputs will be written to `S3:ofo-public` in the following directory 
                ├── dataset1_dtm-ptcloud.tif
                ├── dataset1_log.txt
                ├── dataset1_ortho-dtm-ptcloud.tif
-               ├── dataset1_points-copc.laz
+               ├── dataset1_points.copc.laz
                └── dataset1_report.pdf
             ├── thumbnails/
                ├── dataset1_chm-ptcloud.png
