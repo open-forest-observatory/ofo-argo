@@ -127,6 +127,7 @@ def main():
 
     # Process each mission
     success_count = 0
+    config_filenames = []
     for idx, row in missions_gdf.iterrows():
         mission_id = row["mission_id"]
         sub_mission_ids_str = row["sub_mission_ids"]
@@ -155,13 +156,23 @@ def main():
         )
 
         # Write to output file
-        output_path = output_dir / f"{mission_id}.yml"
+        output_filename = f"{mission_id}.yml"
+        output_path = output_dir / output_filename
         with open(output_path, "w") as f:
             yaml.dump(derived_config, f, default_flow_style=False, sort_keys=False)
 
+        config_filenames.append(output_filename)
         success_count += 1
 
+    # Write config list file
+    config_list_path = output_dir / "config-list.txt"
+    with open(config_list_path, "w") as f:
+        for filename in config_filenames:
+            f.write(f"{filename}\n")
+        f.write("\n")
+
     print(f"Successfully created {success_count} derived config files in: {output_dir}")
+    print(f"Config list written to: {config_list_path}")
 
 
 if __name__ == "__main__":
