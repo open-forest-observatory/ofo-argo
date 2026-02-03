@@ -149,7 +149,7 @@ argo submit -n argo photogrammetry-workflow.yaml \
 -p OUTPUT_DIRECTORY=jgillan_test \
 -p S3_BOUNDARY_DIR=jgillan_test \
 -p WORKING_DIR=/argo-output/temp-working-dir \
--p POSTPROCESSING_IMAGE_TAG=latest
+-p OFO_ARGO_IMAGES_TAG=latest
 ```
 
 Database parameters (not currently functional):
@@ -173,7 +173,7 @@ Database parameters (not currently functional):
 | `OUTPUT_DIRECTORY` | Name of parent folder where postprocessed products are uploaded. When `PHOTOGRAMMETRY_CONFIG_ID` is set, products are organized as `{OUTPUT_DIRECTORY}/{mission_name}/photogrammetry_{PHOTOGRAMMETRY_CONFIG_ID}/`. When not set, products go to `{OUTPUT_DIRECTORY}/{mission_name}/`. |
 | `S3_BOUNDARY_DIR` | Parent directory in `S3_BUCKET_PUBLIC` where mission boundary polygons reside (used to clip imagery). Expected structure: `<S3_BOUNDARY_DIR>/<mission_name>/metadata-mission/<mission_name>_mission-metadata.gpkg`. |
 | `WORKING_DIR` | Directory within container for downloading and postprocessing (typically `/tmp/processing` which downloads data to the processing computer; can be changed to a persistent volume) |
-| `POSTPROCESSING_IMAGE_TAG` | Docker image tag for the postprocessing container (default: `latest`). Use a specific branch name or tag to test development versions (e.g., `dy-manila`) |
+| `OFO_ARGO_IMAGES_TAG` | Docker image tag for OFO Argo containers (postprocessing) (default: `latest`). Use a specific branch name or tag to test development versions (e.g., `dy-manila`) |
 | `DB_*` | Database parameters for logging Argo status (not currently functional; credentials in [OFO credentials document](https://docs.google.com/document/d/155AP0P3jkVa-yT53a-QLp7vBAfjRa78gdST1Dfb4fls/edit?tab=t.0)) |
 
 **Secrets configuration:**

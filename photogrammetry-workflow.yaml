@@ -60,8 +60,8 @@ spec:
         value: "/tmp/processing"
       # - name: OUTPUT_MAX_DIM
       #   value: "800"
-      # Docker image tag for postprocessing container
-      - name: POSTPROCESSING_IMAGE_TAG
+      # Docker image tag for OFO Argo containers (postprocessing)
+      - name: OFO_ARGO_IMAGES_TAG
         value: "latest"
 
   # Defining where to read raw drone imagery data and write out imagery products to `/ofo-share`
@@ -318,7 +318,7 @@ spec:
           - name: dataset-name
           - name: photogrammetry-config-subfolder
       container:
-        image: ghcr.io/open-forest-observatory/photogrammetry-postprocessing:{{workflow.parameters.POSTPROCESSING_IMAGE_TAG}}
+        image: ghcr.io/open-forest-observatory/photogrammetry-postprocessing:{{workflow.parameters.OFO_ARGO_IMAGES_TAG}}
         volumeMounts:
           - name: data
             mountPath: /data

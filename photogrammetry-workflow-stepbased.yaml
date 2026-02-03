@@ -44,10 +44,8 @@ spec:
         value: ""
       # - name: OUTPUT_MAX_DIM
       #   value: "800"
-      # Docker image tag for postprocessing container
-      - name: POSTPROCESSING_IMAGE_TAG
-        value: "latest"
-      - name: UTILS_IMAGE_TAG
+      # Docker image tag for OFO Argo containers (postprocessing, argo-workflow-utils)
+      - name: OFO_ARGO_IMAGES_TAG
         value: "latest"
       # Docker image tag for automate-metashape container
       - name: AUTOMATE_METASHAPE_IMAGE_TAG
@@ -200,7 +198,7 @@ spec:
       nodeSelector:
         feature.node.kubernetes.io/workload-type: cpu
       container:
-        image: ghcr.io/open-forest-observatory/argo-workflow-utils:{{workflow.parameters.UTILS_IMAGE_TAG}}
+        image: ghcr.io/open-forest-observatory/argo-workflow-utils:{{workflow.parameters.OFO_ARGO_IMAGES_TAG}}
         volumeMounts:
           - name: data
             mountPath: /data
@@ -674,7 +672,7 @@ spec:
       nodeSelector:
         feature.node.kubernetes.io/workload-type: cpu
       container:
-        image: ghcr.io/open-forest-observatory/argo-workflow-utils:{{workflow.parameters.UTILS_IMAGE_TAG}}
+        image: ghcr.io/open-forest-observatory/argo-workflow-utils:{{workflow.parameters.OFO_ARGO_IMAGES_TAG}}
         volumeMounts:
           - name: data
             mountPath: /data
@@ -723,7 +721,7 @@ spec:
       nodeSelector:
         feature.node.kubernetes.io/workload-type: cpu
       container:
-        image: ghcr.io/open-forest-observatory/argo-workflow-utils:{{workflow.parameters.UTILS_IMAGE_TAG}}
+        image: ghcr.io/open-forest-observatory/argo-workflow-utils:{{workflow.parameters.OFO_ARGO_IMAGES_TAG}}
         volumeMounts:
           - name: data
             mountPath: /data
@@ -754,7 +752,7 @@ spec:
       nodeSelector:
         feature.node.kubernetes.io/workload-type: cpu
       container:
-        image: ghcr.io/open-forest-observatory/argo-workflow-utils:{{workflow.parameters.UTILS_IMAGE_TAG}}
+        image: ghcr.io/open-forest-observatory/argo-workflow-utils:{{workflow.parameters.OFO_ARGO_IMAGES_TAG}}
         volumeMounts:
           - name: data
             mountPath: /data
@@ -866,7 +864,7 @@ spec:
       nodeSelector:
         feature.node.kubernetes.io/workload-type: cpu
       container:
-        image: ghcr.io/open-forest-observatory/photogrammetry-postprocessing:{{workflow.parameters.POSTPROCESSING_IMAGE_TAG}}
+        image: ghcr.io/open-forest-observatory/photogrammetry-postprocessing:{{workflow.parameters.OFO_ARGO_IMAGES_TAG}}
         volumeMounts:
           - name: data
             mountPath: /data

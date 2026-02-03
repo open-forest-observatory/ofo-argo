@@ -521,8 +521,7 @@ argo submit -n argo photogrammetry-workflow-stepbased.yaml \
   -p S3_BUCKET_PUBLIC=ofo-public \
   -p S3_POSTPROCESSED_DIR=drone_dytest02 \
   -p S3_BOUNDARY_DIR=drone_dytest02 \
-  -p POSTPROCESSING_IMAGE_TAG=latest \
-  -p UTILS_IMAGE_TAG=latest \
+  -p OFO_ARGO_IMAGES_TAG=latest \
   -p AUTOMATE_METASHAPE_IMAGE_TAG=latest
 ```
 
@@ -550,8 +549,7 @@ Database parameters (not currently functional):
 | `S3_BUCKET_PUBLIC` | S3 bucket for public/final outputs (postprocessed, clipped products ready for distribution) and where boundary files are stored (typically `ofo-public`). |
 | `S3_POSTPROCESSED_DIR` | S3 directory name for postprocessed outputs. When `PHOTOGRAMMETRY_CONFIG_ID` is set, products are organized as `{S3_POSTPROCESSED_DIR}/{mission_name}/photogrammetry_{PHOTOGRAMMETRY_CONFIG_ID}/`. When not set, products go to `{S3_POSTPROCESSED_DIR}/{mission_name}/`. Example: `drone/missions_03` |
 | `S3_BOUNDARY_DIR` | Parent directory in `S3_BUCKET_PUBLIC` where mission boundary polygons reside (used to clip imagery). The structure beneath this directory is assumed to be: `<S3_BOUNDARY_DIR>/<mission_name>/metadata-mission/<mission_name>_mission-metadata.gpkg`. Example: `drone/missions_03` |
-| `POSTPROCESSING_IMAGE_TAG` | Docker image tag for the postprocessing container (default: `latest`). Use a specific branch name or tag to test development versions (e.g., `dy-manila`) |
-| `UTILS_IMAGE_TAG` | Docker image tag for the argo-workflow-utils container (default: `latest`). Use a specific branch name or tag to test development versions (e.g., `dy-manila`) |
+| `OFO_ARGO_IMAGES_TAG` | Docker image tag for OFO Argo containers (postprocessing and argo-workflow-utils) (default: `latest`). Use a specific branch name or tag to test development versions (e.g., `dy-manila`) |
 | `AUTOMATE_METASHAPE_IMAGE_TAG` | Docker image tag for the automate-metashape container (default: `latest`). Use a specific branch name or tag to test development versions |
 | `DB_*` | Database parameters for logging Argo status (not currently functional; credentials in [OFO credentials document](https://docs.google.com/document/d/155AP0P3jkVa-yT53a-QLp7vBAfjRa78gdST1Dfb4fls/edit?tab=t.0)) |
 
