@@ -99,8 +99,30 @@ def crop_raster_save_cog(
         # Get geometries for masking
         geometries = mission_polygon_matched.geometry.values
 
-        # Crop raster to polygon
-        cropped_data, cropped_transform = mask(src, geometries, crop=True)
+        # Determine nodata value and whether dtype promotion is needed
+        promote_dtype = False
+        demote_float64 = False
+        if src.nodata is not None:
+            nodata_value = src.nodata
+        elif src.dtypes[0] == "uint8":
+            # Promote uint8 to int16 to allow nodata value outside 0-255 range
+            nodata_value = -32767
+            promote_dtype = True
+            print(
+                f"  Warning: {output_filename} has no nodata defined. "
+                "Promoting uint8 to int16 to enable nodata masking."
+            )
+        else:
+            nodata_value = -9999
+
+        # Convert float64 to float32 to save space
+        if src.dtypes[0] == "float64":
+            demote_float64 = True
+
+        # Crop raster to polygon, explicitly setting nodata outside polygon
+        cropped_data, cropped_transform = mask(
+            src, geometries, crop=True, nodata=nodata_value, filled=True
+        )
 
         # Update metadata for COG
         profile = src.profile.copy()
@@ -112,9 +134,18 @@ def crop_raster_save_cog(
                 "height": cropped_data.shape[1],
                 "width": cropped_data.shape[2],
                 "transform": cropped_transform,
+                "nodata": nodata_value,
                 "BIGTIFF": "IF_SAFER",
             }
         )
+
+        # Apply dtype changes if needed
+        if promote_dtype:
+            profile["dtype"] = "int16"
+            cropped_data = cropped_data.astype("int16")
+        elif demote_float64:
+            profile["dtype"] = "float32"
+            cropped_data = cropped_data.astype("float32")
 
         # Write output
         output_file_path = os.path.join(output_path, "full", output_filename)
@@ -128,6 +159,9 @@ def make_chm(dsm_filepath, dtm_filepath):
     """
     Create a Canopy Height Model (CHM) from DSM and DTM.
 
+    Only pixels with valid data in both DSM and DTM will have values in the CHM.
+    Pixels where either input has nodata will be set to nodata in the output.
+
     Args:
         dsm_filepath: Path to Digital Surface Model
         dtm_filepath: Path to Digital Terrain Model
@@ -135,25 +169,29 @@ def make_chm(dsm_filepath, dtm_filepath):
     Returns:
         Tuple of (chm_array, profile) for writing
     """
-    # Read DSM
+    # Read DSM with masked array to handle nodata
     with rasterio.open(dsm_filepath) as dsm_src:
-        dsm_data = dsm_src.read(1)
+        dsm_data = dsm_src.read(1, masked=True)
         dsm_profile = dsm_src.profile.copy()
         dsm_transform = dsm_src.transform
         dsm_crs = dsm_src.crs
         dsm_shape = dsm_data.shape
+        dsm_nodata = dsm_src.nodata
 
     # Read DTM and reproject to match DSM
     with rasterio.open(dtm_filepath) as dtm_src:
+        dtm_nodata = dtm_src.nodata
+
         # Calculate transform for reprojection
         transform, width, height = calculate_default_transform(
             dtm_src.crs, dsm_crs, dtm_src.width, dtm_src.height, *dtm_src.bounds
         )
 
-        # Create array for reprojected DTM with same shape as DSM
-        dtm_reprojected = np.empty(dsm_shape, dtype=dtm_src.dtypes[0])
+        # Initialize array with nodata value (instead of empty/uninitialized)
+        dtm_fill_value = dtm_nodata if dtm_nodata is not None else -9999
+        dtm_reprojected = np.full(dsm_shape, dtm_fill_value, dtype=dtm_src.dtypes[0])
 
-        # Reproject DTM to match DSM
+        # Reproject DTM to match DSM, with explicit nodata handling
         reproject(
             source=rasterio.band(dtm_src, 1),
             destination=dtm_reprojected,
@@ -161,13 +199,25 @@ def make_chm(dsm_filepath, dtm_filepath):
             src_crs=dtm_src.crs,
             dst_transform=dsm_transform,
             dst_crs=dsm_crs,
+            src_nodata=dtm_nodata,
+            dst_nodata=dtm_fill_value,
             resampling=Resampling.bilinear,
         )
 
-    # Calculate CHM
+    # Convert reprojected DTM to masked array
+    dtm_reprojected = np.ma.masked_equal(dtm_reprojected, dtm_fill_value)
+
+    # Calculate CHM - mask propagates automatically (nodata in either input = nodata in output)
     chm_data = dsm_data - dtm_reprojected
 
-    return chm_data, dsm_profile
+    # Convert back to regular array, filling masked values with nodata
+    chm_nodata = dsm_nodata if dsm_nodata is not None else -9999
+    chm_filled = chm_data.filled(chm_nodata)
+
+    # Update profile with nodata value
+    dsm_profile.update({"nodata": chm_nodata})
+
+    return chm_filled, dsm_profile
 
 
 def create_thumbnail(tif_filepath, output_path, max_dim=800):
@@ -199,9 +249,9 @@ def create_thumbnail(tif_filepath, output_path, max_dim=800):
         fig, ax = plt.subplots(figsize=(fig_width, fig_height), dpi=dpi)
 
         if n_bands == 1:
-            # Single-band grayscale
+            # Single-band (elevation data, CHM, etc.)
             data = src.read(1, out_shape=(new_n_row, new_n_col))
-            ax.imshow(data, cmap="gray")
+            ax.imshow(data, cmap="viridis")
         elif n_bands >= 3:
             # RGB (use first 3 bands)
             rgb = np.dstack(
@@ -216,7 +266,7 @@ def create_thumbnail(tif_filepath, output_path, max_dim=800):
         else:
             # Fallback for 2-band images
             data = src.read(1, out_shape=(new_n_row, new_n_col))
-            ax.imshow(data, cmap="gray")
+            ax.imshow(data, cmap="viridis")
 
         # Remove axes and margins
         ax.axis("off")
