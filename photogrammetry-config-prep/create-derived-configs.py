@@ -13,6 +13,8 @@ import math
 from pathlib import Path
 
 import geopandas as gpd
+from shapely.geometry import Point
+from shapely.ops import unary_union
 import yaml
 
 
@@ -22,6 +24,13 @@ import yaml
 
 # Path to the GeoPackage containing drone mission polygons and metadata
 MISSIONS_GPKG_PATH = "/home/derek/repos/ofo-argo/photogrammetry-config-prep/config-prep-runs/run-03/input/ofo-all-missions-metadata-curated.gpkg"
+
+# Path to the KML file defining the priority area (missions near this area are processed first)
+# Set to None to disable priority sorting
+PRIORITY_AREA_KML_PATH = "/home/derek/repos/ofo-argo/photogrammetry-config-prep/config-prep-runs/run-03/input/priority-area.kml"
+
+# Buffer distance in degrees for priority area proximity check (~0.1 degrees ≈ 10km at mid-latitudes)
+PRIORITY_BUFFER_DEGREES = 0.1
 
 # Path to the base automate-metashape configuration YAML
 BASE_CONFIG_PATH = "/home/derek/repos/ofo-argo/photogrammetry-config-prep/config-prep-runs/run-03/input/config-base.yml"
@@ -117,6 +126,18 @@ def main():
     missions_gdf = gpd.read_file(gpkg_path)
     print(f"Found {len(missions_gdf)} missions")
 
+    # Load priority area if specified
+    priority_area_buffered = None
+    if PRIORITY_AREA_KML_PATH:
+        priority_kml_path = Path(PRIORITY_AREA_KML_PATH)
+        if priority_kml_path.exists():
+            print(f"Loading priority area from: {priority_kml_path}")
+            priority_gdf = gpd.read_file(priority_kml_path)
+            # Merge all geometries and buffer by the configured distance
+            priority_area = unary_union(priority_gdf.geometry)
+            priority_area_buffered = priority_area.buffer(PRIORITY_BUFFER_DEGREES)
+            print(f"Priority area loaded and buffered by {PRIORITY_BUFFER_DEGREES} degrees (~10km)")
+
     # Load base configuration
     print(f"Loading base config from: {base_config_path}")
     with open(base_config_path) as f:
@@ -127,7 +148,8 @@ def main():
 
     # Process each mission
     success_count = 0
-    config_filenames = []
+    priority_config_filenames = []
+    standard_config_filenames = []
     for idx, row in missions_gdf.iterrows():
         mission_id = row["mission_id"]
         sub_mission_ids_str = row["sub_mission_ids"]
@@ -161,17 +183,28 @@ def main():
         with open(output_path, "w") as f:
             yaml.dump(derived_config, f, default_flow_style=False, sort_keys=False)
 
-        config_filenames.append(output_filename)
+        # Classify as priority or standard based on centroid location
+        if priority_area_buffered is not None and priority_area_buffered.contains(Point(centroid.x, centroid.y)):
+            priority_config_filenames.append(output_filename)
+        else:
+            standard_config_filenames.append(output_filename)
         success_count += 1
 
-    # Write config list file
+    # Write config list file with priority and standard sections
     config_list_path = output_dir / "config-list.txt"
     with open(config_list_path, "w") as f:
-        for filename in config_filenames:
+        f.write("# High-priority missions\n")
+        for filename in priority_config_filenames:
+            f.write(f"{filename}\n")
+        f.write("\n")
+        f.write("# Standard-priority missions\n")
+        for filename in standard_config_filenames:
             f.write(f"{filename}\n")
         f.write("\n")
 
     print(f"Successfully created {success_count} derived config files in: {output_dir}")
+    print(f"  - Priority: {len(priority_config_filenames)}")
+    print(f"  - Standard: {len(standard_config_filenames)}")
     print(f"Config list written to: {config_list_path}")
 
 
