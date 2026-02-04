@@ -11,7 +11,7 @@ Usage:
 
 Environment Variables:
     CONFIG_FILE: Path to the original config file
-    OUTPUT_CONFIG_FILE: Path to write the transformed config (e.g., '{TEMP_WORKING_DIR}/{workflow_name}/configs/{iteration_id}-transformed.yml')
+    OUTPUT_CONFIG_FILE: Path to write the transformed config (e.g., '{TEMP_WORKING_DIR}/{workflow_name}/{iteration_id}/photogrammetry/config-transformed.yml')
     DOWNLOADED_IMAGERY_PATH: Actual path to downloaded imagery directory (e.g., '{TEMP_WORKING_DIR}/{workflow_name}/{iteration_id}/photogrammetry/downloaded-raw-imagery')
 
 Output:

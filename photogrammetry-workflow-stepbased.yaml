@@ -758,7 +758,7 @@ spec:
           - name: CONFIG_FILE
             value: "{{inputs.parameters.config-file}}"
           - name: OUTPUT_CONFIG_FILE
-            value: "{{workflow.parameters.TEMP_WORKING_DIR}}/{{workflow.name}}/configs/{{inputs.parameters.iteration-id}}-transformed.yml"
+            value: "{{workflow.parameters.TEMP_WORKING_DIR}}/{{workflow.name}}/{{inputs.parameters.iteration-id}}/photogrammetry/config-transformed.yml"
           - name: DOWNLOADED_IMAGERY_PATH
             value: "{{workflow.parameters.TEMP_WORKING_DIR}}/{{workflow.name}}/{{inputs.parameters.iteration-id}}/photogrammetry/downloaded-raw-imagery"
         resources:
@@ -768,7 +768,7 @@ spec:
       outputs:
         parameters:
           - name: transformed-config-path
-            value: "{{workflow.parameters.TEMP_WORKING_DIR}}/{{workflow.name}}/configs/{{inputs.parameters.iteration-id}}-transformed.yml"
+            value: "{{workflow.parameters.TEMP_WORKING_DIR}}/{{workflow.name}}/{{inputs.parameters.iteration-id}}/photogrammetry/config-transformed.yml"
 
     # --------- RCLONE UPLOAD (Docker image) ---------
     - name: rclone-upload-template
