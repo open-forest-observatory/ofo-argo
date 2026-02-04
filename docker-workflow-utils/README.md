@@ -17,6 +17,7 @@ Preprocessing script for the step-based photogrammetry workflow. Reads mission c
 **Purpose:**
 - Parse mission config files from config list
 - Extract project names and configuration paths
+- Generate unique iteration IDs for mission isolation
 - Determine which processing steps are enabled
 - Determine GPU vs CPU node scheduling for GPU-capable steps
 
@@ -51,7 +52,9 @@ container:
 [
   {
     "project_name": "mission_001",
+    "project_name_sanitized": "mission-001",
     "config": "argo-input/configs/mission_001.yml",
+    "iteration_id": "000_mission-001",
     "match_photos_enabled": "true",
     "match_photos_use_gpu": "true",
     "align_cameras_enabled": "true",
@@ -66,6 +69,8 @@ container:
   }
 ]
 ```
+
+**Note:** The `iteration_id` is a unique identifier (`{index}_{sanitized_project_name}`) used to isolate each mission's working directory and prevent collisions during parallel processing.
 
 ### `db_logger.py`
 

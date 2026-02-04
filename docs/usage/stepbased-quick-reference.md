@@ -257,6 +257,7 @@ Mission N (0-indexed) tasks appear as:
 - `process-datasets-N.finalize`
 - `process-datasets-N.rclone-upload-task`
 - `process-datasets-N.postprocessing-task`
+- `process-datasets-N.cleanup-iteration`
 
 ## Useful Argo CLI Options
 

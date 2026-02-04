@@ -36,7 +36,7 @@ export KUBECONFIG=~/.ofocluster/ofocluster.kubeconfig
 
 ## Workflow overview
 
-The step-based workflow executes **10 separate Metashape processing steps** as individual containerized tasks, followed by upload and post-processing. Each mission processes sequentially through these steps:
+The step-based workflow executes **10 separate Metashape processing steps** as individual containerized tasks, followed by upload, post-processing, and cleanup. Each mission processes sequentially through these steps:
 
 ### Metashape Processing Steps
 
@@ -55,12 +55,31 @@ The step-based workflow executes **10 separate Metashape processing steps** as i
 
 11. **rclone-upload-task** - Upload Metashape outputs to S3
 12. **postprocessing-task** - Generate CHMs, clip to boundaries, create COGs and thumbnails, upload to S3
+13. **cleanup-iteration** - Remove temporary iteration directories after successful postprocessing
 
 !!! info "Sequential Execution"
     Steps execute **sequentially within each mission** to prevent conflicts with shared Metashape project files. However, **multiple missions process in parallel**, each with its own step sequence.
+    
+    **Automatic Cleanup:** After postprocessing completes successfully, the workflow automatically removes the temporary iteration directory (`{TEMP_WORKING_DIR}/{workflow-name}/{iteration-id}/`) to free disk space, keeping only the final products uploaded to S3.
 
 !!! tip "Conditional Execution"
     Steps disabled in your config file are **completely skipped** - no container is created and no resources are allocated. This is more efficient than the original workflow where disabled operations still ran inside a single long-running container.
+
+### Iteration ID
+
+Each mission in the workflow is assigned a unique **iteration ID** for isolation and tracking. The iteration ID is automatically generated as `{index}_{project-name}` where:
+
+- `{index}` is a zero-padded 3-digit number (000, 001, 002, etc.) representing the mission's position in the config list
+- `{project-name}` is the sanitized project name from the config file (DNS-compliant: lowercase, alphanumeric with hyphens)
+
+**Example:** If processing "Mission_001" as the first mission, the iteration ID would be `000_mission-001`.
+
+The iteration ID is used to:
+
+- Create isolated working directories: `{TEMP_WORKING_DIR}/{workflow-name}/{iteration-id}/`
+- Prevent collisions between parallel mission processing
+- Enable unique identification even when multiple missions have the same project name
+- Organize downloaded imagery and intermediate files
 
 ## Setup
 
@@ -542,7 +561,7 @@ Database parameters (not currently functional):
 | Parameter | Description |
 |-----------|-------------|
 | `CONFIG_LIST` | **Absolute path** to text file listing metashape config files. Each line should be a config filename (resolved relative to the config list's directory) or an absolute path. Lines starting with `#` are comments. Example: `/data/argo-input/configs/config-list.txt` |
-| `TEMP_WORKING_DIR` | **Absolute path** for temporary workflow files (both photogrammetry and postprocessing). Workflow creates `photogrammetry/` and `postprocessing/` subdirectories automatically. All files are deleted after successful S3 upload. Example: `/data/argo-output/temp-runs/gillan_june27` |
+| `TEMP_WORKING_DIR` | **Absolute path** for temporary workflow files (both photogrammetry and postprocessing). Workflow creates `{workflow-name}/{iteration-id}/` subdirectories automatically for each mission. Iteration directories are automatically deleted after successful postprocessing to free disk space. Example: `/data/argo-output/temp-runs/gillan_june27` |
 | `PHOTOGRAMMETRY_CONFIG_ID` | Two-digit configuration ID (e.g., `01`, `02`) used to organize outputs into `photogrammetry_NN` subdirectories in S3 for both raw and postprocessed products. If not specified or set to `NONE`, both raw and postprocessed products are stored without the `photogrammetry_NN` subfolder. |
 | `S3_BUCKET_INTERNAL` | S3 bucket for internal/intermediate outputs where raw Metashape products (orthomosaics, point clouds, DEMs) are uploaded (typically `ofo-internal`). |
 | `S3_PHOTOGRAMMETRY_DIR` | S3 directory name for raw Metashape outputs. When `PHOTOGRAMMETRY_CONFIG_ID` is set, products upload to `{S3_BUCKET_INTERNAL}/{S3_PHOTOGRAMMETRY_DIR}/photogrammetry_{PHOTOGRAMMETRY_CONFIG_ID}/`. When `PHOTOGRAMMETRY_CONFIG_ID` is not set, products go to `{bucket}/{S3_PHOTOGRAMMETRY_DIR}/`. Example: `photogrammetry-outputs` |
