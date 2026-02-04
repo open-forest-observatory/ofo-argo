@@ -106,14 +106,17 @@ def _crop_rgb_orthomosaic(src, geometries, output_filename):
         output_filename: Output filename (for logging)
 
     Returns:
-        Tuple of (cropped_data, cropped_transform, profile)
+        Tuple of (cropped_data, cropped_transform, profile, colorinterp)
     """
     has_alpha = src.count == 4
 
+    # Preserve color interpretation from input, adding alpha if needed
     if has_alpha:
         print(f"  {output_filename}: 4-band uint8 with alpha detected, preserving format")
+        colorinterp = list(src.colorinterp)
     else:
         print(f"  {output_filename}: 3-band uint8 detected, adding alpha band")
+        colorinterp = list(src.colorinterp) + [ColorInterp.alpha]
 
     # Read RGB bands (first 3 bands)
     # Use nodata=0 for the mask operation on RGB bands
@@ -166,7 +169,7 @@ def _crop_rgb_orthomosaic(src, geometries, output_filename):
         }
     )
 
-    return cropped_data, cropped_transform, profile
+    return cropped_data, cropped_transform, profile, colorinterp
 
 
 def crop_raster_save_cog(
@@ -193,8 +196,9 @@ def crop_raster_save_cog(
         geometries = mission_polygon_matched.geometry.values
 
         # Handle RGB orthomosaics specially (3 or 4 band uint8)
+        colorinterp = None
         if _is_rgb_orthomosaic(src):
-            cropped_data, cropped_transform, profile = _crop_rgb_orthomosaic(
+            cropped_data, cropped_transform, profile, colorinterp = _crop_rgb_orthomosaic(
                 src, geometries, output_filename
             )
         else:
@@ -248,14 +252,9 @@ def crop_raster_save_cog(
         with rasterio.open(output_file_path, "w", **profile) as dst:
             dst.write(cropped_data)
 
-            # Set color interpretation for RGBA so QGIS recognizes alpha band
-            if profile.get("count") == 4 and profile.get("dtype") == "uint8":
-                dst.colorinterp = [
-                    ColorInterp.red,
-                    ColorInterp.green,
-                    ColorInterp.blue,
-                    ColorInterp.alpha,
-                ]
+            # Set color interpretation for RGBA so GIS software recognizes alpha band
+            if colorinterp is not None:
+                dst.colorinterp = colorinterp
 
     print(f"  Saved COG: {output_filename}")
 
@@ -357,7 +356,8 @@ def create_thumbnail(tif_filepath, output_path, max_dim=800):
 
         if n_bands == 1:
             # Single-band (elevation data, CHM, etc.)
-            data = src.read(1, out_shape=(new_n_row, new_n_col))
+            # Read as masked array to handle nodata (renders as transparent)
+            data = src.read(1, out_shape=(new_n_row, new_n_col), masked=True)
             ax.imshow(data, cmap="viridis")
         elif n_bands == 4 and src.dtypes[0] == "uint8":
             # RGBA (4-band uint8 with alpha)
