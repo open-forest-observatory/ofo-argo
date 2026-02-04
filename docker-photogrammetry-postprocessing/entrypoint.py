@@ -152,9 +152,7 @@ def download_photogrammetry_products():
 
     try:
         subprocess.run(copy_cmd, check=True)
-        files = (
-            os.listdir(local_input_dir) if os.path.exists(local_input_dir) else []
-        )
+        files = os.listdir(local_input_dir) if os.path.exists(local_input_dir) else []
 
         if not files:
             print(
@@ -258,9 +256,7 @@ def detect_and_match_missions():
         return None
 
     # Find boundary file directly in boundary/ directory
-    boundary_file = os.path.join(
-        boundary_dir, f"{project_name}_mission-metadata.gpkg"
-    )
+    boundary_file = os.path.join(boundary_dir, f"{project_name}_mission-metadata.gpkg")
 
     if not os.path.exists(boundary_file):
         print(

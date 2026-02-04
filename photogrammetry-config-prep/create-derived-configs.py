@@ -50,6 +50,7 @@ S3_DRONE_MISSIONS_PATH = "ofo-public/drone/missions_03"
 # Helper Functions
 # =============================================================================
 
+
 def compute_utm_epsg(longitude: float, latitude: float) -> str:
     """
     Compute the UTM EPSG code for a given longitude/latitude.
@@ -115,6 +116,7 @@ def create_derived_config(
 # Main Script
 # =============================================================================
 
+
 def main():
     gpkg_path = Path(MISSIONS_GPKG_PATH)
     base_config_path = Path(BASE_CONFIG_PATH)
@@ -135,7 +137,9 @@ def main():
             # Merge all geometries and buffer by the configured distance
             priority_area = unary_union(priority_gdf.geometry)
             priority_area_buffered = priority_area.buffer(PRIORITY_BUFFER_DEGREES)
-            print(f"Priority area loaded and buffered by {PRIORITY_BUFFER_DEGREES} degrees (~10km)")
+            print(
+                f"Priority area loaded and buffered by {PRIORITY_BUFFER_DEGREES} degrees (~10km)"
+            )
 
     # Load base configuration
     print(f"Loading base config from: {base_config_path}")
@@ -154,7 +158,9 @@ def main():
         sub_mission_ids_str = row["sub_mission_ids"]
 
         # Validate sub_mission_ids
-        if not sub_mission_ids_str or (isinstance(sub_mission_ids_str, float) and math.isnan(sub_mission_ids_str)):
+        if not sub_mission_ids_str or (
+            isinstance(sub_mission_ids_str, float) and math.isnan(sub_mission_ids_str)
+        ):
             raise ValueError(f"Mission {mission_id} has empty or null sub_mission_ids")
 
         # Compute centroid for UTM zone calculation
@@ -165,7 +171,9 @@ def main():
         photo_paths = parse_sub_mission_ids(str(sub_mission_ids_str), str(mission_id))
 
         # Generate S3 download path
-        s3_download_path = f"{S3_DRONE_MISSIONS_PATH}/{mission_id}/images/{mission_id}_images.zip"
+        s3_download_path = (
+            f"{S3_DRONE_MISSIONS_PATH}/{mission_id}/images/{mission_id}_images.zip"
+        )
 
         # Create derived config
         derived_config = create_derived_config(
@@ -183,7 +191,9 @@ def main():
             yaml.dump(derived_config, f, default_flow_style=False, sort_keys=False)
 
         # Classify as priority or standard based on centroid location
-        if priority_area_buffered is not None and priority_area_buffered.contains(Point(centroid.x, centroid.y)):
+        if priority_area_buffered is not None and priority_area_buffered.contains(
+            Point(centroid.x, centroid.y)
+        ):
             priority_config_filenames.append(output_filename)
         else:
             standard_config_filenames.append(output_filename)

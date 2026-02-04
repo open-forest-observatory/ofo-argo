@@ -103,7 +103,7 @@ def transform_path(path: str, download_path: str) -> str:
     if path.startswith(DOWNLOAD_PREFIX):
         # Replace prefix with actual download path
         # Handle both "__DOWNLOADED__/subpath" and "__DOWNLOADED__" alone
-        suffix = path[len(DOWNLOAD_PREFIX):]
+        suffix = path[len(DOWNLOAD_PREFIX) :]
         if suffix.startswith("/"):
             suffix = suffix[1:]  # Remove leading slash for clean join
         if suffix:
@@ -139,6 +139,7 @@ def transform_config(config: Dict[str, Any], download_path: str) -> Dict[str, An
     """
     # Deep copy to avoid modifying original
     import copy
+
     transformed = copy.deepcopy(config)
 
     # Get project section
@@ -165,7 +166,9 @@ def transform_config(config: Dict[str, Any], download_path: str) -> Dict[str, An
 
             # Preserve original format
             if isinstance(photo_path_secondary, str):
-                project["photo_path_secondary"] = transformed_paths[0] if transformed_paths else ""
+                project["photo_path_secondary"] = (
+                    transformed_paths[0] if transformed_paths else ""
+                )
             else:
                 project["photo_path_secondary"] = transformed_paths
 
@@ -217,17 +220,25 @@ def main() -> None:
     photo_path_secondary = project.get("photo_path_secondary")
 
     # Normalize paths for checking
-    all_paths = normalize_photo_path(photo_path) + normalize_photo_path(photo_path_secondary)
+    all_paths = normalize_photo_path(photo_path) + normalize_photo_path(
+        photo_path_secondary
+    )
 
     # Validation: This script should only be called when downloads are configured,
     # so at least one path should use __DOWNLOADED__ prefix
     if not has_download_prefix(all_paths):
         print("ERROR: Configuration mismatch detected")
-        print("  This script was called (implying S3 imagery downloads are configured),")
+        print(
+            "  This script was called (implying S3 imagery downloads are configured),"
+        )
         print("  but no photo_path entries use the __DOWNLOADED__ prefix.")
         print("  Either:")
-        print("    1. Add __DOWNLOADED__ prefix to photo_path entries that should use downloaded imagery")
-        print("    2. Remove s3_imagery_zip_download from argo config if not using downloaded imagery")
+        print(
+            "    1. Add __DOWNLOADED__ prefix to photo_path entries that should use downloaded imagery"
+        )
+        print(
+            "    2. Remove s3_imagery_zip_download from argo config if not using downloaded imagery"
+        )
         print(f"  Current photo_path: {photo_path}")
         if photo_path_secondary:
             print(f"  Current photo_path_secondary: {photo_path_secondary}")
@@ -251,7 +262,9 @@ def main() -> None:
     print(f"  Original photo_path: {photo_path}")
     print(f"  Transformed photo_path: {transformed_photo_path}")
 
-    if photo_path_secondary and has_download_prefix(normalize_photo_path(photo_path_secondary)):
+    if photo_path_secondary and has_download_prefix(
+        normalize_photo_path(photo_path_secondary)
+    ):
         transformed_secondary = transformed_project.get("photo_path_secondary")
         print(f"  Original photo_path_secondary: {photo_path_secondary}")
         print(f"  Transformed photo_path_secondary: {transformed_secondary}")

@@ -184,7 +184,9 @@ def main() -> None:
         sys.exit(1)
 
     if not isinstance(imagery_urls, list):
-        print(f"ERROR: IMAGERY_ZIP_URLS must be a JSON array, got: {type(imagery_urls).__name__}")
+        print(
+            f"ERROR: IMAGERY_ZIP_URLS must be a JSON array, got: {type(imagery_urls).__name__}"
+        )
         sys.exit(1)
 
     if not imagery_urls:
