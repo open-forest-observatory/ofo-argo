@@ -1,0 +1,1586 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+      
+      
+        <link rel="canonical" href="https://open-forest-observatory.github.io/ofo-argo/plans/s3-imagery-download-feature/">
+      
+      
+        <link rel="prev" href="../../admin/manila-share-mounting/">
+      
+      
+        <link rel="next" href="../../usage/">
+      
+      
+        
+      
+      
+      <link rel="icon" href="../../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.1">
+    
+    
+      
+        <title>Implementation Plan: S3 Imagery Zip Download Feature - OFO Argo Documentation</title>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/stylesheets/main.484c7ddc.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    <body dir="ltr">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#implementation-plan-s3-imagery-zip-download-feature" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="../.." title="OFO Argo Documentation" class="md-header__button md-logo" aria-label="OFO Argo Documentation" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            OFO Argo Documentation
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Implementation Plan: S3 Imagery Zip Download Feature
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+
+<nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../.." title="OFO Argo Documentation" class="md-nav__button md-logo" aria-label="OFO Argo Documentation" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    OFO Argo Documentation
+  </label>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../.." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    OFO Argo Workflows Documentation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../../usage/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    User guides
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_2" id="__nav_2_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    User guides
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../usage/cluster-access-and-resizing/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Cluster access and resizing
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../usage/argo-usage/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Using Argo on the OFO cluster
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../usage/photogrammetry-workflow/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Running the photogrammetry workflow
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../usage/stepbased-workflow/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Running the step-based photogrammetry workflow
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../usage/stepbased-quick-reference/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Step-based workflow quick reference
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../../admin/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Administrator guides
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_3" id="__nav_3_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Administrator guides
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../admin/cluster-creation-and-resizing/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Cluster creation and resizing
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../admin/manila-share-mounting/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Manila share mounting
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../admin/argo-installation-on-cluster/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Argo installation on cluster
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#context" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Context
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#problem-statement" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Problem Statement
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#goals" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Goals
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#non-goals-future-possibilities" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Non-Goals (Future Possibilities)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#user-experience" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        User Experience
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="User Experience">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#config-file-example" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Config File Example
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#expected-behavior" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Expected Behavior
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#architecture-overview" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Architecture Overview
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Architecture Overview">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#download-location" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Download Location
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#workflow-dag-changes" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Workflow DAG Changes
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#implementation-steps" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Implementation Steps
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Implementation Steps">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#step-1-update-config-parsing-in-determine_datasetspy" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Step 1: Update Config Parsing in determine_datasets.py
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#step-2-create-download-script" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Step 2: Create Download Script
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#step-3-create-config-transform-script" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Step 3: Create Config Transform Script
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#step-4-create-cleanup-script" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Step 4: Create Cleanup Script
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#step-5-update-workflow-yaml" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Step 5: Update Workflow YAML
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Step 5: Update Workflow YAML">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#51-add-new-parameters-to-workflow" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5.1: Add New Parameters to Workflow
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#52-add-download-step-template" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5.2: Add Download Step Template
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#53-add-config-transform-step-template" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5.3: Add Config Transform Step Template
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#54-add-cleanup-step-template" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5.4: Add Cleanup Step Template
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#55-update-dag-structure" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5.5: Update DAG Structure
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#56-handle-config-path-switching" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5.6: Handle Config Path Switching
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#step-6-update-docker-image-build" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Step 6: Update Docker Image Build
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#step-7-update-parameter-passing-in-main-template" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Step 7: Update Parameter Passing in Main Template
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#step-8-update-documentation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Step 8: Update Documentation
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#testing-plan" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Testing Plan
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Testing Plan">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#unit-tests" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Unit Tests
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#integration-tests" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Integration Tests
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#rollback-plan" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Rollback Plan
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#future-enhancements" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Future Enhancements
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+
+<h1 id="implementation-plan-s3-imagery-zip-download-feature">Implementation Plan: S3 Imagery Zip Download Feature</h1>
+<h2 id="context">Context</h2>
+<p>The OFO step-based photogrammetry workflow currently requires imagery to already exist on the shared PVC at <code>/data/</code>. Users must manually upload imagery before running workflows, which is time-consuming and requires separate coordination.</p>
+<p>The workflow processes multiple projects in parallel using Argo's <code>withParam</code> mechanism. Each project has its own configuration file that specifies, among other things, the <code>photo_path</code> where imagery is located.</p>
+<h2 id="problem-statement">Problem Statement</h2>
+<p>Users need the ability to have the workflow automatically download imagery from S3 (via rclone) at runtime, rather than requiring imagery to be pre-staged on the PVC. This is especially useful for:
+- Running workflows on imagery stored in cloud object storage
+- Avoiding manual pre-upload steps
+- Processing imagery that doesn't need to persist after the workflow</p>
+<h2 id="goals">Goals</h2>
+<ol>
+<li>Allow users to specify S3 zip file(s) to download in the <code>argo:</code> section of their config</li>
+<li>Automatically download and unzip imagery before photogrammetry begins</li>
+<li>Provide a simple path prefix (<code>__DOWNLOADED__</code>) for users to reference downloaded imagery</li>
+<li>Isolate downloads per-project to prevent collisions in parallel execution</li>
+<li>Clean up downloaded imagery after workflow completion (configurable)</li>
+<li>Fail gracefully: individual project failures should not stop other projects</li>
+</ol>
+<h2 id="non-goals-future-possibilities">Non-Goals (Future Possibilities)</h2>
+<ul>
+<li>Sharing downloaded imagery between projects (would save bandwidth but adds complexity with timing and storage management)</li>
+<li>Downloading non-zip formats (tarballs, raw folders)</li>
+<li>Incremental/resumable downloads</li>
+<li>Per-project folder reorganization (see Future Enhancements section)</li>
+</ul>
+<hr />
+<h2 id="user-experience">User Experience</h2>
+<h3 id="config-file-example">Config File Example</h3>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nt">argo</span><span class="p">:</span>
+<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="w">  </span><span class="c1"># New: List of S3 zip files to download (can also be a single string)</span>
+<a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="w">  </span><span class="c1"># Format: bucket/path/file.zip (no remote prefix needed)</span>
+<a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="w">  </span><span class="c1"># S3 credentials come from the cluster&#39;s s3-credentials Kubernetes secret</span>
+<a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a><span class="w">  </span><span class="nt">s3_imagery_zip_download</span><span class="p">:</span>
+<a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a><span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">ofo-public/drone/missions_01/000558/images/000558_images.zip</span>
+<a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a><span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">ofo-public/drone/missions_01/000559/images/000559_images.zip</span>
+<a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a>
+<a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a><span class="w">  </span><span class="c1"># New: Whether to delete downloaded imagery after workflow (default: true)</span>
+<a id="__codelineno-0-10" name="__codelineno-0-10" href="#__codelineno-0-10"></a><span class="w">  </span><span class="nt">cleanup_downloaded_imagery</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+<a id="__codelineno-0-11" name="__codelineno-0-11" href="#__codelineno-0-11"></a>
+<a id="__codelineno-0-12" name="__codelineno-0-12" href="#__codelineno-0-12"></a><span class="w">  </span><span class="c1"># Existing settings...</span>
+<a id="__codelineno-0-13" name="__codelineno-0-13" href="#__codelineno-0-13"></a><span class="w">  </span><span class="nt">match_photos</span><span class="p">:</span>
+<a id="__codelineno-0-14" name="__codelineno-0-14" href="#__codelineno-0-14"></a><span class="w">    </span><span class="nt">gpu_enabled</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+<a id="__codelineno-0-15" name="__codelineno-0-15" href="#__codelineno-0-15"></a>
+<a id="__codelineno-0-16" name="__codelineno-0-16" href="#__codelineno-0-16"></a><span class="nt">project</span><span class="p">:</span>
+<a id="__codelineno-0-17" name="__codelineno-0-17" href="#__codelineno-0-17"></a><span class="w">  </span><span class="nt">project_name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">my_forest_plot</span>
+<a id="__codelineno-0-18" name="__codelineno-0-18" href="#__codelineno-0-18"></a><span class="w">  </span><span class="c1"># Use __DOWNLOADED__ prefix to reference downloaded imagery</span>
+<a id="__codelineno-0-19" name="__codelineno-0-19" href="#__codelineno-0-19"></a><span class="w">  </span><span class="nt">photo_path</span><span class="p">:</span>
+<a id="__codelineno-0-20" name="__codelineno-0-20" href="#__codelineno-0-20"></a><span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">__DOWNLOADED__/000558_images/000558-01</span>
+<a id="__codelineno-0-21" name="__codelineno-0-21" href="#__codelineno-0-21"></a><span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">__DOWNLOADED__/000558_images/000558-02</span>
+<a id="__codelineno-0-22" name="__codelineno-0-22" href="#__codelineno-0-22"></a><span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">__DOWNLOADED__/000559_images/000559-01</span>
+</code></pre></div>
+<h3 id="expected-behavior">Expected Behavior</h3>
+<ol>
+<li>Workflow downloads <code>000558_images.zip</code> and <code>000559_images.zip</code></li>
+<li>Each zip is extracted to a folder named after the zip (sans <code>.zip</code> extension)</li>
+<li>The <code>__DOWNLOADED__</code> prefix is replaced with the actual download path</li>
+<li>Photogrammetry runs with the resolved paths</li>
+<li>After photogrammetry completes, downloaded imagery is deleted (if cleanup enabled)</li>
+</ol>
+<hr />
+<h2 id="architecture-overview">Architecture Overview</h2>
+<h3 id="download-location">Download Location</h3>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>{TEMP_WORKING_DIR}/downloaded_imagery/{iteration_id}/
+<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>├── 000558_images/
+<a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a>│   ├── 000558-01/
+<a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a>│   │   └── *.jpg
+<a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a>│   └── 000558-02/
+<a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a>│       └── *.jpg
+<a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a>└── 000559_images/
+<a id="__codelineno-1-8" name="__codelineno-1-8" href="#__codelineno-1-8"></a>    └── 000559-01/
+<a id="__codelineno-1-9" name="__codelineno-1-9" href="#__codelineno-1-9"></a>        └── *.jpg
+</code></pre></div>
+<ul>
+<li><code>TEMP_WORKING_DIR</code> = <code>/ofo-share/argo-working/{workflow-name}</code> (already exists)</li>
+<li><code>iteration_id</code> = <code>{index}_{project_name_sanitized}</code> with 3-digit zero-padded index</li>
+<li>Examples: <code>000_mission_001</code>, <code>001_mission_001</code>, <code>002_other_project</code></li>
+<li>Includes project name for easy identification during manual intervention</li>
+<li>Index ensures uniqueness even with duplicate project names in the same config list</li>
+</ul>
+<h3 id="workflow-dag-changes">Workflow DAG Changes</h3>
+<p>Current flow:
+<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>setup-photogrammetry → match-photos → align-cameras → ...
+</code></pre></div></p>
+<p>New flow:
+<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>download-imagery (conditional) → setup-photogrammetry → ... → cleanup-imagery (conditional)
+</code></pre></div></p>
+<hr />
+<h2 id="implementation-steps">Implementation Steps</h2>
+<h3 id="step-1-update-config-parsing-in-determine_datasetspy">Step 1: Update Config Parsing in <code>determine_datasets.py</code></h3>
+<p><strong>File:</strong> <code>docker-workflow-utils/determine_datasets.py</code></p>
+<p><strong>Changes needed:</strong></p>
+<ol>
+<li>
+<p><strong>Add iteration ID generation</strong>: When building the list of mission parameters, generate a unique <code>iteration_id</code> combining the zero-padded index (3 digits) and the sanitized project name, separated by underscore.</p>
+</li>
+<li>
+<p><strong>Extract new argo attributes</strong>: Parse <code>s3_imagery_zip_download</code> and <code>cleanup_downloaded_imagery</code> from the <code>argo:</code> section.</p>
+</li>
+<li>
+<p><strong>Normalize to list</strong>: Handle both single string and list inputs for <code>s3_imagery_zip_download</code>.</p>
+</li>
+<li>
+<p><strong>Add new output parameters</strong>: Include in the JSON output for each mission:</p>
+</li>
+<li><code>iteration_id</code>: Format <code>{index:03d}_{project_name_sanitized}</code> (e.g., <code>000_mission_001</code>)</li>
+<li><code>imagery_zip_downloads</code>: JSON array of S3 URLs (empty array if not specified)</li>
+<li><code>imagery_download_enabled</code>: Boolean flag for conditional step execution</li>
+<li><code>cleanup_downloaded_imagery</code>: Boolean (default <code>true</code>)</li>
+</ol>
+<p><strong>Example of parameter extraction logic:</strong></p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="c1"># In process_config_file() function, after loading argo_config:</span>
+<a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a><span class="c1"># Note: index is the enumeration index passed to this function</span>
+<a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a>
+<a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a><span class="c1"># Generate unique iteration ID: 3-digit zero-padded index + underscore + sanitized project name</span>
+<a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a><span class="c1"># Example: &quot;000_mission_001&quot;, &quot;001_mission_001&quot; (for duplicates), &quot;002_other_project&quot;</span>
+<a id="__codelineno-4-6" name="__codelineno-4-6" href="#__codelineno-4-6"></a><span class="n">iteration_id</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">index</span><span class="si">:</span><span class="s2">03d</span><span class="si">}</span><span class="s2">_</span><span class="si">{</span><span class="n">project_name_sanitized</span><span class="si">}</span><span class="s2">&quot;</span>
+<a id="__codelineno-4-7" name="__codelineno-4-7" href="#__codelineno-4-7"></a>
+<a id="__codelineno-4-8" name="__codelineno-4-8" href="#__codelineno-4-8"></a><span class="c1"># Extract imagery download settings</span>
+<a id="__codelineno-4-9" name="__codelineno-4-9" href="#__codelineno-4-9"></a><span class="n">imagery_downloads</span> <span class="o">=</span> <span class="n">argo_config</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;s3_imagery_zip_download&#39;</span><span class="p">,</span> <span class="p">[])</span>
+<a id="__codelineno-4-10" name="__codelineno-4-10" href="#__codelineno-4-10"></a><span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">imagery_downloads</span><span class="p">,</span> <span class="nb">str</span><span class="p">):</span>
+<a id="__codelineno-4-11" name="__codelineno-4-11" href="#__codelineno-4-11"></a>    <span class="n">imagery_downloads</span> <span class="o">=</span> <span class="p">[</span><span class="n">imagery_downloads</span><span class="p">]</span> <span class="k">if</span> <span class="n">imagery_downloads</span><span class="o">.</span><span class="n">strip</span><span class="p">()</span> <span class="k">else</span> <span class="p">[]</span>
+<a id="__codelineno-4-12" name="__codelineno-4-12" href="#__codelineno-4-12"></a>
+<a id="__codelineno-4-13" name="__codelineno-4-13" href="#__codelineno-4-13"></a><span class="n">cleanup_imagery</span> <span class="o">=</span> <span class="n">argo_config</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;cleanup_downloaded_imagery&#39;</span><span class="p">,</span> <span class="kc">True</span><span class="p">)</span>
+</code></pre></div>
+<p><strong>Add to mission_params dict:</strong>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="n">mission_params</span><span class="p">[</span><span class="s1">&#39;iteration_id&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">iteration_id</span>
+<a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a><span class="n">mission_params</span><span class="p">[</span><span class="s1">&#39;imagery_zip_downloads&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">json</span><span class="o">.</span><span class="n">dumps</span><span class="p">(</span><span class="n">imagery_downloads</span><span class="p">)</span>
+<a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a><span class="n">mission_params</span><span class="p">[</span><span class="s1">&#39;imagery_download_enabled&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">imagery_downloads</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">)</span><span class="o">.</span><span class="n">lower</span><span class="p">()</span>
+<a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a><span class="n">mission_params</span><span class="p">[</span><span class="s1">&#39;cleanup_downloaded_imagery&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="n">cleanup_imagery</span><span class="p">)</span><span class="o">.</span><span class="n">lower</span><span class="p">()</span>
+</code></pre></div></p>
+<p><strong>Add comment for future enhancement:</strong>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="c1"># FUTURE: Could implement download sharing between projects to save bandwidth.</span>
+<a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a><span class="c1"># Would require: (1) download coordination/locking, (2) reference counting for cleanup,</span>
+<a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a><span class="c1"># (3) handling projects that start days apart. Current approach downloads per-project</span>
+<a id="__codelineno-6-4" name="__codelineno-6-4" href="#__codelineno-6-4"></a><span class="c1"># to avoid these complexities and prevent storage issues from long-running workflows.</span>
+</code></pre></div></p>
+<hr />
+<h3 id="step-2-create-download-script">Step 2: Create Download Script</h3>
+<p><strong>File:</strong> <code>docker-workflow-utils/download_imagery.py</code> (new file)</p>
+<p><strong>Purpose:</strong> Download and extract zip files from S3, preparing imagery for photogrammetry.</p>
+<p><strong>Inputs (via environment variables or arguments):</strong>
+- <code>IMAGERY_ZIP_URLS</code>: JSON array of S3 paths (format: <code>bucket/path/file.zip</code>, no remote prefix)
+- <code>DOWNLOAD_BASE_DIR</code>: Base directory for downloads (e.g., <code>{TEMP_WORKING_DIR}/downloaded_imagery</code>)
+- <code>ITERATION_ID</code>: Unique ID for this project iteration
+- S3 credentials: <code>S3_PROVIDER</code>, <code>S3_ENDPOINT</code>, <code>S3_ACCESS_KEY</code>, <code>S3_SECRET_KEY</code></p>
+<p><strong>Logic:</strong></p>
+<ol>
+<li>Parse the JSON array of URLs</li>
+<li>Create project-specific download directory: <code>{DOWNLOAD_BASE_DIR}/{ITERATION_ID}/</code></li>
+<li>For each URL:
+   a. Extract filename from URL (e.g., <code>000558_images.zip</code>)
+   b. Download using rclone: <code>rclone copyto {url} {download_dir}/{filename}</code>
+   c. Determine extraction folder name (filename sans <code>.zip</code>)
+   d. Create extraction directory
+   e. Unzip: <code>unzip {download_dir}/{filename} -d {download_dir}/{folder_name}</code>
+   f. Delete zip file to save space</li>
+<li>Output the download path for use by subsequent steps</li>
+</ol>
+<p><strong>Error handling:</strong>
+- If any download or extraction fails, exit with non-zero status
+- Log clear error messages identifying which URL failed
+- Do not attempt partial cleanup on failure (let workflow handle)</p>
+<p><strong>Example rclone command construction:</strong></p>
+<p>Use the existing <code>get_s3_flags()</code> pattern from <code>docker-photogrammetry-postprocessing/entrypoint.py</code> for consistency:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a><span class="k">def</span> <span class="nf">get_s3_flags</span><span class="p">():</span>
+<a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;Build common S3 authentication flags for rclone commands.&quot;&quot;&quot;</span>
+<a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a>    <span class="k">return</span> <span class="p">[</span>
+<a id="__codelineno-7-4" name="__codelineno-7-4" href="#__codelineno-7-4"></a>        <span class="s2">&quot;--s3-provider&quot;</span><span class="p">,</span> <span class="n">os</span><span class="o">.</span><span class="n">environ</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;S3_PROVIDER&quot;</span><span class="p">),</span>
+<a id="__codelineno-7-5" name="__codelineno-7-5" href="#__codelineno-7-5"></a>        <span class="s2">&quot;--s3-endpoint&quot;</span><span class="p">,</span> <span class="n">os</span><span class="o">.</span><span class="n">environ</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;S3_ENDPOINT&quot;</span><span class="p">),</span>
+<a id="__codelineno-7-6" name="__codelineno-7-6" href="#__codelineno-7-6"></a>        <span class="s2">&quot;--s3-access-key-id&quot;</span><span class="p">,</span> <span class="n">os</span><span class="o">.</span><span class="n">environ</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;S3_ACCESS_KEY&quot;</span><span class="p">),</span>
+<a id="__codelineno-7-7" name="__codelineno-7-7" href="#__codelineno-7-7"></a>        <span class="s2">&quot;--s3-secret-access-key&quot;</span><span class="p">,</span> <span class="n">os</span><span class="o">.</span><span class="n">environ</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;S3_SECRET_KEY&quot;</span><span class="p">),</span>
+<a id="__codelineno-7-8" name="__codelineno-7-8" href="#__codelineno-7-8"></a>    <span class="p">]</span>
+<a id="__codelineno-7-9" name="__codelineno-7-9" href="#__codelineno-7-9"></a>
+<a id="__codelineno-7-10" name="__codelineno-7-10" href="#__codelineno-7-10"></a><span class="c1"># Download command using rclone&#39;s on-the-fly backend syntax (:s3:)</span>
+<a id="__codelineno-7-11" name="__codelineno-7-11" href="#__codelineno-7-11"></a><span class="c1"># This avoids needing a pre-configured remote - credentials come from flags</span>
+<a id="__codelineno-7-12" name="__codelineno-7-12" href="#__codelineno-7-12"></a><span class="c1"># User specifies just &quot;bucket/path/file.zip&quot;, we prepend &quot;:s3:&quot;</span>
+<a id="__codelineno-7-13" name="__codelineno-7-13" href="#__codelineno-7-13"></a><span class="n">rclone_url</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;:s3:</span><span class="si">{</span><span class="n">s3_path</span><span class="si">}</span><span class="s2">&quot;</span>
+<a id="__codelineno-7-14" name="__codelineno-7-14" href="#__codelineno-7-14"></a><span class="n">rclone_cmd</span> <span class="o">=</span> <span class="p">[</span>
+<a id="__codelineno-7-15" name="__codelineno-7-15" href="#__codelineno-7-15"></a>    <span class="s2">&quot;rclone&quot;</span><span class="p">,</span> <span class="s2">&quot;copyto&quot;</span><span class="p">,</span>
+<a id="__codelineno-7-16" name="__codelineno-7-16" href="#__codelineno-7-16"></a>    <span class="n">rclone_url</span><span class="p">,</span>
+<a id="__codelineno-7-17" name="__codelineno-7-17" href="#__codelineno-7-17"></a>    <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">download_dir</span><span class="si">}</span><span class="s2">/</span><span class="si">{</span><span class="n">filename</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">,</span>
+<a id="__codelineno-7-18" name="__codelineno-7-18" href="#__codelineno-7-18"></a>    <span class="s2">&quot;--progress&quot;</span><span class="p">,</span>
+<a id="__codelineno-7-19" name="__codelineno-7-19" href="#__codelineno-7-19"></a>    <span class="s2">&quot;--transfers&quot;</span><span class="p">,</span> <span class="s2">&quot;8&quot;</span><span class="p">,</span>
+<a id="__codelineno-7-20" name="__codelineno-7-20" href="#__codelineno-7-20"></a>    <span class="s2">&quot;--checkers&quot;</span><span class="p">,</span> <span class="s2">&quot;8&quot;</span><span class="p">,</span>
+<a id="__codelineno-7-21" name="__codelineno-7-21" href="#__codelineno-7-21"></a>    <span class="s2">&quot;--retries&quot;</span><span class="p">,</span> <span class="s2">&quot;5&quot;</span><span class="p">,</span>
+<a id="__codelineno-7-22" name="__codelineno-7-22" href="#__codelineno-7-22"></a>    <span class="s2">&quot;--retries-sleep&quot;</span><span class="p">,</span> <span class="s2">&quot;15s&quot;</span><span class="p">,</span>
+<a id="__codelineno-7-23" name="__codelineno-7-23" href="#__codelineno-7-23"></a>    <span class="s2">&quot;--stats&quot;</span><span class="p">,</span> <span class="s2">&quot;30s&quot;</span><span class="p">,</span>
+<a id="__codelineno-7-24" name="__codelineno-7-24" href="#__codelineno-7-24"></a><span class="p">]</span> <span class="o">+</span> <span class="n">get_s3_flags</span><span class="p">()</span>
+</code></pre></div>
+<hr />
+<h3 id="step-3-create-config-transform-script">Step 3: Create Config Transform Script</h3>
+<p><strong>File:</strong> <code>docker-workflow-utils/transform_config.py</code> (new file)</p>
+<p><strong>Purpose:</strong> Replace <code>__DOWNLOADED__</code> prefix in config's <code>photo_path</code> with actual download path.</p>
+<p><strong>Inputs:</strong>
+- <code>CONFIG_FILE</code>: Path to original config file
+- <code>OUTPUT_CONFIG_FILE</code>: Path to write transformed config
+- <code>DOWNLOADED_IMAGERY_PATH</code>: Actual path to downloaded imagery</p>
+<p><strong>Logic:</strong></p>
+<ol>
+<li>Load YAML config file</li>
+<li>Get <code>photo_path</code> from <code>project</code> section</li>
+<li>If <code>photo_path</code> is a string, convert to single-item list for uniform handling</li>
+<li>Replace <code>__DOWNLOADED__</code> prefix with actual path in each photo_path entry</li>
+<li>Write modified config to output path</li>
+<li>Preserve all other config settings unchanged</li>
+</ol>
+<p><strong>Example transformation:</strong>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a><span class="c1"># Input photo_path: __DOWNLOADED__/000558_images/000558-01</span>
+<a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a><span class="c1"># DOWNLOADED_IMAGERY_PATH: /ofo-share/argo-working/wf-abc123/downloaded_imagery/000_my_project</span>
+<a id="__codelineno-8-3" name="__codelineno-8-3" href="#__codelineno-8-3"></a><span class="c1"># Output photo_path: /ofo-share/argo-working/wf-abc123/downloaded_imagery/000_my_project/000558_images/000558-01</span>
+</code></pre></div></p>
+<p><strong>Validation (exit non-zero on failure):</strong>
+- <strong>FAIL</strong> if <code>__DOWNLOADED__</code> prefix is used in <code>photo_path</code> but no downloads were specified in config
+- <strong>FAIL</strong> if downloads were specified but no <code>__DOWNLOADED__</code> paths found in <code>photo_path</code>
+- These are configuration errors that should be caught early rather than causing cryptic failures later</p>
+<hr />
+<h3 id="step-4-create-cleanup-script">Step 4: Create Cleanup Script</h3>
+<p><strong>File:</strong> <code>docker-workflow-utils/cleanup_imagery.py</code> (new file)</p>
+<p><strong>Purpose:</strong> Delete downloaded imagery after photogrammetry completes.</p>
+<p><strong>Inputs:</strong>
+- <code>DOWNLOAD_DIR</code>: Directory to delete (e.g., <code>{TEMP_WORKING_DIR}/downloaded_imagery/{ITERATION_ID}</code>)</p>
+<p><strong>Logic:</strong></p>
+<ol>
+<li>Verify directory exists and is within expected base path (safety check)</li>
+<li>Remove directory recursively</li>
+<li>Log success/failure</li>
+</ol>
+<p><strong>Safety checks (exit non-zero on failure):</strong>
+- <strong>FAIL</strong> if path doesn't contain expected components (<code>downloaded_imagery</code>, <code>argo-working</code>)
+- <strong>FAIL</strong> if path appears to be outside the expected temp working directory structure
+- This prevents accidental deletion of important data if paths are misconfigured
+- A failed safety check indicates a bug or misconfiguration that needs investigation</p>
+<hr />
+<h3 id="step-5-update-workflow-yaml">Step 5: Update Workflow YAML</h3>
+<p><strong>File:</strong> <code>photogrammetry-workflow-stepbased.yaml</code></p>
+<p><strong>Changes needed:</strong></p>
+<h4 id="51-add-new-parameters-to-workflow">5.1: Add New Parameters to Workflow</h4>
+<p>In the <code>process-project-workflow</code> template's <code>inputs.parameters</code> section, add:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">iteration-id</span>
+<a id="__codelineno-9-2" name="__codelineno-9-2" href="#__codelineno-9-2"></a><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">imagery-zip-downloads</span>
+<a id="__codelineno-9-3" name="__codelineno-9-3" href="#__codelineno-9-3"></a><span class="w">  </span><span class="nt">default</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;[]&quot;</span>
+<a id="__codelineno-9-4" name="__codelineno-9-4" href="#__codelineno-9-4"></a><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">imagery-download-enabled</span>
+<a id="__codelineno-9-5" name="__codelineno-9-5" href="#__codelineno-9-5"></a><span class="w">  </span><span class="nt">default</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;false&quot;</span>
+<a id="__codelineno-9-6" name="__codelineno-9-6" href="#__codelineno-9-6"></a><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">cleanup-downloaded-imagery</span>
+<a id="__codelineno-9-7" name="__codelineno-9-7" href="#__codelineno-9-7"></a><span class="w">  </span><span class="nt">default</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;true&quot;</span>
+</code></pre></div>
+<h4 id="52-add-download-step-template">5.2: Add Download Step Template</h4>
+<p>Create new template <code>download-imagery</code>:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">download-imagery</span>
+<a id="__codelineno-10-2" name="__codelineno-10-2" href="#__codelineno-10-2"></a><span class="w">  </span><span class="nt">inputs</span><span class="p">:</span>
+<a id="__codelineno-10-3" name="__codelineno-10-3" href="#__codelineno-10-3"></a><span class="w">    </span><span class="nt">parameters</span><span class="p">:</span>
+<a id="__codelineno-10-4" name="__codelineno-10-4" href="#__codelineno-10-4"></a><span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">imagery-zip-downloads</span>
+<a id="__codelineno-10-5" name="__codelineno-10-5" href="#__codelineno-10-5"></a><span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">iteration-id</span>
+<a id="__codelineno-10-6" name="__codelineno-10-6" href="#__codelineno-10-6"></a><span class="w">  </span><span class="nt">container</span><span class="p">:</span>
+<a id="__codelineno-10-7" name="__codelineno-10-7" href="#__codelineno-10-7"></a><span class="w">    </span><span class="nt">image</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">ghcr.io/open-forest-observatory/docker-workflow-utils:latest</span>
+<a id="__codelineno-10-8" name="__codelineno-10-8" href="#__codelineno-10-8"></a><span class="w">    </span><span class="nt">command</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="s">&quot;python3&quot;</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="s">&quot;/app/download_imagery.py&quot;</span><span class="p p-Indicator">]</span>
+<a id="__codelineno-10-9" name="__codelineno-10-9" href="#__codelineno-10-9"></a><span class="w">    </span><span class="nt">env</span><span class="p">:</span>
+<a id="__codelineno-10-10" name="__codelineno-10-10" href="#__codelineno-10-10"></a><span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">IMAGERY_ZIP_URLS</span>
+<a id="__codelineno-10-11" name="__codelineno-10-11" href="#__codelineno-10-11"></a><span class="w">        </span><span class="nt">value</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;{{inputs.parameters.imagery-zip-downloads}}&quot;</span>
+<a id="__codelineno-10-12" name="__codelineno-10-12" href="#__codelineno-10-12"></a><span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">DOWNLOAD_BASE_DIR</span>
+<a id="__codelineno-10-13" name="__codelineno-10-13" href="#__codelineno-10-13"></a><span class="w">        </span><span class="nt">value</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;{{workflow.parameters.TEMP_WORKING_DIR}}/downloaded_imagery&quot;</span>
+<a id="__codelineno-10-14" name="__codelineno-10-14" href="#__codelineno-10-14"></a><span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">ITERATION_ID</span>
+<a id="__codelineno-10-15" name="__codelineno-10-15" href="#__codelineno-10-15"></a><span class="w">        </span><span class="nt">value</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;{{inputs.parameters.iteration-id}}&quot;</span>
+<a id="__codelineno-10-16" name="__codelineno-10-16" href="#__codelineno-10-16"></a><span class="w">      </span><span class="c1"># S3 credentials from existing secret references</span>
+</code></pre></div>
+<h4 id="53-add-config-transform-step-template">5.3: Add Config Transform Step Template</h4>
+<p>Create new template <code>transform-config</code>:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">transform-config</span>
+<a id="__codelineno-11-2" name="__codelineno-11-2" href="#__codelineno-11-2"></a><span class="w">  </span><span class="nt">inputs</span><span class="p">:</span>
+<a id="__codelineno-11-3" name="__codelineno-11-3" href="#__codelineno-11-3"></a><span class="w">    </span><span class="nt">parameters</span><span class="p">:</span>
+<a id="__codelineno-11-4" name="__codelineno-11-4" href="#__codelineno-11-4"></a><span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">config-file</span>
+<a id="__codelineno-11-5" name="__codelineno-11-5" href="#__codelineno-11-5"></a><span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">iteration-id</span>
+<a id="__codelineno-11-6" name="__codelineno-11-6" href="#__codelineno-11-6"></a><span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">project-name</span>
+<a id="__codelineno-11-7" name="__codelineno-11-7" href="#__codelineno-11-7"></a><span class="w">  </span><span class="nt">container</span><span class="p">:</span>
+<a id="__codelineno-11-8" name="__codelineno-11-8" href="#__codelineno-11-8"></a><span class="w">    </span><span class="nt">image</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">ghcr.io/open-forest-observatory/docker-workflow-utils:latest</span>
+<a id="__codelineno-11-9" name="__codelineno-11-9" href="#__codelineno-11-9"></a><span class="w">    </span><span class="nt">command</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="s">&quot;python3&quot;</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="s">&quot;/app/transform_config.py&quot;</span><span class="p p-Indicator">]</span>
+<a id="__codelineno-11-10" name="__codelineno-11-10" href="#__codelineno-11-10"></a><span class="w">    </span><span class="nt">env</span><span class="p">:</span>
+<a id="__codelineno-11-11" name="__codelineno-11-11" href="#__codelineno-11-11"></a><span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">CONFIG_FILE</span>
+<a id="__codelineno-11-12" name="__codelineno-11-12" href="#__codelineno-11-12"></a><span class="w">        </span><span class="nt">value</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;{{inputs.parameters.config-file}}&quot;</span>
+<a id="__codelineno-11-13" name="__codelineno-11-13" href="#__codelineno-11-13"></a><span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">OUTPUT_CONFIG_FILE</span>
+<a id="__codelineno-11-14" name="__codelineno-11-14" href="#__codelineno-11-14"></a><span class="w">        </span><span class="nt">value</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;{{workflow.parameters.TEMP_WORKING_DIR}}/configs/{{inputs.parameters.project-name}}-transformed.yml&quot;</span>
+<a id="__codelineno-11-15" name="__codelineno-11-15" href="#__codelineno-11-15"></a><span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">DOWNLOADED_IMAGERY_PATH</span>
+<a id="__codelineno-11-16" name="__codelineno-11-16" href="#__codelineno-11-16"></a><span class="w">        </span><span class="nt">value</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;{{workflow.parameters.TEMP_WORKING_DIR}}/downloaded_imagery/{{inputs.parameters.iteration-id}}&quot;</span>
+<a id="__codelineno-11-17" name="__codelineno-11-17" href="#__codelineno-11-17"></a><span class="w">  </span><span class="nt">outputs</span><span class="p">:</span>
+<a id="__codelineno-11-18" name="__codelineno-11-18" href="#__codelineno-11-18"></a><span class="w">    </span><span class="nt">parameters</span><span class="p">:</span>
+<a id="__codelineno-11-19" name="__codelineno-11-19" href="#__codelineno-11-19"></a><span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">transformed-config-path</span>
+<a id="__codelineno-11-20" name="__codelineno-11-20" href="#__codelineno-11-20"></a><span class="w">        </span><span class="nt">value</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;{{workflow.parameters.TEMP_WORKING_DIR}}/configs/{{inputs.parameters.project-name}}-transformed.yml&quot;</span>
+</code></pre></div>
+<h4 id="54-add-cleanup-step-template">5.4: Add Cleanup Step Template</h4>
+<p>Create new template <code>cleanup-imagery</code>:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-12-1" name="__codelineno-12-1" href="#__codelineno-12-1"></a><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">cleanup-imagery</span>
+<a id="__codelineno-12-2" name="__codelineno-12-2" href="#__codelineno-12-2"></a><span class="w">  </span><span class="nt">inputs</span><span class="p">:</span>
+<a id="__codelineno-12-3" name="__codelineno-12-3" href="#__codelineno-12-3"></a><span class="w">    </span><span class="nt">parameters</span><span class="p">:</span>
+<a id="__codelineno-12-4" name="__codelineno-12-4" href="#__codelineno-12-4"></a><span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">iteration-id</span>
+<a id="__codelineno-12-5" name="__codelineno-12-5" href="#__codelineno-12-5"></a><span class="w">  </span><span class="nt">container</span><span class="p">:</span>
+<a id="__codelineno-12-6" name="__codelineno-12-6" href="#__codelineno-12-6"></a><span class="w">    </span><span class="nt">image</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">ghcr.io/open-forest-observatory/docker-workflow-utils:latest</span>
+<a id="__codelineno-12-7" name="__codelineno-12-7" href="#__codelineno-12-7"></a><span class="w">    </span><span class="nt">command</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="s">&quot;python3&quot;</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="s">&quot;/app/cleanup_imagery.py&quot;</span><span class="p p-Indicator">]</span>
+<a id="__codelineno-12-8" name="__codelineno-12-8" href="#__codelineno-12-8"></a><span class="w">    </span><span class="nt">env</span><span class="p">:</span>
+<a id="__codelineno-12-9" name="__codelineno-12-9" href="#__codelineno-12-9"></a><span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">DOWNLOAD_DIR</span>
+<a id="__codelineno-12-10" name="__codelineno-12-10" href="#__codelineno-12-10"></a><span class="w">        </span><span class="nt">value</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;{{workflow.parameters.TEMP_WORKING_DIR}}/downloaded_imagery/{{inputs.parameters.iteration-id}}&quot;</span>
+</code></pre></div>
+<h4 id="55-update-dag-structure">5.5: Update DAG Structure</h4>
+<p>Modify the <code>process-project-workflow</code> DAG to include new steps:</p>
+<p><strong>Add download step (conditional):</strong>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-13-1" name="__codelineno-13-1" href="#__codelineno-13-1"></a><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">download-imagery</span>
+<a id="__codelineno-13-2" name="__codelineno-13-2" href="#__codelineno-13-2"></a><span class="w">  </span><span class="nt">template</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">download-imagery</span>
+<a id="__codelineno-13-3" name="__codelineno-13-3" href="#__codelineno-13-3"></a><span class="w">  </span><span class="nt">when</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;{{inputs.parameters.imagery-download-enabled}}</span><span class="nv"> </span><span class="s">==</span><span class="nv"> </span><span class="s">&#39;true&#39;&quot;</span>
+<a id="__codelineno-13-4" name="__codelineno-13-4" href="#__codelineno-13-4"></a><span class="w">  </span><span class="nt">arguments</span><span class="p">:</span>
+<a id="__codelineno-13-5" name="__codelineno-13-5" href="#__codelineno-13-5"></a><span class="w">    </span><span class="nt">parameters</span><span class="p">:</span>
+<a id="__codelineno-13-6" name="__codelineno-13-6" href="#__codelineno-13-6"></a><span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">imagery-zip-downloads</span>
+<a id="__codelineno-13-7" name="__codelineno-13-7" href="#__codelineno-13-7"></a><span class="w">        </span><span class="nt">value</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;{{inputs.parameters.imagery-zip-downloads}}&quot;</span>
+<a id="__codelineno-13-8" name="__codelineno-13-8" href="#__codelineno-13-8"></a><span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">iteration-id</span>
+<a id="__codelineno-13-9" name="__codelineno-13-9" href="#__codelineno-13-9"></a><span class="w">        </span><span class="nt">value</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;{{inputs.parameters.iteration-id}}&quot;</span>
+</code></pre></div></p>
+<p><strong>Add transform step (conditional, depends on download):</strong>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-14-1" name="__codelineno-14-1" href="#__codelineno-14-1"></a><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">transform-config</span>
+<a id="__codelineno-14-2" name="__codelineno-14-2" href="#__codelineno-14-2"></a><span class="w">  </span><span class="nt">template</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">transform-config</span>
+<a id="__codelineno-14-3" name="__codelineno-14-3" href="#__codelineno-14-3"></a><span class="w">  </span><span class="nt">when</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;{{inputs.parameters.imagery-download-enabled}}</span><span class="nv"> </span><span class="s">==</span><span class="nv"> </span><span class="s">&#39;true&#39;&quot;</span>
+<a id="__codelineno-14-4" name="__codelineno-14-4" href="#__codelineno-14-4"></a><span class="w">  </span><span class="nt">depends</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;download-imagery&quot;</span>
+<a id="__codelineno-14-5" name="__codelineno-14-5" href="#__codelineno-14-5"></a><span class="w">  </span><span class="nt">arguments</span><span class="p">:</span>
+<a id="__codelineno-14-6" name="__codelineno-14-6" href="#__codelineno-14-6"></a><span class="w">    </span><span class="nt">parameters</span><span class="p">:</span>
+<a id="__codelineno-14-7" name="__codelineno-14-7" href="#__codelineno-14-7"></a><span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">config-file</span>
+<a id="__codelineno-14-8" name="__codelineno-14-8" href="#__codelineno-14-8"></a><span class="w">        </span><span class="nt">value</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;{{inputs.parameters.config-file}}&quot;</span>
+<a id="__codelineno-14-9" name="__codelineno-14-9" href="#__codelineno-14-9"></a><span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">iteration-id</span>
+<a id="__codelineno-14-10" name="__codelineno-14-10" href="#__codelineno-14-10"></a><span class="w">        </span><span class="nt">value</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;{{inputs.parameters.iteration-id}}&quot;</span>
+<a id="__codelineno-14-11" name="__codelineno-14-11" href="#__codelineno-14-11"></a><span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">project-name</span>
+<a id="__codelineno-14-12" name="__codelineno-14-12" href="#__codelineno-14-12"></a><span class="w">        </span><span class="nt">value</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;{{inputs.parameters.project-name}}&quot;</span>
+</code></pre></div></p>
+<p><strong>Update setup-photogrammetry dependency:</strong>
+- If downloads enabled: depends on <code>transform-config</code>
+- Use transformed config path instead of original</p>
+<p><strong>Add cleanup step at end (conditional):</strong>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-15-1" name="__codelineno-15-1" href="#__codelineno-15-1"></a><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">cleanup-imagery</span>
+<a id="__codelineno-15-2" name="__codelineno-15-2" href="#__codelineno-15-2"></a><span class="w">  </span><span class="nt">template</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">cleanup-imagery</span>
+<a id="__codelineno-15-3" name="__codelineno-15-3" href="#__codelineno-15-3"></a><span class="w">  </span><span class="nt">when</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;{{inputs.parameters.imagery-download-enabled}}</span><span class="nv"> </span><span class="s">==</span><span class="nv"> </span><span class="s">&#39;true&#39;</span><span class="nv"> </span><span class="s">&amp;&amp;</span><span class="nv"> </span><span class="s">{{inputs.parameters.cleanup-downloaded-imagery}}</span><span class="nv"> </span><span class="s">==</span><span class="nv"> </span><span class="s">&#39;true&#39;&quot;</span>
+<a id="__codelineno-15-4" name="__codelineno-15-4" href="#__codelineno-15-4"></a><span class="w">  </span><span class="nt">depends</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;upload-outputs&quot;</span><span class="w">  </span><span class="c1"># After all photogrammetry and upload complete</span>
+<a id="__codelineno-15-5" name="__codelineno-15-5" href="#__codelineno-15-5"></a><span class="w">  </span><span class="nt">arguments</span><span class="p">:</span>
+<a id="__codelineno-15-6" name="__codelineno-15-6" href="#__codelineno-15-6"></a><span class="w">    </span><span class="nt">parameters</span><span class="p">:</span>
+<a id="__codelineno-15-7" name="__codelineno-15-7" href="#__codelineno-15-7"></a><span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">iteration-id</span>
+<a id="__codelineno-15-8" name="__codelineno-15-8" href="#__codelineno-15-8"></a><span class="w">        </span><span class="nt">value</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;{{inputs.parameters.iteration-id}}&quot;</span>
+</code></pre></div></p>
+<h4 id="56-handle-config-path-switching">5.6: Handle Config Path Switching</h4>
+<p>The tricky part: subsequent steps need to use either the original config or transformed config.</p>
+<p>Use Argo's conditional expression syntax to select the appropriate config path:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-16-1" name="__codelineno-16-1" href="#__codelineno-16-1"></a><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">setup-photogrammetry</span>
+<a id="__codelineno-16-2" name="__codelineno-16-2" href="#__codelineno-16-2"></a><span class="w">  </span><span class="nt">arguments</span><span class="p">:</span>
+<a id="__codelineno-16-3" name="__codelineno-16-3" href="#__codelineno-16-3"></a><span class="w">    </span><span class="nt">parameters</span><span class="p">:</span>
+<a id="__codelineno-16-4" name="__codelineno-16-4" href="#__codelineno-16-4"></a><span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">config-file</span>
+<a id="__codelineno-16-5" name="__codelineno-16-5" href="#__codelineno-16-5"></a><span class="w">        </span><span class="c1"># Conditional config path selection:</span>
+<a id="__codelineno-16-6" name="__codelineno-16-6" href="#__codelineno-16-6"></a><span class="w">        </span><span class="c1"># - If imagery download is enabled, use the transformed config (with __DOWNLOADED__ paths resolved)</span>
+<a id="__codelineno-16-7" name="__codelineno-16-7" href="#__codelineno-16-7"></a><span class="w">        </span><span class="c1"># - Otherwise, use the original config file path unchanged</span>
+<a id="__codelineno-16-8" name="__codelineno-16-8" href="#__codelineno-16-8"></a><span class="w">        </span><span class="c1"># This allows the same workflow DAG structure to handle both download and non-download cases</span>
+<a id="__codelineno-16-9" name="__codelineno-16-9" href="#__codelineno-16-9"></a><span class="w">        </span><span class="nt">value</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;{{=inputs.parameters[&#39;imagery-download-enabled&#39;]</span><span class="nv"> </span><span class="s">==</span><span class="nv"> </span><span class="s">&#39;true&#39;</span><span class="nv"> </span><span class="s">?</span><span class="nv"> </span><span class="s">steps[&#39;transform-config&#39;].outputs.parameters[&#39;transformed-config-path&#39;]</span><span class="nv"> </span><span class="s">:</span><span class="nv"> </span><span class="s">inputs.parameters[&#39;config-file&#39;]}}&quot;</span>
+</code></pre></div>
+<p>This conditional expression uses Argo's expression syntax (<code>{{= ... }}</code>) to evaluate at runtime which config path to pass to downstream steps.</p>
+<p><strong>Alternative considered (rejected):</strong> Always run the transform step and transform the config even if no downloads are specified, outputting to a consistent location. This was rejected because it adds unnecessary processing overhead for the common case where no downloads are needed, and the conditional approach is cleaner.</p>
+<hr />
+<h3 id="step-6-update-docker-image-build">Step 6: Update Docker Image Build</h3>
+<p><strong>File:</strong> <code>docker-workflow-utils/Dockerfile</code></p>
+<p><strong>Changes:</strong>
+- Ensure <code>rclone</code> is installed (follow pattern from <code>docker-photogrammetry-postprocessing/Dockerfile</code>)
+- Ensure <code>unzip</code> package is installed
+- Include new Python scripts: <code>download_imagery.py</code>, <code>transform_config.py</code>, <code>cleanup_imagery.py</code>
+- Ensure PyYAML is available for config parsing</p>
+<hr />
+<h3 id="step-7-update-parameter-passing-in-main-template">Step 7: Update Parameter Passing in Main Template</h3>
+<p><strong>File:</strong> <code>photogrammetry-workflow-stepbased.yaml</code></p>
+<p>In the <code>main</code> template where <code>withParam</code> iterates, add the new parameters to the arguments:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-17-1" name="__codelineno-17-1" href="#__codelineno-17-1"></a><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">process-projects</span>
+<a id="__codelineno-17-2" name="__codelineno-17-2" href="#__codelineno-17-2"></a><span class="w">  </span><span class="nt">template</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">process-project-workflow</span>
+<a id="__codelineno-17-3" name="__codelineno-17-3" href="#__codelineno-17-3"></a><span class="w">  </span><span class="nt">arguments</span><span class="p">:</span>
+<a id="__codelineno-17-4" name="__codelineno-17-4" href="#__codelineno-17-4"></a><span class="w">    </span><span class="nt">parameters</span><span class="p">:</span>
+<a id="__codelineno-17-5" name="__codelineno-17-5" href="#__codelineno-17-5"></a><span class="w">      </span><span class="c1"># Existing parameters...</span>
+<a id="__codelineno-17-6" name="__codelineno-17-6" href="#__codelineno-17-6"></a><span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">iteration-id</span>
+<a id="__codelineno-17-7" name="__codelineno-17-7" href="#__codelineno-17-7"></a><span class="w">        </span><span class="nt">value</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;{{item.iteration_id}}&quot;</span>
+<a id="__codelineno-17-8" name="__codelineno-17-8" href="#__codelineno-17-8"></a><span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">imagery-zip-downloads</span>
+<a id="__codelineno-17-9" name="__codelineno-17-9" href="#__codelineno-17-9"></a><span class="w">        </span><span class="nt">value</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;{{item.imagery_zip_downloads}}&quot;</span>
+<a id="__codelineno-17-10" name="__codelineno-17-10" href="#__codelineno-17-10"></a><span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">imagery-download-enabled</span>
+<a id="__codelineno-17-11" name="__codelineno-17-11" href="#__codelineno-17-11"></a><span class="w">        </span><span class="nt">value</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;{{item.imagery_download_enabled}}&quot;</span>
+<a id="__codelineno-17-12" name="__codelineno-17-12" href="#__codelineno-17-12"></a><span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">cleanup-downloaded-imagery</span>
+<a id="__codelineno-17-13" name="__codelineno-17-13" href="#__codelineno-17-13"></a><span class="w">        </span><span class="nt">value</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;{{item.cleanup_downloaded_imagery}}&quot;</span>
+</code></pre></div>
+<hr />
+<h3 id="step-8-update-documentation">Step 8: Update Documentation</h3>
+<p><strong>File:</strong> <code>docs/usage/stepbased-workflow.md</code></p>
+<p>Add new section documenting:</p>
+<ol>
+<li><strong>When to use S3 imagery download</strong> - Use cases and benefits</li>
+<li><strong>Configuration options</strong> - Document <code>s3_imagery_zip_download</code> and <code>cleanup_downloaded_imagery</code></li>
+<li><strong>Path syntax</strong> - Explain <code>__DOWNLOADED__</code> prefix usage</li>
+<li><strong>Zip file structure requirements</strong> - Explain that zip filename becomes folder name</li>
+<li><strong>Example configurations</strong> - Show complete config examples</li>
+<li><strong>Troubleshooting</strong> - Common issues (wrong paths, download failures)</li>
+</ol>
+<hr />
+<h2 id="testing-plan">Testing Plan</h2>
+<h3 id="unit-tests">Unit Tests</h3>
+<ol>
+<li>Test <code>determine_datasets.py</code> correctly parses new attributes</li>
+<li>Test normalization of single string to list</li>
+<li>Test default values when attributes not present</li>
+<li>Test iteration_id format is correct (<code>{index:03d}_{project_name_sanitized}</code>)</li>
+</ol>
+<h3 id="integration-tests">Integration Tests</h3>
+<ol>
+<li><strong>Happy path:</strong> Config with downloads specified, verify:</li>
+<li>Download step runs</li>
+<li>Files are extracted correctly</li>
+<li>Config is transformed</li>
+<li>Photogrammetry receives correct paths</li>
+<li>
+<p>Cleanup removes files</p>
+</li>
+<li>
+<p><strong>No downloads:</strong> Config without <code>s3_imagery_zip_download</code>, verify:</p>
+</li>
+<li>Download step is skipped</li>
+<li>
+<p>Config is passed through unchanged</p>
+</li>
+<li>
+<p><strong>Cleanup disabled:</strong> Set <code>cleanup_downloaded_imagery: false</code>, verify files persist</p>
+</li>
+<li>
+<p><strong>Download failure:</strong> Use invalid S3 path, verify:</p>
+</li>
+<li>That specific project fails</li>
+<li>Other projects continue</li>
+<li>
+<p>Workflow reports partial failure</p>
+</li>
+<li>
+<p><strong>Parallel projects:</strong> Two projects downloading same-named zips simultaneously, verify:</p>
+</li>
+<li>No collisions due to iteration_id isolation</li>
+<li>
+<p>Both complete successfully</p>
+</li>
+<li>
+<p><strong>Validation failures:</strong> Verify workflow fails early when:</p>
+</li>
+<li><code>__DOWNLOADED__</code> prefix used but no downloads specified</li>
+<li>Downloads specified but no <code>__DOWNLOADED__</code> paths in config</li>
+</ol>
+<hr />
+<h2 id="rollback-plan">Rollback Plan</h2>
+<p>If issues arise after deployment:</p>
+<ol>
+<li>Users can simply not use <code>s3_imagery_zip_download</code> attribute (feature is additive)</li>
+<li>Revert workflow YAML to previous version</li>
+<li>Revert docker-workflow-utils image to previous tag</li>
+</ol>
+<hr />
+<h2 id="future-enhancements">Future Enhancements</h2>
+<p>Document these as comments in relevant code files:</p>
+<ol>
+<li>
+<p><strong>Download sharing between projects</strong> - Would save bandwidth when multiple projects need the same imagery. Would require: download coordination/locking, reference counting for cleanup, handling projects that start days apart. Current approach downloads per-project to avoid these complexities and prevent storage issues from long-running workflows.</p>
+</li>
+<li>
+<p><strong>Per-project folder reorganization</strong> - Currently, workflow intermediates are organized as:
+   <div class="highlight"><pre><span></span><code><a id="__codelineno-18-1" name="__codelineno-18-1" href="#__codelineno-18-1"></a>{TEMP_WORKING_DIR}/
+<a id="__codelineno-18-2" name="__codelineno-18-2" href="#__codelineno-18-2"></a>├── photogrammetry/{project-name}/
+<a id="__codelineno-18-3" name="__codelineno-18-3" href="#__codelineno-18-3"></a>├── postprocessing/
+<a id="__codelineno-18-4" name="__codelineno-18-4" href="#__codelineno-18-4"></a>└── downloaded_imagery/{iteration_id}/
+</code></pre></div>
+   A future enhancement could reorganize to per-project folders:
+   <div class="highlight"><pre><span></span><code><a id="__codelineno-19-1" name="__codelineno-19-1" href="#__codelineno-19-1"></a>{TEMP_WORKING_DIR}/
+<a id="__codelineno-19-2" name="__codelineno-19-2" href="#__codelineno-19-2"></a>└── {iteration_id}/
+<a id="__codelineno-19-3" name="__codelineno-19-3" href="#__codelineno-19-3"></a>    ├── photogrammetry/
+<a id="__codelineno-19-4" name="__codelineno-19-4" href="#__codelineno-19-4"></a>    ├── postprocessing/
+<a id="__codelineno-19-5" name="__codelineno-19-5" href="#__codelineno-19-5"></a>    └── downloaded_imagery/
+</code></pre></div>
+   This would make per-project cleanup trivial (delete one folder) and simplify debugging failed iterations. However, this is a larger refactor affecting existing workflow code and should be implemented separately.</p>
+</li>
+<li>
+<p><strong>Support for tarballs</strong> - Different extraction command (<code>tar -xzf</code>)</p>
+</li>
+<li>
+<p><strong>Direct folder download</strong> - <code>rclone copy</code> instead of <code>copyto</code> + unzip for uncompressed imagery</p>
+</li>
+<li>
+<p><strong>Parallel zip downloads within a project</strong> - Currently downloads are sequential within a project</p>
+</li>
+<li>
+<p><strong>Download progress reporting</strong> - Surface download progress to Argo UI</p>
+</li>
+</ol>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+    
+      
+      <nav class="md-footer__inner md-grid" aria-label="Footer" >
+        
+          
+          <a href="../../admin/manila-share-mounting/" class="md-footer__link md-footer__link--prev" aria-label="Previous: Manila share mounting">
+            <div class="md-footer__button md-icon">
+              
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+            </div>
+            <div class="md-footer__title">
+              <span class="md-footer__direction">
+                Previous
+              </span>
+              <div class="md-ellipsis">
+                Manila share mounting
+              </div>
+            </div>
+          </a>
+        
+        
+          
+          <a href="../../usage/" class="md-footer__link md-footer__link--next" aria-label="Next: User guides">
+            <div class="md-footer__title">
+              <span class="md-footer__direction">
+                Next
+              </span>
+              <div class="md-ellipsis">
+                User guides
+              </div>
+            </div>
+            <div class="md-footer__button md-icon">
+              
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M4 11v2h12l-5.5 5.5 1.42 1.42L19.84 12l-7.92-7.92L10.5 5.5 16 11z"/></svg>
+            </div>
+          </a>
+        
+      </nav>
+    
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["navigation.footer", "navigation.indexes"], "search": "../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../../assets/javascripts/bundle.79ae519e.min.js"></script>
+      
+    
+  </body>
+</html>
