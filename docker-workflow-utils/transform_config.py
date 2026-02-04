@@ -30,7 +30,6 @@ from typing import Any, Dict, List, Union
 
 import yaml
 
-
 # Placeholder prefix that users put in their config to reference downloaded imagery
 DOWNLOAD_PREFIX = "__DOWNLOADED__"
 
