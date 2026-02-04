@@ -7,10 +7,17 @@ This determines which processing steps are enabled and whether GPU or CPU nodes
 should be used for GPU-capable steps.
 
 Usage:
-    python determine_datasets.py <config_list_path>
+    python determine_datasets.py <config_list_path> [output_file_path]
+
+Arguments:
+    config_list_path: Path to text file listing config files
+    output_file_path: Optional path to write full configs JSON (for artifact-based workflow).
+                      If provided, stdout will contain only minimal references.
+                      If not provided, stdout will contain full configs (legacy behavior).
 
 Output:
-    JSON array of mission parameters to stdout
+    - If output_file_path provided: Writes full configs to file, outputs minimal refs to stdout
+    - If output_file_path not provided: Outputs full configs to stdout (legacy)
 """
 
 import json
@@ -426,7 +433,7 @@ def process_config_file(config_path: str, index: int) -> Dict[str, Any]:
     return mission
 
 
-def main(config_list_path: str) -> None:
+def main(config_list_path: str, output_file_path: Optional[str] = None) -> None:
     """
     Main entry point for preprocessing script.
 
@@ -435,6 +442,8 @@ def main(config_list_path: str) -> None:
             Each line can be either a filename (resolved relative to the config list's directory)
             or an absolute path (starting with /). Lines starting with # are comments.
             Inline comments (# after filename) are also supported.
+        output_file_path: Optional path to write full configs JSON. If provided,
+            stdout will contain only minimal references (to avoid Argo parameter size limits).
     """
     missions: List[Dict[str, Any]] = []
 
@@ -463,13 +472,37 @@ def main(config_list_path: str) -> None:
             print(f"Error processing config {config_path}: {e}", file=sys.stderr)
             raise
 
-    # Output as JSON list to stdout
-    json.dump(missions, sys.stdout)
+    if output_file_path:
+        # Artifact-based mode: write full configs to file, output minimal refs to stdout
+        # This avoids Argo's parameter size limit (default 256KB) for large batch runs
+
+        # Ensure output directory exists
+        os.makedirs(os.path.dirname(output_file_path), exist_ok=True)
+
+        # Write full configs to file
+        with open(output_file_path, "w") as f:
+            json.dump(missions, f)
+
+        print(f"Wrote {len(missions)} project configs to {output_file_path}", file=sys.stderr)
+
+        # Output minimal references to stdout (just index and project_name)
+        # These are small enough to pass via withParam without hitting size limits
+        refs = [
+            {"index": i, "project_name": m["project_name"]}
+            for i, m in enumerate(missions)
+        ]
+        json.dump(refs, sys.stdout)
+    else:
+        # Legacy mode: output full configs to stdout
+        json.dump(missions, sys.stdout)
 
 
 if __name__ == "__main__":
-    if len(sys.argv) != 2:
-        print("Usage: determine_datasets.py <config_list_path>", file=sys.stderr)
+    if len(sys.argv) < 2 or len(sys.argv) > 3:
+        print(
+            "Usage: determine_datasets.py <config_list_path> [output_file_path]",
+            file=sys.stderr,
+        )
         print(
             "  config_list_path: Absolute path to text file listing config files.",
             file=sys.stderr,
@@ -482,7 +515,16 @@ if __name__ == "__main__":
             "                    or an absolute path. Lines starting with # are comments.",
             file=sys.stderr,
         )
+        print(
+            "  output_file_path: Optional. If provided, full configs are written to this file",
+            file=sys.stderr,
+        )
+        print(
+            "                    and only minimal refs are output to stdout (artifact mode).",
+            file=sys.stderr,
+        )
         sys.exit(1)
 
     config_list_path = sys.argv[1]
-    main(config_list_path)
+    output_file_path = sys.argv[2] if len(sys.argv) == 3 else None
+    main(config_list_path, output_file_path)
