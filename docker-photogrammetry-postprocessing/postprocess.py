@@ -13,6 +13,7 @@ import matplotlib
 import numpy as np
 import pandas as pd
 import rasterio
+from rasterio.enums import ColorInterp
 from rasterio.mask import mask
 from rasterio.warp import Resampling, calculate_default_transform, reproject
 from shapely.geometry import Point
@@ -246,6 +247,15 @@ def crop_raster_save_cog(
         output_file_path = os.path.join(output_path, "full", output_filename)
         with rasterio.open(output_file_path, "w", **profile) as dst:
             dst.write(cropped_data)
+
+            # Set color interpretation for RGBA so QGIS recognizes alpha band
+            if profile.get("count") == 4 and profile.get("dtype") == "uint8":
+                dst.colorinterp = [
+                    ColorInterp.red,
+                    ColorInterp.green,
+                    ColorInterp.blue,
+                    ColorInterp.alpha,
+                ]
 
     print(f"  Saved COG: {output_filename}")
 
