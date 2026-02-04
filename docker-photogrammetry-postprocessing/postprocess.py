@@ -79,11 +79,103 @@ def transform_to_local_utm(gdf):
 # Core processing functions
 
 
+def _is_rgb_orthomosaic(src):
+    """
+    Check if a raster is an RGB orthomosaic (3 or 4 band uint8).
+
+    Args:
+        src: Open rasterio dataset
+
+    Returns:
+        True if this appears to be an RGB orthomosaic
+    """
+    return src.dtypes[0] == "uint8" and src.count in (3, 4)
+
+
+def _crop_rgb_orthomosaic(src, geometries, output_filename):
+    """
+    Crop an RGB orthomosaic and return 4-band uint8 with alpha mask.
+
+    Handles both 3-band and 4-band uint8 inputs. The output is always
+    4-band uint8 where band 4 is an alpha mask (0=nodata, 255=valid).
+
+    Args:
+        src: Open rasterio dataset
+        geometries: Geometries to use for masking
+        output_filename: Output filename (for logging)
+
+    Returns:
+        Tuple of (cropped_data, cropped_transform, profile)
+    """
+    has_alpha = src.count == 4
+
+    if has_alpha:
+        print(f"  {output_filename}: 4-band uint8 with alpha detected, preserving format")
+    else:
+        print(f"  {output_filename}: 3-band uint8 detected, adding alpha band")
+
+    # Read RGB bands (first 3 bands)
+    # Use nodata=0 for the mask operation on RGB bands
+    cropped_rgb, cropped_transform = mask(
+        src, geometries, crop=True, indexes=[1, 2, 3], nodata=0, filled=True
+    )
+
+    # Create alpha band: 255 where valid, 0 where nodata
+    # Start with all zeros (nodata)
+    alpha_band = np.zeros(
+        (1, cropped_rgb.shape[1], cropped_rgb.shape[2]), dtype=np.uint8
+    )
+
+    if has_alpha:
+        # Read and crop the existing alpha band
+        cropped_alpha, _ = mask(
+            src, geometries, crop=True, indexes=[4], nodata=0, filled=True
+        )
+        # Alpha is valid (255) only where:
+        # 1. Original alpha was valid (non-zero)
+        # 2. Pixel is inside the crop polygon (handled by mask with nodata=0)
+        alpha_band = cropped_alpha
+    else:
+        # For 3-band input, create alpha from the mask operation
+        # Pixels inside polygon get alpha=255, outside get alpha=0
+        # We need to re-run mask to get the valid mask
+        cropped_with_mask, _ = mask(
+            src, geometries, crop=True, indexes=[1], filled=False
+        )
+        # Where mask is False (valid data), set alpha to 255
+        alpha_band[0] = np.where(cropped_with_mask.mask[0], 0, 255).astype(np.uint8)
+
+    # Combine RGB + alpha
+    cropped_data = np.vstack([cropped_rgb, alpha_band])
+
+    # Build profile for 4-band uint8 output
+    profile = src.profile.copy()
+    profile.update(
+        {
+            "driver": "COG",
+            "compress": "deflate",
+            "tiled": True,
+            "height": cropped_data.shape[1],
+            "width": cropped_data.shape[2],
+            "transform": cropped_transform,
+            "count": 4,
+            "dtype": "uint8",
+            "nodata": None,  # Alpha band handles nodata
+            "BIGTIFF": "IF_SAFER",
+        }
+    )
+
+    return cropped_data, cropped_transform, profile
+
+
 def crop_raster_save_cog(
     raster_filepath, output_filename, mission_polygon, output_path
 ):
     """
     Crop raster to mission polygon boundary and save as Cloud Optimized GeoTIFF (COG).
+
+    For RGB orthomosaics (3 or 4 band uint8), outputs 4-band uint8 with alpha mask.
+    For other rasters, uses standard nodata value handling.
 
     Args:
         raster_filepath: Path to input raster file
@@ -99,53 +191,56 @@ def crop_raster_save_cog(
         # Get geometries for masking
         geometries = mission_polygon_matched.geometry.values
 
-        # Determine nodata value and whether dtype promotion is needed
-        promote_dtype = False
-        demote_float64 = False
-        if src.nodata is not None:
-            nodata_value = src.nodata
-        elif src.dtypes[0] == "uint8":
-            # Promote uint8 to int16 to allow nodata value outside 0-255 range
-            nodata_value = -32767
-            promote_dtype = True
-            print(
-                f"  Warning: {output_filename} has no nodata defined. "
-                "Promoting uint8 to int16 to enable nodata masking."
+        # Handle RGB orthomosaics specially (3 or 4 band uint8)
+        if _is_rgb_orthomosaic(src):
+            cropped_data, cropped_transform, profile = _crop_rgb_orthomosaic(
+                src, geometries, output_filename
             )
         else:
-            nodata_value = -9999
+            # Standard handling for non-RGB rasters (elevation data, etc.)
+            # Determine nodata value and output dtype
+            output_dtype = None
+            if src.nodata is not None:
+                nodata_value = src.nodata
+            elif src.dtypes[0] == "uint8":
+                # Single-band uint8 without nodata: promote to int16
+                nodata_value = -32767
+                output_dtype = "int16"
+                print(
+                    f"  Warning: {output_filename} has no nodata defined. "
+                    "Promoting uint8 to int16 to enable nodata masking."
+                )
+            else:
+                nodata_value = -9999
 
-        # Convert float64 to float32 to save space
-        if src.dtypes[0] == "float64":
-            demote_float64 = True
+            # Convert float64 to float32 to save space
+            if src.dtypes[0] == "float64":
+                output_dtype = "float32"
 
-        # Crop raster to polygon, explicitly setting nodata outside polygon
-        cropped_data, cropped_transform = mask(
-            src, geometries, crop=True, nodata=nodata_value, filled=True
-        )
+            # Crop raster to polygon, explicitly setting nodata outside polygon
+            cropped_data, cropped_transform = mask(
+                src, geometries, crop=True, nodata=nodata_value, filled=True
+            )
 
-        # Update metadata for COG
-        profile = src.profile.copy()
-        profile.update(
-            {
-                "driver": "COG",
-                "compress": "deflate",
-                "tiled": True,
-                "height": cropped_data.shape[1],
-                "width": cropped_data.shape[2],
-                "transform": cropped_transform,
-                "nodata": nodata_value,
-                "BIGTIFF": "IF_SAFER",
-            }
-        )
+            # Update metadata for COG
+            profile = src.profile.copy()
+            profile.update(
+                {
+                    "driver": "COG",
+                    "compress": "deflate",
+                    "tiled": True,
+                    "height": cropped_data.shape[1],
+                    "width": cropped_data.shape[2],
+                    "transform": cropped_transform,
+                    "nodata": nodata_value,
+                    "BIGTIFF": "IF_SAFER",
+                }
+            )
 
-        # Apply dtype changes if needed
-        if promote_dtype:
-            profile["dtype"] = "int16"
-            cropped_data = cropped_data.astype("int16")
-        elif demote_float64:
-            profile["dtype"] = "float32"
-            cropped_data = cropped_data.astype("float32")
+            # Apply dtype conversion if needed
+            if output_dtype is not None:
+                profile["dtype"] = output_dtype
+                cropped_data = cropped_data.astype(output_dtype)
 
         # Write output
         output_file_path = os.path.join(output_path, "full", output_filename)
@@ -224,6 +319,8 @@ def create_thumbnail(tif_filepath, output_path, max_dim=800):
     """
     Create a PNG thumbnail from a GeoTIFF.
 
+    For 4-band uint8 images (RGB + alpha), uses the alpha band for transparency.
+
     Args:
         tif_filepath: Path to input TIF file
         output_path: Path to output PNG file
@@ -252,6 +349,12 @@ def create_thumbnail(tif_filepath, output_path, max_dim=800):
             # Single-band (elevation data, CHM, etc.)
             data = src.read(1, out_shape=(new_n_row, new_n_col))
             ax.imshow(data, cmap="viridis")
+        elif n_bands == 4 and src.dtypes[0] == "uint8":
+            # RGBA (4-band uint8 with alpha)
+            rgba = np.dstack(
+                [src.read(i, out_shape=(new_n_row, new_n_col)) for i in [1, 2, 3, 4]]
+            )
+            ax.imshow(rgba)
         elif n_bands >= 3:
             # RGB (use first 3 bands)
             rgb = np.dstack(
