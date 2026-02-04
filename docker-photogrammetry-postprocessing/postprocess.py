@@ -13,6 +13,7 @@ import matplotlib
 import numpy as np
 import pandas as pd
 import rasterio
+from rasterio.enums import ColorInterp
 from rasterio.mask import mask
 from rasterio.warp import Resampling, calculate_default_transform, reproject
 from shapely.geometry import Point
@@ -79,11 +80,106 @@ def transform_to_local_utm(gdf):
 # Core processing functions
 
 
+def _is_rgb_orthomosaic(src):
+    """
+    Check if a raster is an RGB orthomosaic (3 or 4 band uint8).
+
+    Args:
+        src: Open rasterio dataset
+
+    Returns:
+        True if this appears to be an RGB orthomosaic
+    """
+    return src.dtypes[0] == "uint8" and src.count in (3, 4)
+
+
+def _crop_rgb_orthomosaic(src, geometries, output_filename):
+    """
+    Crop an RGB orthomosaic and return 4-band uint8 with alpha mask.
+
+    Handles both 3-band and 4-band uint8 inputs. The output is always
+    4-band uint8 where band 4 is an alpha mask (0=nodata, 255=valid).
+
+    Args:
+        src: Open rasterio dataset
+        geometries: Geometries to use for masking
+        output_filename: Output filename (for logging)
+
+    Returns:
+        Tuple of (cropped_data, cropped_transform, profile, colorinterp)
+    """
+    has_alpha = src.count == 4
+
+    # Preserve color interpretation from input, adding alpha if needed
+    if has_alpha:
+        print(f"  {output_filename}: 4-band uint8 with alpha detected, preserving format")
+        colorinterp = list(src.colorinterp)
+    else:
+        print(f"  {output_filename}: 3-band uint8 detected, adding alpha band")
+        colorinterp = list(src.colorinterp) + [ColorInterp.alpha]
+
+    # Read RGB bands (first 3 bands)
+    # Use nodata=0 for the mask operation on RGB bands
+    cropped_rgb, cropped_transform = mask(
+        src, geometries, crop=True, indexes=[1, 2, 3], nodata=0, filled=True
+    )
+
+    # Create alpha band: 255 where valid, 0 where nodata
+    # Start with all zeros (nodata)
+    alpha_band = np.zeros(
+        (1, cropped_rgb.shape[1], cropped_rgb.shape[2]), dtype=np.uint8
+    )
+
+    if has_alpha:
+        # Read and crop the existing alpha band
+        cropped_alpha, _ = mask(
+            src, geometries, crop=True, indexes=[4], nodata=0, filled=True
+        )
+        # Alpha is valid (255) only where:
+        # 1. Original alpha was valid (non-zero)
+        # 2. Pixel is inside the crop polygon (handled by mask with nodata=0)
+        alpha_band = cropped_alpha
+    else:
+        # For 3-band input, create alpha from the mask operation
+        # Pixels inside polygon get alpha=255, outside get alpha=0
+        # We need to re-run mask to get the valid mask
+        cropped_with_mask, _ = mask(
+            src, geometries, crop=True, indexes=[1], filled=False
+        )
+        # Where mask is False (valid data), set alpha to 255
+        alpha_band[0] = np.where(cropped_with_mask.mask[0], 0, 255).astype(np.uint8)
+
+    # Combine RGB + alpha
+    cropped_data = np.vstack([cropped_rgb, alpha_band])
+
+    # Build profile for 4-band uint8 output
+    profile = src.profile.copy()
+    profile.update(
+        {
+            "driver": "COG",
+            "compress": "deflate",
+            "tiled": True,
+            "height": cropped_data.shape[1],
+            "width": cropped_data.shape[2],
+            "transform": cropped_transform,
+            "count": 4,
+            "dtype": "uint8",
+            "nodata": None,  # Alpha band handles nodata
+            "BIGTIFF": "IF_SAFER",
+        }
+    )
+
+    return cropped_data, cropped_transform, profile, colorinterp
+
+
 def crop_raster_save_cog(
     raster_filepath, output_filename, mission_polygon, output_path
 ):
     """
     Crop raster to mission polygon boundary and save as Cloud Optimized GeoTIFF (COG).
+
+    For RGB orthomosaics (3 or 4 band uint8), outputs 4-band uint8 with alpha mask.
+    For other rasters, uses standard nodata value handling.
 
     Args:
         raster_filepath: Path to input raster file
@@ -99,27 +195,66 @@ def crop_raster_save_cog(
         # Get geometries for masking
         geometries = mission_polygon_matched.geometry.values
 
-        # Crop raster to polygon
-        cropped_data, cropped_transform = mask(src, geometries, crop=True)
+        # Handle RGB orthomosaics specially (3 or 4 band uint8)
+        colorinterp = None
+        if _is_rgb_orthomosaic(src):
+            cropped_data, cropped_transform, profile, colorinterp = _crop_rgb_orthomosaic(
+                src, geometries, output_filename
+            )
+        else:
+            # Standard handling for non-RGB rasters (elevation data, etc.)
+            # Determine nodata value and output dtype
+            output_dtype = None
+            if src.nodata is not None:
+                nodata_value = src.nodata
+            elif src.dtypes[0] == "uint8":
+                # Single-band uint8 without nodata: promote to int16
+                nodata_value = -32767
+                output_dtype = "int16"
+                print(
+                    f"  Warning: {output_filename} has no nodata defined. "
+                    "Promoting uint8 to int16 to enable nodata masking."
+                )
+            else:
+                nodata_value = -9999
 
-        # Update metadata for COG
-        profile = src.profile.copy()
-        profile.update(
-            {
-                "driver": "COG",
-                "compress": "deflate",
-                "tiled": True,
-                "height": cropped_data.shape[1],
-                "width": cropped_data.shape[2],
-                "transform": cropped_transform,
-                "BIGTIFF": "IF_SAFER",
-            }
-        )
+            # Convert float64 to float32 to save space
+            if src.dtypes[0] == "float64":
+                output_dtype = "float32"
+
+            # Crop raster to polygon, explicitly setting nodata outside polygon
+            cropped_data, cropped_transform = mask(
+                src, geometries, crop=True, nodata=nodata_value, filled=True
+            )
+
+            # Update metadata for COG
+            profile = src.profile.copy()
+            profile.update(
+                {
+                    "driver": "COG",
+                    "compress": "deflate",
+                    "tiled": True,
+                    "height": cropped_data.shape[1],
+                    "width": cropped_data.shape[2],
+                    "transform": cropped_transform,
+                    "nodata": nodata_value,
+                    "BIGTIFF": "IF_SAFER",
+                }
+            )
+
+            # Apply dtype conversion if needed
+            if output_dtype is not None:
+                profile["dtype"] = output_dtype
+                cropped_data = cropped_data.astype(output_dtype)
 
         # Write output
         output_file_path = os.path.join(output_path, "full", output_filename)
         with rasterio.open(output_file_path, "w", **profile) as dst:
             dst.write(cropped_data)
+
+            # Set color interpretation for RGBA so GIS software recognizes alpha band
+            if colorinterp is not None:
+                dst.colorinterp = colorinterp
 
     print(f"  Saved COG: {output_filename}")
 
@@ -128,6 +263,9 @@ def make_chm(dsm_filepath, dtm_filepath):
     """
     Create a Canopy Height Model (CHM) from DSM and DTM.
 
+    Only pixels with valid data in both DSM and DTM will have values in the CHM.
+    Pixels where either input has nodata will be set to nodata in the output.
+
     Args:
         dsm_filepath: Path to Digital Surface Model
         dtm_filepath: Path to Digital Terrain Model
@@ -135,25 +273,29 @@ def make_chm(dsm_filepath, dtm_filepath):
     Returns:
         Tuple of (chm_array, profile) for writing
     """
-    # Read DSM
+    # Read DSM with masked array to handle nodata
     with rasterio.open(dsm_filepath) as dsm_src:
-        dsm_data = dsm_src.read(1)
+        dsm_data = dsm_src.read(1, masked=True)
         dsm_profile = dsm_src.profile.copy()
         dsm_transform = dsm_src.transform
         dsm_crs = dsm_src.crs
         dsm_shape = dsm_data.shape
+        dsm_nodata = dsm_src.nodata
 
     # Read DTM and reproject to match DSM
     with rasterio.open(dtm_filepath) as dtm_src:
+        dtm_nodata = dtm_src.nodata
+
         # Calculate transform for reprojection
         transform, width, height = calculate_default_transform(
             dtm_src.crs, dsm_crs, dtm_src.width, dtm_src.height, *dtm_src.bounds
         )
 
-        # Create array for reprojected DTM with same shape as DSM
-        dtm_reprojected = np.empty(dsm_shape, dtype=dtm_src.dtypes[0])
+        # Initialize array with nodata value (instead of empty/uninitialized)
+        dtm_fill_value = dtm_nodata if dtm_nodata is not None else -9999
+        dtm_reprojected = np.full(dsm_shape, dtm_fill_value, dtype=dtm_src.dtypes[0])
 
-        # Reproject DTM to match DSM
+        # Reproject DTM to match DSM, with explicit nodata handling
         reproject(
             source=rasterio.band(dtm_src, 1),
             destination=dtm_reprojected,
@@ -161,18 +303,32 @@ def make_chm(dsm_filepath, dtm_filepath):
             src_crs=dtm_src.crs,
             dst_transform=dsm_transform,
             dst_crs=dsm_crs,
+            src_nodata=dtm_nodata,
+            dst_nodata=dtm_fill_value,
             resampling=Resampling.bilinear,
         )
 
-    # Calculate CHM
+    # Convert reprojected DTM to masked array
+    dtm_reprojected = np.ma.masked_equal(dtm_reprojected, dtm_fill_value)
+
+    # Calculate CHM - mask propagates automatically (nodata in either input = nodata in output)
     chm_data = dsm_data - dtm_reprojected
 
-    return chm_data, dsm_profile
+    # Convert back to regular array, filling masked values with nodata
+    chm_nodata = dsm_nodata if dsm_nodata is not None else -9999
+    chm_filled = chm_data.filled(chm_nodata)
+
+    # Update profile with nodata value
+    dsm_profile.update({"nodata": chm_nodata})
+
+    return chm_filled, dsm_profile
 
 
 def create_thumbnail(tif_filepath, output_path, max_dim=800):
     """
     Create a PNG thumbnail from a GeoTIFF.
+
+    For 4-band uint8 images (RGB + alpha), uses the alpha band for transparency.
 
     Args:
         tif_filepath: Path to input TIF file
@@ -199,9 +355,16 @@ def create_thumbnail(tif_filepath, output_path, max_dim=800):
         fig, ax = plt.subplots(figsize=(fig_width, fig_height), dpi=dpi)
 
         if n_bands == 1:
-            # Single-band grayscale
-            data = src.read(1, out_shape=(new_n_row, new_n_col))
-            ax.imshow(data, cmap="gray")
+            # Single-band (elevation data, CHM, etc.)
+            # Read as masked array to handle nodata (renders as transparent)
+            data = src.read(1, out_shape=(new_n_row, new_n_col), masked=True)
+            ax.imshow(data, cmap="viridis")
+        elif n_bands == 4 and src.dtypes[0] == "uint8":
+            # RGBA (4-band uint8 with alpha)
+            rgba = np.dstack(
+                [src.read(i, out_shape=(new_n_row, new_n_col)) for i in [1, 2, 3, 4]]
+            )
+            ax.imshow(rgba)
         elif n_bands >= 3:
             # RGB (use first 3 bands)
             rgb = np.dstack(
@@ -216,7 +379,7 @@ def create_thumbnail(tif_filepath, output_path, max_dim=800):
         else:
             # Fallback for 2-band images
             data = src.read(1, out_shape=(new_n_row, new_n_col))
-            ax.imshow(data, cmap="gray")
+            ax.imshow(data, cmap="viridis")
 
         # Remove axes and margins
         ax.axis("off")
