@@ -112,7 +112,9 @@ def _crop_rgb_orthomosaic(src, geometries, output_filename):
 
     # Preserve color interpretation from input, adding alpha if needed
     if has_alpha:
-        print(f"  {output_filename}: 4-band uint8 with alpha detected, preserving format")
+        print(
+            f"  {output_filename}: 4-band uint8 with alpha detected, preserving format"
+        )
         colorinterp = list(src.colorinterp)
     else:
         print(f"  {output_filename}: 3-band uint8 detected, adding alpha band")
@@ -198,8 +200,8 @@ def crop_raster_save_cog(
         # Handle RGB orthomosaics specially (3 or 4 band uint8)
         colorinterp = None
         if _is_rgb_orthomosaic(src):
-            cropped_data, cropped_transform, profile, colorinterp = _crop_rgb_orthomosaic(
-                src, geometries, output_filename
+            cropped_data, cropped_transform, profile, colorinterp = (
+                _crop_rgb_orthomosaic(src, geometries, output_filename)
             )
         else:
             # Standard handling for non-RGB rasters (elevation data, etc.)
