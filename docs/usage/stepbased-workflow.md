@@ -65,6 +65,22 @@ The step-based workflow executes **10 separate Metashape processing steps** as i
 !!! tip "Conditional Execution"
     Steps disabled in your config file are **completely skipped** - no container is created and no resources are allocated. This is more efficient than the original workflow where disabled operations still ran inside a single long-running container.
 
+### Iteration ID
+
+Each mission in the workflow is assigned a unique **iteration ID** for isolation and tracking. The iteration ID is automatically generated as `{index}_{project-name}` where:
+
+- `{index}` is a zero-padded 3-digit number (000, 001, 002, etc.) representing the mission's position in the config list
+- `{project-name}` is the sanitized project name from the config file (DNS-compliant: lowercase, alphanumeric with hyphens)
+
+**Example:** If processing "Mission_001" as the first mission, the iteration ID would be `000_mission-001`.
+
+The iteration ID is used to:
+
+- Create isolated working directories: `{TEMP_WORKING_DIR}/{workflow-name}/{iteration-id}/`
+- Prevent collisions between parallel mission processing
+- Enable unique identification even when multiple missions have the same project name
+- Organize downloaded imagery and intermediate files
+
 ## Setup
 
 ### Prepare inputs
