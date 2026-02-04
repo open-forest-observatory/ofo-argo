@@ -244,8 +244,11 @@ def postprocess_photogrammetry_containerized(
     - Creates PNG thumbnails
     - Copies non-raster files
 
+    Output is written directly to output/full/ and output/thumbnails/ directories
+    (no mission subdirectory since each iteration has its own isolated postprocessing folder).
+
     Args:
-        mission_id: Mission identifier
+        mission_id: Mission identifier (used for naming output files, not directory structure)
         boundary_file_path: Path to mission boundary polygon file
         product_file_paths: List of paths to photogrammetry product files
 
@@ -264,9 +267,9 @@ def postprocess_photogrammetry_containerized(
             f"Product files not found: {', '.join(missing_products)}"
         )
 
-    # Create mission-specific output directories
-    working_dir = os.environ.get("WORKING_DIR", "/tmp/processing")
-    postprocessed_path = f"{working_dir}/output/{mission_id}"
+    # Create output directories (no mission subdirectory)
+    working_dir = os.environ.get("TEMP_WORKING_DIR_POSTPROCESSING", "/tmp/processing")
+    postprocessed_path = f"{working_dir}/output"
     create_dir(os.path.join(postprocessed_path, "full"))
     create_dir(os.path.join(postprocessed_path, "thumbnails"))
 

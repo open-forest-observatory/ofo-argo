@@ -44,22 +44,24 @@ spec:
         value: "default-run"
       - name: PHOTOGRAMMETRY_CONFIG_ID
         value: "NONE"
-      # S3 / rclone upload parameters
-      - name: S3_BUCKET_PHOTOGRAMMETRY_OUTPUTS
+      # S3 bucket for internal/intermediate outputs (raw Metashape products like orthomosaics, point clouds, DEMs)
+      - name: S3_BUCKET_INTERNAL
         value: ""
-      # Post-processing parameters
-      - name: S3_BUCKET_POSTPROCESSED_OUTPUTS
+      # S3 bucket for public/final outputs (postprocessed, clipped products ready for distribution)
+      - name: S3_BUCKET_PUBLIC
         value: "ofo-public"
       - name: OUTPUT_DIRECTORY
         value: ""
-      - name: BOUNDARY_DIRECTORY
+      # Parent directory in S3_BUCKET_PUBLIC where mission boundary polygons reside.
+      # Expected structure: <S3_BOUNDARY_DIR>/<mission_name>/metadata-mission/<mission_name>_mission-metadata.gpkg
+      - name: S3_BOUNDARY_DIR
         value: ""
       - name: WORKING_DIR
         value: "/tmp/processing"
       # - name: OUTPUT_MAX_DIM
       #   value: "800"
-      # Docker image tag for postprocessing container
-      - name: POSTPROCESSING_IMAGE_TAG
+      # Docker image tag for OFO Argo containers (postprocessing)
+      - name: OFO_ARGO_IMAGES_TAG
         value: "latest"
 
   # Defining where to read raw drone imagery data and write out imagery products to `/ofo-share`
@@ -243,9 +245,9 @@ spec:
 
             # Build S3 destination path with optional photogrammetry config subfolder
             if [ -n "{{inputs.parameters.photogrammetry-config-subfolder}}" ]; then
-              DST="s3:{{workflow.parameters.S3_BUCKET_PHOTOGRAMMETRY_OUTPUTS}}/{{workflow.parameters.RUN_FOLDER}}/{{inputs.parameters.photogrammetry-config-subfolder}}"
+              DST="s3:{{workflow.parameters.S3_BUCKET_INTERNAL}}/{{workflow.parameters.RUN_FOLDER}}/{{inputs.parameters.photogrammetry-config-subfolder}}"
             else
-              DST="s3:{{workflow.parameters.S3_BUCKET_PHOTOGRAMMETRY_OUTPUTS}}/{{workflow.parameters.RUN_FOLDER}}"
+              DST="s3:{{workflow.parameters.S3_BUCKET_INTERNAL}}/{{workflow.parameters.RUN_FOLDER}}"
             fi
 
             echo "[rclone] Uploading $SRC -> $DST"
@@ -316,7 +318,7 @@ spec:
           - name: dataset-name
           - name: photogrammetry-config-subfolder
       container:
-        image: ghcr.io/open-forest-observatory/photogrammetry-postprocessing:{{workflow.parameters.POSTPROCESSING_IMAGE_TAG}}
+        image: ghcr.io/open-forest-observatory/photogrammetry-postprocessing:{{workflow.parameters.OFO_ARGO_IMAGES_TAG}}
         volumeMounts:
           - name: data
             mountPath: /data
@@ -342,7 +344,7 @@ spec:
                 name: s3-credentials
                 key: secret_key
           - name: S3_BUCKET_INPUT_DATA
-            value: "{{workflow.parameters.S3_BUCKET_PHOTOGRAMMETRY_OUTPUTS}}"
+            value: "{{workflow.parameters.S3_BUCKET_INTERNAL}}"
           - name: RUN_FOLDER
             value: "{{workflow.parameters.RUN_FOLDER}}"
           - name: PHOTOGRAMMETRY_CONFIG_SUBFOLDER
@@ -350,11 +352,11 @@ spec:
           - name: DATASET_NAME
             value: "{{inputs.parameters.dataset-name}}"
           - name: S3_BUCKET_INPUT_BOUNDARY
-            value: "{{workflow.parameters.S3_BUCKET_POSTPROCESSED_OUTPUTS}}"
-          - name: INPUT_BOUNDARY_DIRECTORY
-            value: "{{workflow.parameters.BOUNDARY_DIRECTORY}}"
+            value: "{{workflow.parameters.S3_BUCKET_PUBLIC}}"
+          - name: INPUT_BOUNDARY_DIR
+            value: "{{workflow.parameters.S3_BOUNDARY_DIR}}"
           - name: S3_BUCKET_OUTPUT
-            value: "{{workflow.parameters.S3_BUCKET_POSTPROCESSED_OUTPUTS}}"
+            value: "{{workflow.parameters.S3_BUCKET_PUBLIC}}"
           - name: OUTPUT_DIRECTORY
             value: "{{workflow.parameters.OUTPUT_DIRECTORY}}"
           #- name: OUTPUT_MAX_DIM

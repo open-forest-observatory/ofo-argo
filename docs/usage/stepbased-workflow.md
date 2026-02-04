@@ -112,6 +112,193 @@ project:
   photo_path: /data/argo-input/datasets/dataset_1
 ```
 
+## Downloading imagery from S3 (optional)
+
+Instead of pre-staging imagery on the shared PVC, you can have the workflow automatically download and extract imagery zip files from S3 at runtime. This is useful for:
+
+- **Cloud-native workflows**: Process imagery stored in S3 without manual uploads
+- **One-time processing**: Imagery that doesn't need to persist after the workflow
+- **Remote collaboration**: Team members can trigger workflows without PVC access
+
+### When to use S3 imagery download
+
+Use this feature when:
+
+- Your imagery is already stored as zip files in S3
+- You want to avoid manual file transfers to the cluster
+- You're processing imagery that won't be reused
+
+**Don't use this feature when:**
+
+- Your imagery is already on the PVC (use direct paths instead)
+- You need to reprocess the same imagery multiple times (pre-staging is more efficient)
+- Your zip files are very large and bandwidth is a concern
+
+### Configuration
+
+Add the following to the `argo:` section of your config file:
+
+```yaml
+argo:
+  # List of S3 zip files to download (can also be a single string)
+  s3_imagery_zip_download:
+    - ofo-public/drone/missions_01/000558/images/000558_images.zip
+    - ofo-public/drone/missions_01/000559/images/000559_images.zip
+
+  # Whether to delete downloaded imagery after workflow completes (default: true)
+  cleanup_downloaded_imagery: true
+```
+
+| Parameter | Description | Default |
+|-----------|-------------|---------|
+| `s3_imagery_zip_download` | S3 path(s) of zip files to download. Can be a single string or a list. Format: `bucket/path/file.zip`. The S3 endpoint and credentials are configured in the cluster's `s3-credentials` Kubernetes secret. | (none) |
+| `cleanup_downloaded_imagery` | If `true`, downloaded imagery is deleted after photogrammetry completes to free disk space | `true` |
+
+### Path syntax: The `__DOWNLOADED__` prefix
+
+When using S3 imagery download, reference downloaded files in `photo_path` using the `__DOWNLOADED__` prefix:
+
+```yaml
+project:
+  project_name: my_forest_plot
+  photo_path:
+    - __DOWNLOADED__/000558_images/000558-01
+    - __DOWNLOADED__/000558_images/000558-02
+    - __DOWNLOADED__/000559_images/000559-01
+```
+
+The workflow automatically replaces `__DOWNLOADED__` with the actual download location before photogrammetry begins.
+
+### Zip file structure requirements
+
+The zip filename (without `.zip` extension) becomes the extraction folder name. Plan your `photo_path` entries accordingly:
+
+**Example:** Downloading `000558_images.zip` containing:
+```
+000558_images.zip
+├── 000558-01/
+│   ├── IMG_0001.jpg
+│   └── IMG_0002.jpg
+└── 000558-02/
+    ├── IMG_0001.jpg
+    └── IMG_0002.jpg
+```
+
+Results in this structure after extraction:
+```
+{download_dir}/
+└── 000558_images/          ← folder name from zip filename
+    ├── 000558-01/
+    │   ├── IMG_0001.jpg
+    │   └── IMG_0002.jpg
+    └── 000558-02/
+        ├── IMG_0001.jpg
+        └── IMG_0002.jpg
+```
+
+Reference these paths as:
+```yaml
+photo_path:
+  - __DOWNLOADED__/000558_images/000558-01
+  - __DOWNLOADED__/000558_images/000558-02
+```
+
+### Complete example configuration
+
+```yaml
+argo:
+  # S3 imagery download settings
+  s3_imagery_zip_download:
+    - ofo-public/drone/missions_01/000558/images/000558_images.zip
+  cleanup_downloaded_imagery: true
+
+  # Standard workflow settings
+  match_photos:
+    gpu_enabled: true
+    gpu_resource: "nvidia.com/mig-1g.5gb"
+    cpu_request: "4"
+    memory_request: "16Gi"
+
+  build_depth_maps:
+    gpu_resource: "nvidia.com/mig-2g.10gb"
+
+project:
+  project_name: mission_000558
+  # Reference downloaded imagery with __DOWNLOADED__ prefix
+  photo_path:
+    - __DOWNLOADED__/000558_images/000558-01
+    - __DOWNLOADED__/000558_images/000558-02
+
+# ... rest of Metashape config sections ...
+match_photos:
+  enabled: true
+  # ...
+```
+
+### How it works
+
+When `s3_imagery_zip_download` is specified, the workflow adds these steps before photogrammetry:
+
+1. **download-imagery**: Downloads each zip file from S3 using rclone and extracts it
+2. **transform-config**: Replaces `__DOWNLOADED__` in `photo_path` with the actual download location
+
+After all processing completes (including upload and postprocessing):
+
+3. **cleanup-imagery** (if enabled): Deletes the downloaded imagery to free disk space
+
+Each project gets its own isolated download directory to prevent collisions when processing multiple projects in parallel.
+
+### Troubleshooting S3 imagery download
+
+#### "Config validation failed: __DOWNLOADED__ prefix used but no downloads specified"
+
+**Cause:** Your `photo_path` contains `__DOWNLOADED__` but `s3_imagery_zip_download` is empty or missing.
+
+**Solution:** Either add `s3_imagery_zip_download` entries, or change `photo_path` to use direct paths (e.g., `/data/...`).
+
+#### "Config validation failed: Downloads specified but no __DOWNLOADED__ paths found"
+
+**Cause:** You specified `s3_imagery_zip_download` but your `photo_path` entries don't use the `__DOWNLOADED__` prefix.
+
+**Solution:** Update `photo_path` to use `__DOWNLOADED__/...` paths that reference your downloaded zip contents.
+
+#### Download fails with "Failed to copy" or timeout errors
+
+**Possible causes:**
+
+- Incorrect S3 path format (should be `bucket/path/file.zip` without a remote prefix)
+- S3 credentials not configured in the cluster's `s3-credentials` secret
+- Network issues or S3 endpoint unavailable
+- Zip file doesn't exist at the specified path
+
+**Debug steps:**
+
+1. Check the `download-imagery` step logs in Argo UI
+2. Verify the S3 path is correct by listing files (requires rclone configured with the same credentials):
+   ```bash
+   rclone ls :s3:ofo-public/drone/missions_01/000558/images/ --s3-provider=Ceph --s3-endpoint=<endpoint>
+   ```
+
+#### "Photo path not found" errors in setup step
+
+**Cause:** The extracted zip structure doesn't match your `photo_path` entries.
+
+**Solution:**
+
+1. Check what's actually inside your zip file
+2. Ensure `photo_path` matches the extracted folder structure
+3. Remember: zip filename (minus `.zip`) becomes the top-level folder
+
+#### Disk space issues
+
+**Cause:** Downloaded imagery fills up the shared storage.
+
+**Solutions:**
+
+- Ensure `cleanup_downloaded_imagery: true` (default) to auto-delete after completion
+- Process fewer projects in parallel to reduce concurrent disk usage
+- Monitor disk usage during workflow execution
+
 ## Resource request configuration
 
 All Argo workflow resource requests (GPU, CPU, memory) are configured in the top-level `argo` section of your automate-metashape config file. The defaults assume one or more JS2 `m3.large` CPU nodes and one or more `mig1` (7-slice MIG `g3.xl`) GPU nodes (see [cluster access and resizing](cluster-access-and-resizing.md)).
@@ -247,20 +434,32 @@ Any values specified for `project_path` and `output_path` in the config.yml will
 
 #### Create a config list file
 
-We use a text file, for example `config_list.txt`, to tell the Argo workflow which config files
-should be processed in the current run. This text file should list the paths to each config.yml file
-you want to process within the container (for example, use `/data/XYZ` to specity the path `/ofo-share/argo-data/XYZ`), one config file path per line.
+We use a text file, for example `config-list.txt`, to tell the Argo workflow which config files
+should be processed in the current run. Place this file in the **same directory as your config files**, then list just the **filenames** (not full paths), one per line.
 
-For example:
+**Example:** If your configs are in `/ofo-share/argo-data/argo-input/configs/`, create a file at `/ofo-share/argo-data/argo-input/configs/config-list.txt`:
 
 ```
-/data/argo-input/configs/01_benchmarking-greasewood.yml
-/data/argo-input/configs/02_benchmarking-greasewood.yml
-/data/argo-input/configs/01_benchmarking-emerald-subset.yml
-/data/argo-input/configs/02_benchmarking-emerald-subset.yml
+# Benchmarking missions
+01_benchmarking-greasewood.yml
+02_benchmarking-greasewood.yml
+
+# Skipping emerald for now
+# 01_benchmarking-emerald-subset.yml
+# 02_benchmarking-emerald-subset.yml
+
+03_production-run.yml  # high priority
 ```
 
-This allows you to organize your config files in subdirectories or different locations. The project name will be automatically derived from the config filename (e.g., `/data/argo-input/configs/project-name.yml` becomes project `project-name`), unless it is explicity set in the config file at `project.project_name` (which takes priority).
+**Features:**
+
+- **Filenames only**: List just the config filename; the directory is inferred from the config list's location
+- **Comments**: Lines starting with `#` (after whitespace) are skipped
+- **Inline comments**: Text after `#` on any line is ignored (e.g., `config.yml # note`)
+- **Blank lines**: Empty lines are ignored for readability
+- **Backward compatibility**: Absolute paths (starting with `/`) still work if needed
+
+The project name will be automatically derived from the config filename (e.g., `project-name.yml` becomes project `project-name`), unless explicitly set in the config file at `project.project_name` (which takes priority).
 
 You can create your own config list file and name it whatever you want, placing it anywhere within `/ofo-share/argo-data/`. Then specify the path to it within the container (using `/data/XYZ` to refer to `/ofo-share/argo-data/XYZ`) using the `CONFIG_LIST` parameter when submitting the workflow.
 
@@ -314,16 +513,15 @@ Once your cluster authentication is set up and your inputs are prepared, run:
 ```bash
 argo submit -n argo photogrammetry-workflow-stepbased.yaml \
   --name "my-run-$(date +%Y%m%d)" \
-  -p CONFIG_LIST=/data/argo-input/config-lists/config_list.txt \
-  -p TEMP_WORKING_DIR=/data/argo-output/temp-runs/gillan_june27 \
-  -p S3_PHOTOGRAMMETRY_DIR=gillan_june27 \
-  -p PHOTOGRAMMETRY_CONFIG_ID=01 \
-  -p S3_BUCKET_PHOTOGRAMMETRY_OUTPUTS=ofo-internal \
-  -p S3_POSTPROCESSED_DIR=jgillan_test \
-  -p S3_BUCKET_POSTPROCESSED_OUTPUTS=ofo-public \
-  -p BOUNDARY_DIRECTORY=jgillan_test \
-  -p POSTPROCESSING_IMAGE_TAG=latest \
-  -p UTILS_IMAGE_TAG=latest \
+  -p CONFIG_LIST=/data/argo-input/configs/config-list.txt \
+  -p TEMP_WORKING_DIR=/data/argo-output/tmp/derek-0202 \
+  -p S3_BUCKET_INTERNAL=ofo-internal \
+  -p S3_PHOTOGRAMMETRY_DIR=photogrammetry-outputs_dytest02 \
+  -p PHOTOGRAMMETRY_CONFIG_ID=03 \
+  -p S3_BUCKET_PUBLIC=ofo-public \
+  -p S3_POSTPROCESSED_DIR=drone_dytest02 \
+  -p S3_BOUNDARY_DIR=drone_dytest02 \
+  -p OFO_ARGO_IMAGES_TAG=latest \
   -p AUTOMATE_METASHAPE_IMAGE_TAG=latest
 ```
 
@@ -343,16 +541,15 @@ Database parameters (not currently functional):
 
 | Parameter | Description |
 |-----------|-------------|
-| `CONFIG_LIST` | **Absolute path** to text file listing metashape config file paths (each line should be an absolute path starting with `/data/`). Example: `/data/argo-input/config-lists/config_list.txt` |
+| `CONFIG_LIST` | **Absolute path** to text file listing metashape config files. Each line should be a config filename (resolved relative to the config list's directory) or an absolute path. Lines starting with `#` are comments. Example: `/data/argo-input/configs/config-list.txt` |
 | `TEMP_WORKING_DIR` | **Absolute path** for temporary workflow files (both photogrammetry and postprocessing). Workflow creates `photogrammetry/` and `postprocessing/` subdirectories automatically. All files are deleted after successful S3 upload. Example: `/data/argo-output/temp-runs/gillan_june27` |
-| `S3_PHOTOGRAMMETRY_DIR` | S3 directory name for raw Metashape outputs. When `PHOTOGRAMMETRY_CONFIG_ID` is set, products upload to `{bucket}/{S3_PHOTOGRAMMETRY_DIR}/photogrammetry_{PHOTOGRAMMETRY_CONFIG_ID}/`. When not set, products go to `{bucket}/{S3_PHOTOGRAMMETRY_DIR}/`. Example: `gillan_june27` |
 | `PHOTOGRAMMETRY_CONFIG_ID` | Two-digit configuration ID (e.g., `01`, `02`) used to organize outputs into `photogrammetry_NN` subdirectories in S3 for both raw and postprocessed products. If not specified or set to `NONE`, both raw and postprocessed products are stored without the `photogrammetry_NN` subfolder. |
-| `S3_BUCKET_PHOTOGRAMMETRY_OUTPUTS` | S3 bucket where raw Metashape products (orthomosaics, point clouds, etc.) are uploaded (typically `ofo-internal`). |
-| `S3_POSTPROCESSED_DIR` | S3 directory name for postprocessed outputs. When `PHOTOGRAMMETRY_CONFIG_ID` is set, products are organized as `{S3_POSTPROCESSED_DIR}/{mission_name}/photogrammetry_{PHOTOGRAMMETRY_CONFIG_ID}/`. When not set, products go to `{S3_POSTPROCESSED_DIR}/{mission_name}/`. Example: `jgillan_test` |
-| `S3_BUCKET_POSTPROCESSED_OUTPUTS` | S3 bucket for final postprocessed outputs and where boundary files are stored (typically `ofo-public`) |
-| `BOUNDARY_DIRECTORY` | Parent directory in S3 where mission boundary polygons reside (used to clip imagery). Example: `jgillan_test` |
-| `POSTPROCESSING_IMAGE_TAG` | Docker image tag for the postprocessing container (default: `latest`). Use a specific branch name or tag to test development versions (e.g., `dy-manila`) |
-| `UTILS_IMAGE_TAG` | Docker image tag for the argo-workflow-utils container (default: `latest`). Use a specific branch name or tag to test development versions (e.g., `dy-manila`) |
+| `S3_BUCKET_INTERNAL` | S3 bucket for internal/intermediate outputs where raw Metashape products (orthomosaics, point clouds, DEMs) are uploaded (typically `ofo-internal`). |
+| `S3_PHOTOGRAMMETRY_DIR` | S3 directory name for raw Metashape outputs. When `PHOTOGRAMMETRY_CONFIG_ID` is set, products upload to `{S3_BUCKET_INTERNAL}/{S3_PHOTOGRAMMETRY_DIR}/photogrammetry_{PHOTOGRAMMETRY_CONFIG_ID}/`. When `PHOTOGRAMMETRY_CONFIG_ID` is not set, products go to `{bucket}/{S3_PHOTOGRAMMETRY_DIR}/`. Example: `photogrammetry-outputs` |
+| `S3_BUCKET_PUBLIC` | S3 bucket for public/final outputs (postprocessed, clipped products ready for distribution) and where boundary files are stored (typically `ofo-public`). |
+| `S3_POSTPROCESSED_DIR` | S3 directory name for postprocessed outputs. When `PHOTOGRAMMETRY_CONFIG_ID` is set, products are organized as `{S3_POSTPROCESSED_DIR}/{mission_name}/photogrammetry_{PHOTOGRAMMETRY_CONFIG_ID}/`. When not set, products go to `{S3_POSTPROCESSED_DIR}/{mission_name}/`. Example: `drone/missions_03` |
+| `S3_BOUNDARY_DIR` | Parent directory in `S3_BUCKET_PUBLIC` where mission boundary polygons reside (used to clip imagery). The structure beneath this directory is assumed to be: `<S3_BOUNDARY_DIR>/<mission_name>/metadata-mission/<mission_name>_mission-metadata.gpkg`. Example: `drone/missions_03` |
+| `OFO_ARGO_IMAGES_TAG` | Docker image tag for OFO Argo containers (postprocessing and argo-workflow-utils) (default: `latest`). Use a specific branch name or tag to test development versions (e.g., `dy-manila`) |
 | `AUTOMATE_METASHAPE_IMAGE_TAG` | Docker image tag for the automate-metashape container (default: `latest`). Use a specific branch name or tag to test development versions |
 | `DB_*` | Database parameters for logging Argo status (not currently functional; credentials in [OFO credentials document](https://docs.google.com/document/d/155AP0P3jkVa-yT53a-QLp7vBAfjRa78gdST1Dfb4fls/edit?tab=t.0)) |
 
@@ -472,7 +669,7 @@ The final outputs will be written to `S3:ofo-public` in the following directory 
                ├── dataset1_dtm-ptcloud.tif
                ├── dataset1_log.txt
                ├── dataset1_ortho-dtm-ptcloud.tif
-               ├── dataset1_points-copc.laz
+               ├── dataset1_points.copc.laz
                └── dataset1_report.pdf
             ├── thumbnails/
                ├── dataset1_chm-ptcloud.png
@@ -487,7 +684,7 @@ The final outputs will be written to `S3:ofo-public` in the following directory 
                ├── dataset1_dtm-ptcloud.tif
                ├── dataset1_log.txt
                ├── dataset1_ortho-dtm-ptcloud.tif
-               ├── dataset1_points-copc.laz
+               ├── dataset1_points.copc.laz
                └── dataset1_report.pdf
             ├── thumbnails/
                ├── dataset1_chm-ptcloud.png

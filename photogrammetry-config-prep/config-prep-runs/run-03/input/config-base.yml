@@ -1,0 +1,258 @@
+# This is an example yaml configuration for a metashape run
+
+#### Project-level parameters (grouped under project section):
+
+project:
+  # Project to load. If not a blank string, this will open an existing project at the path specified. If a blank string, creates a new empty project.
+  # Even if opening an existing project, all processing on it is saved as a new project (path and name specified below). The original project file is not modified.
+  load_project: ""
+
+  # The path to the directory of flight photos
+  # If there are multiple photo folders, set path to the folder that contains all the photo folders,
+  # or provide a list of paths via the YAML list syntax (e.g., ["/path/to/photo/folder1", "/path/to/photo/folder2"]). Each separately-provided path will be given its own camera calibration.
+  # If there are no photos to add (e.g., this is an existing project that already has photos in it, set to an empty string ("")
+  # If you are running this workflow via the OFO Argo platform and have specified (in the 'argo' section below) to download input imagery from S3, reference the location of those downloaded images with '__DOWNLOADED__'. For example, set photo_path to ["__DOWNLOADED__/000558_images/000558-01", "__DOWNLOADED__/000558_images/000558-02", "__DOWNLOADED__/000559_images/000559-01"]. The first folder beaneath __DOWNLOADED__ is the name of the downloaded zip file (sans extension) and the remainder (optional) is any subfolders that should receive separate camera calibration.
+  photo_path: ""
+
+  # The path to a secondary directory of flight photos, which are only aligned to the project *after*
+  # all the other processing is done. This is useful if you want to use secondary photos for multiview
+  # analyses (e.g., species ID) without affecting the photogrammetry. Note that the secondary photos
+  # are processed in the same way as the primary (e.g., same resolution, same procedure regarding
+  # separate calibration per path) and that align_cameras:reset_alignment must be False and
+  # match_photos:keep_keypoints must be True. If there are no secondary photos to add, set to an empty
+  # string ("").
+  photo_path_secondary: ""
+
+  # Path for exports (e.g., points, DSM, orthomosaic) and processing log. Will be created if does not exist.
+  output_path: ""
+
+  # Path to save Metashape project file (.psx). Will be created if does not exist
+  project_path: ""
+
+  # The identifier for the project. Will be used in naming the project file and output files. Recommended to include a photoset name and processing parameter set name.
+  # Optionally, set it to an empty string ("") to use the config file name (minus extension) as the project name
+  project_name: ""
+
+  # CRS EPSG code that project outputs should be in (projection should be in meter units and intended for the project area)
+  project_crs: "EPSG::32610" # 26910 is UTM 10N
+
+  # Enable metashape "fine-level task subdivision" which reduces memory use by breaking processing into independent chunks that are run in series.
+  # Assuming there's enough memory, it seems to run 10-20% faster by disabling subdividing. But large projects can run out memory and fail if subdivide is not enabled.
+  subdivide_task: True
+
+#### Processing parameters:
+## Steps can be run or skipped using the 'enabled' parameter. If enabled == False, everything else in the step is irrelevant.
+## The metashape functions powering each of these steps are listed in the comments in parentheses.
+## Refer to Metashape documentation for full parameter definitions: https://www.agisoft.com/pdf/metashape_python_api_1_5_0.pdf
+## Parameter names here generally follow the parameter names of the Metashape functions.
+
+# Should the photos at the path(s) listed above be added to the project? Can disable if, for
+# example, you only want to add GCPs (or do additional processing) to an existing project.
+add_photos: # (Metashape: addPhotos)
+  enabled: True # This applies to the main photos specified in project:photo_path above. Secondary photos are always added and aligned if a path (or paths) is provided.
+  separate_calibration_per_path: True # If True, each photo path (i.e. each element in the list supplied to 'project:photo_path' above) will be calibrated independently. Regardless whether True or False, separate camera *models* are calibrated separately; if True, identical camera *models* are calibrated separately if they are provided as separate paths. This addresses the case where two different instances of the same camera model are used in the same project. Note that when True, the logic for assigning separate calibration to each path assumes that the same camera is used for all photos in the path.
+  multispectral: False # Is this a multispectral photo set? If RGB, set to False.
+  use_rtk: False # Whether to use image EXIF RTK flags to make image geospatial accuracy more precise. If enabled but photos don't have RTK data, will treat them as regular photos and use the nofix accuracy.
+  fix_accuracy: 3 # Accuracy to set for photos that have a RTK fix, in units of the CRS
+  nofix_accuracy: 25 # Accuracy to set for photos that have no fix, in units of the CRS
+  # Choose what type of camera you are using:
+  #   Frame: default, uses radial distortion to handle lens distortion
+  #   Spherical: expects image data to come in in the equirectangular format
+  sensor_type: Metashape.Sensor.Type.Frame # Sets the camera type. Tested choices: Metashape.Sensor.Type.Frame, Metashape.Sensor.Type.Spherical
+  # These options only apply if you have data collected with two different altitude references
+  # (e.g. using barometric altitude with a time delay between collections) and you want to enforce
+  # a specific altitude offset between the two groups of photos.
+  # Whether to apply the offset. If set to False, no paramters below apply.
+  apply_paired_altitude_offset: False
+  # The desired altitude offset (in meters) to obtain between the two groups of photos
+  paired_altitude_offset: 0
+  # The below two elements specify which folders of images are assigned to upper and lower groups
+  # when computing an altitiude adjustment. They should be in the same format as the photo_path
+  # element (e.g., ["/path/to/photo/folder1", "/path/to/photo/folder2"])
+  # Lower altitude photo folders
+  lower_offset_folders: []
+  # Upper altitude photos folders
+  upper_offset_folders: []
+
+calibrate_reflectance: # (Metahsape: calibrateReflectance)
+    enabled: False
+    panel_filename: "RP04-1923118-OB.csv" # The calibration file must be in the "calibration" folder in the top-level project photos directory. See example panel calibration file in the calibration directory of project repo.
+    use_reflectance_panels: True
+    use_sun_sensor: True
+
+match_photos: # (Metashape: matchPhotos)
+    enabled: True
+    downscale: 2 # How much to coarsen the photos when searching for tie points. Higher number for blurrier photos or when there are small surfaces that may move between photos (such as leaves). Accepts numbers 2^x (and zero) (https://www.agisoft.com/forum/index.php?topic=11697.0).
+    keep_keypoints: True # Should keypoints from matching photos be stored in the project? Required if you later want to add more photos and align them to the previously aligned photos without redoing the original alignment.
+    generic_preselection: True # When matching photos, use a much-coarsened version of each photo to narrow down the potential neighbors to pair? Works well if the photos have high altitude above the surface and high overlap (e.g. a 120m nadir 90/90 overlap mission), but doesn't work well for low-altitude and/or highly oblique photos (e.g. a 80m 25deg pitch 80/80 overlap mission)
+    reference_preselection: True # When matching photos, use the camera location data to narrow down the potential neighbors to pair?
+    reference_preselection_mode: Metashape.ReferencePreselectionSource # When matching photos, use the camera location data to narrow down the potential neighbors to pair?
+
+align_cameras: # (Metashape: alignCameras)
+    enabled: True
+    adaptive_fitting: True # Should the camera lens model be fit at the same time as aligning photos?
+    reset_alignment: False # When running an alignment, if any of the photos were already aligned, should we keep that alignment? Or reset it so we align everything anew?
+
+# To use GCPs, a 'gcps' folder must exist in the root of the photo folder provided in project:photo_path
+# above (or the first folder, if a list is passed). The contents of the 'gcps' folder are created by
+# the prep_gcps.R script. See readme: https://github.com/ucdavis/metashape
+add_gcps:
+    enabled: False
+    gcp_crs: "EPSG::26910" # CRS EPSG code of GCP coordinates. 26910 (UTM 10 N) is the CRS of the sample RGB photoset.
+    marker_location_accuracy: 0.1 # Accuracy of GCPs real-world coordinates, in meters.
+    marker_projection_accuracy: 8 # Accuracy of the identified locations of the GCPs within the images, in pixels.
+    optimize_w_gcps_only: True # Optimize alignment using GCPs only: required for GCP locations to take precedence over photo GPS data. Disabling it makes GCPs essentially irrelevant.
+
+filter_points_usgs:
+    enabled: True
+    rec_thresh_percent: 20
+    rec_thresh_absolute: 15
+    proj_thresh_percent: 30
+    proj_thresh_absolute: 2
+    reproj_thresh_percent: 5
+    reproj_thresh_absolute: 0.3
+
+optimize_cameras: # (Metashape: optimizeCameras)
+    enabled: True
+    adaptive_fitting: True # Should the camera lens model be fit at the same time as optimizing photos?
+
+# Should an xml file specifying estimated camera locations (transform matrices) be exported? If
+# enabled, it is exported once after all alignment-related steps (e.g., align, fliter points,
+# optimize cameras) -- even if these steps are disabled -- and then again after aligning the
+# secondary set of locations (if performed), overwriting the first file
+export_cameras: # (Metashape: exportCameras)
+    enabled: True
+
+build_depth_maps: # (Metashape: buildDepthMaps)
+    enabled: True
+    downscale: 4 # How much to coarsen the photos when searching for matches to build the point cloud. For large photosets, values < 4 likely take prohibitively long. Accepts numbers 2^x (https://www.agisoft.com/forum/index.php?topic=11697.0).
+    filter_mode: Metashape.ModerateFiltering # How to filter the depth map. Options are NoFiltering, MildFiltering, ModerateFiltering, AggressiveFiltering. Aggressive filtering removes detail and makes worse DEMs (at least for forest). NoFiltering takes very long. In trials, it never completed.
+    reuse_depth: False # Purpose unknown.
+    max_neighbors: 60 # Maximum number of neighboring photos to use for estimating depth map. Higher numbers may increase accuracy but dramatically increase processing time.
+
+build_point_cloud: # (Metashape: buildPointCloud, (optionally) classifyGroundPoints, and exportPoints)
+    enabled: True
+    keep_depth: True # If False, removes depth maps from project data after building point cloud
+    max_neighbors: 60 # Maximum number of neighboring photos to use for estimating point cloud. Higher numbers may increase accuracy but dramatically increase processing time.
+    classify_ground_points: True # Should ground points be classified as a part of this step? Must be enabled (either here or in build_dem, below) if a digital terrain model (DTM) is needed either for orthomosaic or DTM export. Enabling here is an alternative to enabling as a component of build_dem (below). It depends on which stage you want the classification to be done at. If you already have a point cloud but it's unclassified, then don't do it as part of this stage as it would require computing the point cloud again.
+    export: True # Whether to export point cloud file.
+    export_format: Metashape.PointCloudFormatCOPC # Export format. Options: Metashape.PointCloudFormatCOPC, Metashape.PointCloudFormatLAZ, Metashape.PointCloudFormatLAS, or other options indicated in the Metashape Python module documentation. We have observed that COPC export takes about 6x longer than LAZ or LAS export on a 32-core machine, but this is still much faster than using Untwine when the files are not stored on a local volume. PDAL is proably faster but requires a lot of memory. COPC is cloud-optimized point cloud (a subset of LAZ format) and is recommended for cloud native visualization and analysis.
+    classes: "ALL" # Point classes to export. Must be a list. Or can set to "ALL" to use all points. An example of a specific class is: Metashape.PointClass.Ground
+    remove_after_export: True # Remove point cloud from project after export of all dependencies (DEMs) to reduce the metashape project file size
+
+classify_ground_points: # (Metashape: classifyGroundPoints) # classify points, IF SPECIFIED as a component of build_point_cloud (above) or build_dem (below). Must be enabled (in either location) if a digital terrain model (DTM) is needed either for orthomosaic or DTM export. Definitions here: https://www.agisoft.com/forum/index.php?topic=9328.0
+    max_angle: 15.0
+    max_distance: 1.0
+    cell_size: 50.0
+
+build_mesh:
+    enabled: True
+    face_count: "Metashape.MediumFaceCount" # How many faces to use, Metashape.LowFaceCount, MediumFaceCount, HighFaceCount, CustomFaceCount
+    face_count_custom: 100000 # Only used if custom number of faces set (above).
+    export: True # Export the georeferenced mesh.
+    export_extension: "ply" # Can be any supported 3D mesh extension
+    # If True, add in a shift to the CRS so the mesh origin is at the camera EXIF average location and points are reported in a local frame - shifted from the normal CRS origin.
+    # This is necessary when fine mesh detail is needed, since the natural export format of Metashape is float32 for meshes. In most CRS, that results in point quantization in the 5cm-20cm range
+    # In order to save finer detail, set shift_crs_to_cameras to True, and then apply the inverse shift to the mesh model to recreate the true CRS values
+    # The shift used is reported using the save_metadata_xml mechanism of exportModel
+    shift_crs_to_cameras: False
+
+build_dem: # (Metashape: buildDem, (optionally) classifyGroundPoints, exportRaster)
+    enabled: True
+    classify_ground_points: False # Should ground points be classified as part of this step? Note that an alternative is to calculate them as a part of build_point_cloud (above)
+    surface: ["DTM-ptcloud", "DSM-ptcloud", "DSM-mesh"] # Options: "DTM-ptcloud", "DSM-ptcloud", and/or "DSM-mesh". Type of DEM to export and data to build it from (digital terrain model or digital surface model, and from point cloud or mesh)
+    resolution: 0 # DSM resolution. Only affects DSM built using the mesh (other DSM types are set by Metashape and not customizable). Note that this also sets the resolution of the orthomosaic built from this DSM, which is 1/4 of the DSM resolution. If using a mesh-derived DSM, and you also desire an orthomosaic with maximal detail, set the DEM resolution to 4x your GSD. Set to 0 to use Metashape-determined default.
+    export: True # Whether to export DEM(s)
+    tiff_big: True # Use BigTIFF format? Required for larger projects with large DEMs
+    tiff_tiled: False # Use tiled TIFF? This is related to internal file architecture.
+    nodata: -32767 # Value used to represent nodata.
+    tiff_overviews: True # Include coarse-scale raster data in file for quick display in GIS.
+
+build_orthomosaic: # (Metashape: buildOrthomosaic, exportRaster)
+    enabled: True
+    surface: ["DSM-ptcloud"] # Options: "DTM-ptcloud", "DSM-ptcloud", "DSM-mesh", and/or "Mesh". The surface to build the orthomosaic onto. DTM and DSM refer to elevation models built by Metashape and must be configured to be computed via build_dem, above. Mesh refers to using the mesh model directly rather than first computing a DEM.
+    blending: Metashape.MosaicBlending # Photo blending mode. Options include AverageBlending, MosaicBlending, MinBlending, MaxBlending, DisabledBlending
+    fill_holes: True # Fill holes in orthomosaic where no photo data exist by interpolating?
+    refine_seamlines: True # Use smart algorithm to identify photo seamlines where they will least distort.
+    export: True # Whether to export orthomosaic(s)
+    tiff_big: True # Use BigTIFF format? Required for larger projects with large DEMs
+    tiff_tiled: True # Use tiled TIFF? This is related to internal file architecture. Tiled may be (semi-)equivalent to COG.
+    nodata: -32767 # Value used to represent nodata.
+    tiff_overviews: True # Include coarse-scale raster data in file for quick display in GIS.
+    remove_after_export: True # Remove orthomosaic from project after export to reduce the metashape project file size
+
+# Argo workflow resource configuration (for running on OFO Argo cluster). This section is only used
+# when running workflows on Argo via the OFO argo step-based workflow
+# (https://github.com/open-forest-observatory/ofo-argo) and has no effect otherwise
+argo:
+    # Raw (input) imagery download instructions
+    s3_imagery_zip_download:  # List of S3 paths to zip files to download. Format: bucket/path/file.zip (no remote prefix). S3 credentials come from the cluster's s3-credentials Kubernetes secret. Leave blank to skip imagery download and use files already on the PVC. Multiple zip files can be provided as a list: ["ofo-public/drone/missions_01/000558/images/000558_images.zip", "ofo-public/drone/missions_01/000559/images/000559_images.zip"]
+    cleanup_downloaded_imagery: true  # Whether to delete downloaded imagery after workflow completes (default: true)
+    
+    # Resource requests per step
+    # Optional: User-specified defaults that apply to all steps (unless overridden at step level)
+    # Fallback order: Step-specific value → User defaults defined here → Hardcoded defaults in argo workflow YAML
+    defaults:
+        cpu_request: "12"  # Default CPU cores for steps that don't specify. Designed to limit to one pod per JS2 m3.large node (16 cores) while leaving some overhead for system processes.
+        memory_request: "50Gi"  # Default memory for steps that don't specify. Designed to limit to one pod per JS2 m3.large node (16 cores) while leaving some overhead for system processes.
+        gpu_resource: "nvidia.com/mig-1g.5gb"  # Default GPU type. Options: nvidia.com/gpu (full GPU), or different MIG configurations: nvidia.com/mig-1g.5gb, nvidia.com/mig-2g.10gb, nvidia.com/mig-3g.20gb
+        gpu_count: 1  # Default number of GPU resources (MIG slices or full GPU nodes) to request
+
+    # Resource configuration for each workflow step (maps to Argo steps, not necessarily automate-metashape methods/steps).
+    # Leave values blank (e.g., "cpu_request:" with no value) to use defaults specified above.
+    # Pre-filled values are recommendations for near-maximum compute efficiency, allowing multiple pods per node when possible while maintaining relatilvely fast processing. This assumes CPU ndoes are JS2 m3.large, which our benchmarking found to support more efficient runs that m3.xl. 
+
+    setup:
+        cpu_request: "500m"
+        memory_request: "1.5Gi"
+
+    match_photos:
+        gpu_enabled: true # If true, run on GPU; if false, run on CPU. Blank = default (true)
+        gpu_resource: "nvidia.com/mig-1g.5gb"  # Options: nvidia.com/mig-1g.5gb, other MIG flavors present in cluster, or nvidia.com/gpu for full GPU node if present in cluster. Blank = use defaults.gpu_resource, then nvidia.com/gpu
+        gpu_count: 1  # Number of MIG slices (if gpu_resource is a MIG flavor) or full GPUs (if gpu_resource is a full GPU). Blank = use defaults.gpu_count, then 1
+        cpu_request: 4  # Recommendation: for GPU run: 4x number of MIG 1g.5gb GPU slices to get full scheduling of pods on all 7 slices assuming JS2 g3.xl flavor; for CPU run: 15. Blank = use defaults.cpu_request, then 4 (GPU mode) or 18 (CPU mode)
+        memory_request: "8Gi"  # Recommendation: 8x number of GPU slices to get full scheduling assuming JS2 g3.xl flavor; for CPU run: 6-8Gi. Blank = use defaults.memory_request, then 16Gi (GPU) or 100Gi (CPU)
+
+    # For explanation of options and defaults for the following steps, see the `match_photos:` section above
+
+    align_cameras:
+        cpu_request: 14 
+        memory_request: "23Gi"
+
+    build_depth_maps:  # Always uses GPU
+        gpu_resource: "nvidia.com/mig-1g.5gb"
+        gpu_count: 2
+        cpu_request: 8  # Recommendation: 4x number of GPU slices to get full scheduling
+        memory_request: "16Gi"  # Recommendation: 8x number of GPU slices to get full scheduling
+
+    build_point_cloud:
+        cpu_request: 11 
+        memory_request: "34Gi"
+
+    build_mesh:
+        gpu_enabled: false # A full GPU node appears to improve compute time by ~10% max, but this is not worth the extra resource use
+        gpu_resource:
+        gpu_count:
+        cpu_request: 8 # Suggested value assumes running on a CPU node. Not extensively benchmarked on GPU.
+        memory_request: "22Gi"  # Suggested value assumes running on a CPU node. Not extensively benchmarked on GPU.
+
+    build_dem_orthomosaic:  # Combined step for build_dem + build_orthomosaic
+        cpu_request: 7
+        memory_request: "35Gi"
+
+    # Note: match_photos_secondary and align_cameras_secondary inherit from their primary steps
+    # Only specify here if you need different settings for secondary vs primary
+    # match_photos_secondary:
+    #     gpu_enabled:
+    #     gpu_resource:
+    #     gpu_count:
+    #     cpu_request:
+    #     memory_request:
+
+    # align_cameras_secondary:
+    #     cpu_request:
+    #     memory_request:
+
+    finalize:
+        cpu_request: 1
+        memory_request: "2Gi"

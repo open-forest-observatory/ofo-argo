@@ -34,13 +34,12 @@ def setup_working_directory():
     Create base working directory structure.
 
     Creates all required base directories under TEMP_WORKING_DIR_POSTPROCESSING:
-    - input/: Base directory for downloaded photogrammetry products
-    - boundary/: Base directory for mission boundary polygons
-    - output/: Base directory for processed outputs (mission-specific subdirectories created during processing)
-    - temp/: Reserved for temporary processing files
+    - input/: Directory for downloaded photogrammetry products
+    - boundary/: Directory for mission boundary polygons
+    - output/: Directory for processed outputs (full/ and thumbnails/ subdirectories created during processing)
 
-    Mission-specific subdirectories (e.g., input/01_mission-name/, output/01_mission-name/) are created
-    on-the-fly by individual download/processing functions.
+    Since each iteration has its own isolated postprocessing folder, no mission-specific
+    subdirectories are needed.
 
     Returns:
         bool: True if all directories created successfully
@@ -73,7 +72,6 @@ def setup_working_directory():
         f"{working_dir}/input",
         f"{working_dir}/boundary",
         f"{working_dir}/output",
-        f"{working_dir}/temp",
     ]
 
     # Create each base directory
@@ -94,12 +92,13 @@ def download_photogrammetry_products():
 
     Downloads all files from S3 structure (s3_photogrammetry_dir/[photogrammetry_NN]/imagery_products)
     and filters by PROJECT_NAME prefix to get files for the specified mission.
-    Organizes files locally into a mission subdirectory for processing.
+    Files are downloaded directly to the input/ directory (no mission subdirectory needed
+    since each iteration has its own isolated postprocessing folder).
 
     Returns:
         str: The project name
     """
-    input_bucket = os.environ.get("S3_BUCKET_PHOTOGRAMMETRY_OUTPUTS")
+    input_bucket = os.environ.get("S3_BUCKET_INTERNAL")
     s3_photogrammetry_dir = os.environ.get("S3_PHOTOGRAMMETRY_DIR")
     # PHOTOGRAMMETRY_CONFIG_SUBFOLDER may be empty string (skip subfolder) or "photogrammetry_NN"
     # If empty, we inject it and strip the trailing slash to get clean paths
@@ -126,19 +125,16 @@ def download_photogrammetry_products():
     remote_base_path = f":s3:{input_bucket}/{s3_photogrammetry_dir}/{photogrammetry_config_subfolder}".rstrip(
         "/"
     )
-    local_mission_dir = os.path.join(local_input_dir, project_name)
-    # Create mission-specific subdirectory (base input/ directory already exists from setup)
-    os.makedirs(local_mission_dir, exist_ok=True)
 
     print(f"Downloading products from: {remote_base_path}")
     print(f"Filtering files with prefix: {project_name}_")
 
-    # Download all files matching the project prefix
+    # Download all files matching the project prefix directly to input/
     copy_cmd = [
         "rclone",
         "copy",
         remote_base_path,
-        local_mission_dir,
+        local_input_dir,
         "--include",
         f"{project_name}_*",  # Filter by project prefix
         "--progress",
@@ -157,7 +153,7 @@ def download_photogrammetry_products():
     try:
         subprocess.run(copy_cmd, check=True)
         files = (
-            os.listdir(local_mission_dir) if os.path.exists(local_mission_dir) else []
+            os.listdir(local_input_dir) if os.path.exists(local_input_dir) else []
         )
 
         if not files:
@@ -178,6 +174,9 @@ def download_photogrammetry_products():
 def download_boundary_polygons(mission_name):
     """Download boundary polygon from nested S3 structure for the specified mission.
 
+    Downloads directly to the boundary/ directory (no mission subdirectory needed
+    since each iteration has its own isolated postprocessing folder).
+
     Args:
         mission_name: Mission name (may include numeric prefix like '01_mission-name')
 
@@ -185,7 +184,7 @@ def download_boundary_polygons(mission_name):
         bool: True if boundary file was downloaded successfully
     """
     boundary_bucket = os.environ.get("S3_BUCKET_INPUT_BOUNDARY")
-    boundary_base_dir = os.environ.get("INPUT_BOUNDARY_DIRECTORY")
+    boundary_base_dir = os.environ.get("INPUT_BOUNDARY_DIR")
     working_dir = os.environ.get("TEMP_WORKING_DIR_POSTPROCESSING")
     local_boundary_dir = f"{working_dir}/boundary"
 
@@ -193,11 +192,8 @@ def download_boundary_polygons(mission_name):
 
     # Construct path: <boundary_base>/<mission_name>/metadata-mission/<mission_name>_mission-metadata.gpkg
     remote_boundary_file = f":s3:{boundary_bucket}/{boundary_base_dir}/{mission_name}/metadata-mission/{mission_name}_mission-metadata.gpkg"
-    local_mission_boundary_dir = os.path.join(local_boundary_dir, mission_name)
-    # Create mission-specific subdirectory (base boundary/ directory already exists from setup)
-    os.makedirs(local_mission_boundary_dir, exist_ok=True)
     local_boundary_file = os.path.join(
-        local_mission_boundary_dir, f"{mission_name}_mission-metadata.gpkg"
+        local_boundary_dir, f"{mission_name}_mission-metadata.gpkg"
     )
 
     copy_cmd = [
@@ -231,6 +227,9 @@ def detect_and_match_missions():
     """
     Match products to boundary file for the single mission being processed.
 
+    Files are located directly in input/ and boundary/ directories (no mission
+    subdirectories since each iteration has its own isolated postprocessing folder).
+
     Returns:
         Dict with keys: 'prefix', 'boundary_file', 'product_files'
         Returns None if matching fails
@@ -247,29 +246,20 @@ def detect_and_match_missions():
     if not os.path.exists(boundary_dir):
         raise ValueError("Boundary directory not found")
 
-    # Get the mission directory
-    mission_input_dir = os.path.join(input_dir, project_name)
-    mission_boundary_dir = os.path.join(boundary_dir, project_name)
-
-    if not os.path.exists(mission_input_dir):
-        raise ValueError(f"Mission input directory not found: {mission_input_dir}")
-
-    # Get all product files for this mission
-    product_files = []
-    if os.path.exists(mission_input_dir):
-        product_files = [
-            os.path.join(mission_input_dir, f)
-            for f in os.listdir(mission_input_dir)
-            if os.path.isfile(os.path.join(mission_input_dir, f))
-        ]
+    # Get all product files directly from input/ directory
+    product_files = [
+        os.path.join(input_dir, f)
+        for f in os.listdir(input_dir)
+        if os.path.isfile(os.path.join(input_dir, f))
+    ]
 
     if not product_files:
         print(f"Error: No product files found for mission: {project_name}")
         return None
 
-    # Find boundary file
+    # Find boundary file directly in boundary/ directory
     boundary_file = os.path.join(
-        mission_boundary_dir, f"{project_name}_mission-metadata.gpkg"
+        boundary_dir, f"{project_name}_mission-metadata.gpkg"
     )
 
     if not os.path.exists(boundary_file):
@@ -292,15 +282,18 @@ def upload_processed_products(mission_id):
     Upload processed products for a specific mission to S3 in mission-specific directories.
     Uses PHOTOGRAMMETRY_CONFIG_SUBFOLDER parameter to organize outputs.
 
+    Uploads from the output/ directory directly (no mission subdirectory since each
+    iteration has its own isolated postprocessing folder).
+
     Examples:
         - PHOTOGRAMMETRY_CONFIG_SUBFOLDER='photogrammetry_01' -> benchmarking-greasewood/photogrammetry_01/
         - PHOTOGRAMMETRY_CONFIG_SUBFOLDER='photogrammetry_02' -> benchmarking-greasewood/photogrammetry_02/
         - PHOTOGRAMMETRY_CONFIG_SUBFOLDER='' (empty) -> benchmarking-greasewood/
 
     Args:
-        mission_id: Mission identifier
+        mission_id: Mission identifier (used for S3 destination path, not local path)
     """
-    output_bucket = os.environ.get("S3_BUCKET_POSTPROCESSED_OUTPUTS")
+    output_bucket = os.environ.get("S3_BUCKET_PUBLIC")
     s3_postprocessed_dir = os.environ.get("S3_POSTPROCESSED_DIR")
     working_dir = os.environ.get("TEMP_WORKING_DIR_POSTPROCESSING")
 
@@ -310,8 +303,8 @@ def upload_processed_products(mission_id):
         "PHOTOGRAMMETRY_CONFIG_SUBFOLDER", ""
     )
 
-    # Construct local and remote paths
-    local_mission_dir = f"{working_dir}/output/{mission_id}"
+    # Local output directory (no mission subdirectory)
+    local_output_dir = f"{working_dir}/output"
 
     # Build remote path with photogrammetry subfolder
     # Empty: "bucket/s3_dir/mission" -> "bucket/s3_dir/mission"
@@ -323,14 +316,14 @@ def upload_processed_products(mission_id):
 
     print(f"Uploading to {remote_base_path}")
 
-    # Verify local mission directory exists
-    if not os.path.exists(local_mission_dir):
-        print(f"Error: Local mission output directory not found: {local_mission_dir}")
+    # Verify local output directory exists
+    if not os.path.exists(local_output_dir):
+        print(f"Error: Local output directory not found: {local_output_dir}")
         sys.exit(1)
 
     # Count files to upload
-    full_dir = os.path.join(local_mission_dir, "full")
-    thumbnails_dir = os.path.join(local_mission_dir, "thumbnails")
+    full_dir = os.path.join(local_output_dir, "full")
+    thumbnails_dir = os.path.join(local_output_dir, "thumbnails")
     full_count = len(os.listdir(full_dir)) if os.path.exists(full_dir) else 0
     thumbnail_count = (
         len(os.listdir(thumbnails_dir)) if os.path.exists(thumbnails_dir) else 0
@@ -340,11 +333,11 @@ def upload_processed_products(mission_id):
         f"Uploading {full_count} full files and {thumbnail_count} thumbnails for mission {mission_id}"
     )
 
-    # Upload entire mission directory (includes full/ and thumbnails/ subdirectories)
+    # Upload output directory (includes full/ and thumbnails/ subdirectories)
     cmd = [
         "rclone",
         "copy",
-        local_mission_dir,
+        local_output_dir,
         remote_mission_path,
         "--progress",
         "--transfers",
@@ -365,37 +358,21 @@ def upload_processed_products(mission_id):
         sys.exit(1)
 
 
-def cleanup_working_directory(mission_id):
-    """Remove temporary processing files for a specific mission.
+def cleanup_working_directory():
+    """Remove the entire postprocessing working directory.
 
-    Only deletes mission-specific directories to support parallel
-    processing where multiple containers may share the same TEMP_WORKING_DIR_POSTPROCESSING.
-
-    Args:
-        mission_id: Mission identifier
+    Since each iteration has its own isolated postprocessing folder under
+    {iteration_id}/postprocessing/, we can safely delete the entire directory.
     """
-    print(f"Cleaning up temporary files for mission: {mission_id}")
     working_dir = os.environ.get("TEMP_WORKING_DIR_POSTPROCESSING")
 
-    # Delete mission-specific input directory
-    mission_input_dir = os.path.join(working_dir, "input", mission_id)
-    if os.path.exists(mission_input_dir):
-        shutil.rmtree(mission_input_dir)
-        print(f"Removed: {mission_input_dir}")
+    print(f"Cleaning up postprocessing directory: {working_dir}")
 
-    # Delete mission-specific boundary directory
-    mission_boundary_dir = os.path.join(working_dir, "boundary", mission_id)
-    if os.path.exists(mission_boundary_dir):
-        shutil.rmtree(mission_boundary_dir)
-        print(f"Removed: {mission_boundary_dir}")
+    if os.path.exists(working_dir):
+        shutil.rmtree(working_dir)
+        print(f"Removed: {working_dir}")
 
-    # Delete mission-specific output directory (includes full/ and thumbnails/)
-    mission_output_dir = os.path.join(working_dir, "output", mission_id)
-    if os.path.exists(mission_output_dir):
-        shutil.rmtree(mission_output_dir)
-        print(f"Removed: {mission_output_dir}")
-
-    print(f"Cleanup completed for mission: {mission_id}")
+    print("Cleanup completed")
 
 
 def main():
@@ -447,14 +424,14 @@ def main():
             upload_processed_products(mission_match["prefix"])
             print(f"✓ Successfully processed mission: {mission_match['prefix']}")
 
-            cleanup_working_directory(mission_match["prefix"])
+            cleanup_working_directory()
 
             print("\n=== Summary ===")
             print(f"Mission '{mission_match['prefix']}' processed successfully!")
             sys.exit(0)
         else:
             print(f"✗ Failed to process mission: {mission_match['prefix']}")
-            cleanup_working_directory(mission_match["prefix"])
+            cleanup_working_directory()
             sys.exit(1)
 
     except Exception as e:
@@ -462,7 +439,7 @@ def main():
         import traceback
 
         traceback.print_exc()
-        cleanup_working_directory(mission_match["prefix"])
+        cleanup_working_directory()
         sys.exit(1)
 
 

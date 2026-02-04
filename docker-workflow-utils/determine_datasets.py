@@ -97,12 +97,13 @@ def sanitize_dns1123(name: str) -> str:
     return sanitized
 
 
-def process_config_file(config_path: str) -> Dict[str, Any]:
+def process_config_file(config_path: str, index: int) -> Dict[str, Any]:
     """
     Process a single mission config file and extract mission parameters.
 
     Args:
         config_path: Absolute path to config file
+        index: Zero-based index of this config in the processing list (used for iteration_id)
 
     Returns:
         Dictionary of mission parameters with enabled flags
@@ -139,6 +140,27 @@ def process_config_file(config_path: str) -> Dict[str, Any]:
     # The original project_name is preserved for file paths and processing
     project_name_sanitized = sanitize_dns1123(project_name)
 
+    # Generate unique iteration ID: 3-digit zero-padded index + underscore + sanitized project name
+    # Example: "000_mission_001", "001_mission_001" (for duplicates), "002_other_project"
+    # This provides uniqueness even with duplicate project names and easy identification
+    iteration_id = f"{index:03d}_{project_name_sanitized}"
+
+    # Extract argo config section for easy access
+    argo_config = config.get("argo", {})
+
+    # Extract imagery download settings from argo section
+    # FUTURE: Could implement download sharing between projects to save bandwidth.
+    # Would require: (1) download coordination/locking, (2) reference counting for cleanup,
+    # (3) handling projects that start days apart. Current approach downloads per-project
+    # to avoid these complexities and prevent storage issues from long-running workflows.
+    imagery_downloads = argo_config.get("s3_imagery_zip_download", [])
+    # Normalize single string to list
+    if isinstance(imagery_downloads, str):
+        imagery_downloads = [imagery_downloads] if imagery_downloads.strip() else []
+    # Ensure it's a list (handle None case)
+    if imagery_downloads is None:
+        imagery_downloads = []
+
     # Default GPU resource (full GPU). Can be overridden per-step with MIG resources like:
     # "nvidia.com/mig-1g.5gb", "nvidia.com/mig-2g.10gb", "nvidia.com/mig-3g.20gb"
     DEFAULT_GPU_RESOURCE = "nvidia.com/gpu"
@@ -162,6 +184,13 @@ def process_config_file(config_path: str) -> Dict[str, Any]:
         "project_name": project_name,
         "project_name_sanitized": project_name_sanitized,
         "config": config_path,
+        # Iteration ID for unique per-project isolation (used in download paths, etc.)
+        "iteration_id": iteration_id,
+        # S3 imagery download settings
+        # imagery_zip_downloads is a list that Argo will serialize to JSON when needed
+        "imagery_zip_downloads": imagery_downloads,
+        # Boolean flags as lowercase strings for Argo workflow conditionals
+        "imagery_download_enabled": str(len(imagery_downloads) > 0).lower(),
         # Setup step resources
         "setup_cpu_request": (
             get_nested(config, ["argo", "setup", "cpu_request"])
@@ -402,23 +431,37 @@ def main(config_list_path: str) -> None:
     Main entry point for preprocessing script.
 
     Args:
-        config_list_path: Absolute path to text file listing config files (each line should be an absolute path)
+        config_list_path: Absolute path to text file listing config files.
+            Each line can be either a filename (resolved relative to the config list's directory)
+            or an absolute path (starting with /). Lines starting with # are comments.
+            Inline comments (# after filename) are also supported.
     """
     missions: List[Dict[str, Any]] = []
 
-    # Read config list file (expecting absolute path)
+    # Get directory containing the config list for resolving relative filenames
+    config_list_dir = os.path.dirname(config_list_path)
+
+    # Read config list file and resolve paths
+    # Supports: comments (#), inline comments, filenames, and absolute paths
+    config_paths = []
     with open(config_list_path, "r") as f:
         for line in f:
-            config_path = line.strip()
-            if not config_path:
+            line = line.split("#")[0].strip()  # Remove inline comments and whitespace
+            if not line:  # Skip empty lines and comment-only lines
                 continue
+            # Resolve path: absolute paths used as-is, filenames joined with config list dir
+            if line.startswith("/"):
+                config_paths.append(line)
+            else:
+                config_paths.append(os.path.join(config_list_dir, line))
 
-            try:
-                mission = process_config_file(config_path)
-                missions.append(mission)
-            except Exception as e:
-                print(f"Error processing config {config_path}: {e}", file=sys.stderr)
-                raise
+    for index, config_path in enumerate(config_paths):
+        try:
+            mission = process_config_file(config_path, index)
+            missions.append(mission)
+        except Exception as e:
+            print(f"Error processing config {config_path}: {e}", file=sys.stderr)
+            raise
 
     # Output as JSON list to stdout
     json.dump(missions, sys.stdout)
@@ -428,7 +471,15 @@ if __name__ == "__main__":
     if len(sys.argv) != 2:
         print("Usage: determine_datasets.py <config_list_path>", file=sys.stderr)
         print(
-            "  config_list_path: Absolute path to text file listing config files (each line should be an absolute path)",
+            "  config_list_path: Absolute path to text file listing config files.",
+            file=sys.stderr,
+        )
+        print(
+            "                    Each line can be a filename (resolved relative to config list dir)",
+            file=sys.stderr,
+        )
+        print(
+            "                    or an absolute path. Lines starting with # are comments.",
             file=sys.stderr,
         )
         sys.exit(1)
