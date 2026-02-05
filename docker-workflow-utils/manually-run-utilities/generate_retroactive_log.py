@@ -11,8 +11,7 @@ Usage:
         --internal-prefix photogrammetry/default-run \
         --public-bucket ofo-public \
         --public-prefix postprocessed \
-        --config-id default \
-        --output completion-log.jsonl
+        --output completion-log-default.jsonl
 
 Requirements:
     - boto3 (pip install boto3)
@@ -29,8 +28,8 @@ import json
 import os
 import re
 import sys
-from datetime import datetime, timezone
-from typing import Dict, List, Optional, Set, Tuple
+from datetime import datetime
+from typing import Dict, List, Optional
 
 try:
     import boto3
@@ -38,6 +37,9 @@ try:
 except ImportError:
     print("Error: boto3 required. Install with: pip install boto3", file=sys.stderr)
     sys.exit(1)
+
+# Sentinel file pattern that indicates a completed project
+SENTINEL_PATTERN = re.compile(r"_report\.pdf$")
 
 
 def get_s3_client():
@@ -72,111 +74,65 @@ def list_s3_objects(client, bucket: str, prefix: str, max_keys: int = 10000) -> 
     return objects
 
 
-def extract_project_name_from_key(key: str, prefix: str) -> Optional[str]:
+def extract_project_name_from_sentinel(key: str, prefix: str) -> Optional[str]:
     """
-    Extract project name from S3 object key.
+    Extract project name from a sentinel file's S3 key.
 
-    For internal bucket (metashape products):
-        prefix/project_name/project_name_product.tif -> project_name
-
-    For public bucket (postprocessed):
-        prefix/project_name_product.tif -> project_name
+    Handles two structures:
+        prefix/project_name/project_name_report.pdf -> project_name (nested)
+        prefix/project_name_report.pdf -> project_name (flat)
     """
     # Remove prefix
     relative = key[len(prefix):].lstrip("/")
 
-    # Check if it's in a subdirectory (internal bucket structure)
     parts = relative.split("/")
     if len(parts) >= 2:
-        # Structure: project_name/filename
+        # Nested structure: project_name/filename
         return parts[0]
     elif len(parts) == 1:
-        # Structure: project_name_product.ext (flat, postprocessed)
+        # Flat structure: project_name_report.pdf
         filename = parts[0]
-        # Extract project name by removing _product.ext suffix
-        # Pattern: project_name_ortho.tif, project_name_dsm-ptcloud.tif, etc.
-        match = re.match(r"^(.+?)_(ortho|dsm-ptcloud|dsm-mesh|dtm-ptcloud|chm-ptcloud|chm-mesh|ptcloud)\.", filename)
-        if match:
-            return match.group(1)
+        # Remove _report.pdf suffix
+        if filename.endswith("_report.pdf"):
+            return filename[:-len("_report.pdf")]
 
     return None
 
 
-def detect_metashape_complete(
-    client, bucket: str, prefix: str
+def detect_completed_projects(
+    client, bucket: str, prefix: str, label: str
 ) -> Dict[str, datetime]:
     """
-    Detect projects with completed metashape products.
+    Detect projects with sentinel files indicating completion.
 
     Returns dict mapping project_name -> latest LastModified timestamp.
     """
-    print(f"Scanning s3://{bucket}/{prefix} for metashape products...", file=sys.stderr)
+    print(f"Scanning s3://{bucket}/{prefix} for {label} products...", file=sys.stderr)
 
     objects = list_s3_objects(client, bucket, prefix)
     print(f"  Found {len(objects)} objects", file=sys.stderr)
-
-    # Sentinel patterns that indicate completion
-    sentinel_patterns = [
-        r"_report\.pdf$",
-    ]
 
     projects: Dict[str, datetime] = {}
 
     for obj in objects:
         key = obj["Key"]
 
-        # Check if this is a sentinel file
-        is_sentinel = any(re.search(pattern, key) for pattern in sentinel_patterns)
-        if not is_sentinel:
+        if not SENTINEL_PATTERN.search(key):
             continue
 
-        project_name = extract_project_name_from_key(key, prefix)
+        project_name = extract_project_name_from_sentinel(key, prefix)
         if project_name:
             timestamp = obj["LastModified"]
             if project_name not in projects or timestamp > projects[project_name]:
                 projects[project_name] = timestamp
 
-    print(f"  Detected {len(projects)} completed metashape projects", file=sys.stderr)
-    return projects
-
-
-def detect_postprocess_complete(
-    client, bucket: str, prefix: str
-) -> Dict[str, datetime]:
-    """
-    Detect projects with completed postprocessed products.
-
-    Returns dict mapping project_name -> latest LastModified timestamp.
-    """
-    print(f"Scanning s3://{bucket}/{prefix} for postprocessed products...", file=sys.stderr)
-
-    objects = list_s3_objects(client, bucket, prefix)
-    print(f"  Found {len(objects)} objects", file=sys.stderr)
-
-    # Look for report PDF as sentinel (last file produced by postprocessing)
-    projects: Dict[str, datetime] = {}
-
-    for obj in objects:
-        key = obj["Key"]
-
-        # Only consider report PDF as sentinel for postprocess completion
-        if not re.search(r"_report\.pdf$", key):
-            continue
-
-        project_name = extract_project_name_from_key(key, prefix)
-        if project_name:
-            timestamp = obj["LastModified"]
-            if project_name not in projects or timestamp > projects[project_name]:
-                projects[project_name] = timestamp
-
-    print(f"  Detected {len(projects)} completed postprocess projects", file=sys.stderr)
+    print(f"  Detected {len(projects)} completed {label} projects", file=sys.stderr)
     return projects
 
 
 def generate_log_entries(
     metashape_projects: Dict[str, datetime],
     postprocess_projects: Dict[str, datetime],
-    config_id: str,
 ) -> List[dict]:
     """
     Generate completion log entries from detected projects.
@@ -184,6 +140,8 @@ def generate_log_entries(
     A project gets:
     - 'postprocess' level if found in postprocess_projects
     - 'metashape' level if found only in metashape_projects
+
+    Note: config_id is not included in entries. Use separate log files per config.
     """
     entries = []
     all_projects = set(metashape_projects.keys()) | set(postprocess_projects.keys())
@@ -199,7 +157,6 @@ def generate_log_entries(
 
         entry = {
             "project_name": project_name,
-            "config_id": config_id,
             "completion_level": level,
             "timestamp": timestamp.isoformat(),
             "workflow_name": "retroactive-bootstrap",
@@ -215,31 +172,36 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-    # Scan default locations
+    # Basic scan for default config
     python generate_retroactive_log.py \\
         --internal-bucket ofo-internal \\
         --internal-prefix photogrammetry/default-run \\
         --public-bucket ofo-public \\
         --public-prefix postprocessed \\
-        --config-id default \\
-        --output completion-log.jsonl
+        --output completion-log-default.jsonl
 
-    # With specific config (include in prefix)
+    # For a specific config (use different prefix and output file)
     python generate_retroactive_log.py \\
         --internal-bucket ofo-internal \\
         --internal-prefix photogrammetry/default-run/photogrammetry_highres \\
         --public-bucket ofo-public \\
         --public-prefix postprocessed \\
-        --config-id highres \\
-        --output completion-log.jsonl
+        --output completion-log-highres.jsonl
 
     # Metashape only (no postprocess check)
     python generate_retroactive_log.py \\
         --internal-bucket ofo-internal \\
         --internal-prefix photogrammetry/default-run \\
-        --config-id default \\
         --level metashape \\
-        --output completion-log.jsonl
+        --output completion-log-default.jsonl
+
+Note on multiple configs:
+- Use separate output files for different configs
+- The log file name should indicate which config it's for
+- Examples:
+    completion-log-default.jsonl     (for default/NONE config)
+    completion-log-highres.jsonl     (for highres config)
+    completion-log-lowquality.jsonl  (for lowquality config)
         """,
     )
 
@@ -251,8 +213,6 @@ Examples:
                         help="S3 bucket for public/postprocessed products (optional)")
     parser.add_argument("--public-prefix", default="",
                         help="S3 prefix for postprocessed products (optional)")
-    parser.add_argument("--config-id", default="default",
-                        help="Config ID to use in log entries")
     parser.add_argument("--level", choices=["metashape", "postprocess", "both"], default="both",
                         help="Which completion levels to detect")
     parser.add_argument("--output", "-o", required=True,
@@ -276,17 +236,17 @@ Examples:
     postprocess_projects: Dict[str, datetime] = {}
 
     if args.level in ["metashape", "both"]:
-        metashape_projects = detect_metashape_complete(
-            client, args.internal_bucket, args.internal_prefix
+        metashape_projects = detect_completed_projects(
+            client, args.internal_bucket, args.internal_prefix, "metashape"
         )
 
     if args.level in ["postprocess", "both"]:
-        postprocess_projects = detect_postprocess_complete(
-            client, args.public_bucket, args.public_prefix
+        postprocess_projects = detect_completed_projects(
+            client, args.public_bucket, args.public_prefix, "postprocess"
         )
 
     # Generate log entries
-    entries = generate_log_entries(metashape_projects, postprocess_projects, args.config_id)
+    entries = generate_log_entries(metashape_projects, postprocess_projects)
 
     print(f"\nGenerated {len(entries)} log entries:", file=sys.stderr)
     metashape_only = sum(1 for e in entries if e["completion_level"] == "metashape")

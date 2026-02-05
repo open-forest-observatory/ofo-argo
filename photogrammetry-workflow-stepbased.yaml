@@ -146,8 +146,6 @@ spec:
           - "{{workflow.parameters.COMPLETION_LOG_PATH}}"
           - "--skip-if-complete"
           - "{{workflow.parameters.SKIP_IF_COMPLETE}}"
-          - "--config-id"
-          - "{{=workflow.parameters.PHOTOGRAMMETRY_CONFIG_ID != 'NONE' ? workflow.parameters.PHOTOGRAMMETRY_CONFIG_ID : 'default'}}"
           - "--workflow-name"
           - "{{workflow.name}}"
       outputs:
@@ -536,8 +534,6 @@ spec:
               parameters:
                 - name: project-name
                   value: "{{inputs.parameters.project-name}}"
-                - name: config-id
-                  value: "{{=workflow.parameters.PHOTOGRAMMETRY_CONFIG_ID != 'NONE' ? workflow.parameters.PHOTOGRAMMETRY_CONFIG_ID : 'default'}}"
                 - name: completion-level
                   value: "metashape"
                 - name: completion-log-path
@@ -552,8 +548,6 @@ spec:
               parameters:
                 - name: project-name
                   value: "{{inputs.parameters.project-name}}"
-                - name: config-id
-                  value: "{{=workflow.parameters.PHOTOGRAMMETRY_CONFIG_ID != 'NONE' ? workflow.parameters.PHOTOGRAMMETRY_CONFIG_ID : 'default'}}"
                 - name: completion-level
                   value: "postprocess"
                 - name: completion-log-path
@@ -938,7 +932,6 @@ spec:
       inputs:
         parameters:
           - name: project-name
-          - name: config-id
           - name: completion-level  # "metashape" or "postprocess"
           - name: completion-log-path
       nodeSelector:
@@ -964,7 +957,6 @@ spec:
 
           entry = {
               "project_name": "{{inputs.parameters.project-name}}",
-              "config_id": "{{inputs.parameters.config-id}}",
               "completion_level": "{{inputs.parameters.completion-level}}",
               "timestamp": datetime.now(timezone.utc).isoformat(),
               "workflow_name": "{{workflow.name}}"

@@ -17,9 +17,9 @@ Arguments:
 
 Options:
     --completion-log PATH     Path to completion log file (JSON Lines format)
+                              Use separate log files per config (e.g., completion-log-default.jsonl)
     --skip-if-complete MODE   Skip projects based on completion status:
                               none (default), metashape, postprocess, both
-    --config-id ID            Photogrammetry config ID for this run (default: "default")
     --workflow-name NAME      Argo workflow name for logging
 
 Output:
@@ -112,7 +112,7 @@ def sanitize_dns1123(name: str) -> str:
     return sanitized
 
 
-def load_completion_log(log_path: str) -> Dict[Tuple[str, str], str]:
+def load_completion_log(log_path: str) -> Dict[str, str]:
     """
     Load completion log and return lookup table.
 
@@ -120,10 +120,10 @@ def load_completion_log(log_path: str) -> Dict[Tuple[str, str], str]:
         log_path: Path to JSON Lines completion log
 
     Returns:
-        Dict mapping (project_name, config_id) -> completion_level
+        Dict mapping project_name -> completion_level
         If duplicate entries exist, keeps the highest level (postprocess > metashape)
     """
-    completions: Dict[Tuple[str, str], str] = {}
+    completions: Dict[str, str] = {}
     if not os.path.exists(log_path):
         return completions
 
@@ -136,13 +136,13 @@ def load_completion_log(log_path: str) -> Dict[Tuple[str, str], str]:
                 continue
             try:
                 entry = json.loads(line)
-                key = (entry["project_name"], entry["config_id"])
+                project_name = entry["project_name"]
                 level = entry["completion_level"]
                 # Keep highest completion level
-                if key not in completions or level_priority.get(
+                if project_name not in completions or level_priority.get(
                     level, 0
-                ) > level_priority.get(completions[key], 0):
-                    completions[key] = level
+                ) > level_priority.get(completions[project_name], 0):
+                    completions[project_name] = level
             except (json.JSONDecodeError, KeyError) as e:
                 print(
                     f"Warning: Skipping malformed line {line_num} in completion log: {e}",
@@ -154,8 +154,7 @@ def load_completion_log(log_path: str) -> Dict[Tuple[str, str], str]:
 
 def should_skip_project(
     project_name: str,
-    config_id: str,
-    completions: Dict[Tuple[str, str], str],
+    completions: Dict[str, str],
     skip_mode: str,
 ) -> Tuple[bool, bool]:
     """
@@ -163,7 +162,6 @@ def should_skip_project(
 
     Args:
         project_name: Project identifier
-        config_id: Photogrammetry config ID
         completions: Completion lookup from load_completion_log()
         skip_mode: One of "none", "metashape", "postprocess", "both"
 
@@ -175,8 +173,7 @@ def should_skip_project(
     if skip_mode == "none":
         return (False, False)
 
-    key = (project_name, config_id)
-    completion_level = completions.get(key)
+    completion_level = completions.get(project_name)
 
     if completion_level is None:
         # Not in log, don't skip
@@ -538,7 +535,6 @@ def main(
     output_file_path: Optional[str] = None,
     completion_log: Optional[str] = None,
     skip_if_complete: str = "none",
-    config_id: str = "default",
     workflow_name: str = "",
 ) -> None:
     """
@@ -552,12 +548,12 @@ def main(
         output_file_path: Optional path to write full configs JSON. If provided,
             stdout will contain only minimal references (to avoid Argo parameter size limits).
         completion_log: Optional path to completion log file (JSON Lines format).
+            Should be config-specific (e.g., completion-log-default.jsonl).
         skip_if_complete: Skip mode - "none", "metashape", "postprocess", or "both".
-        config_id: Photogrammetry config ID for completion tracking.
         workflow_name: Argo workflow name for logging (unused in filtering, passed for reference).
     """
     # Load completion log if provided
-    completions: Dict[Tuple[str, str], str] = {}
+    completions: Dict[str, str] = {}
     if completion_log and skip_if_complete != "none":
         completions = load_completion_log(completion_log)
         print(
@@ -596,13 +592,13 @@ def main(
 
             # Check if should skip based on completion status
             skip_entirely, skip_metashape = should_skip_project(
-                mission["project_name"], config_id, completions, skip_if_complete
+                mission["project_name"], completions, skip_if_complete
             )
 
             if skip_entirely:
-                level = completions.get((mission["project_name"], config_id), "unknown")
+                level = completions.get(mission["project_name"], "unknown")
                 print(
-                    f"Skipping {mission['project_name']} (config_id={config_id}): "
+                    f"Skipping {mission['project_name']}: "
                     f"already complete at level '{level}'",
                     file=sys.stderr,
                 )
@@ -662,11 +658,10 @@ Examples:
     # Artifact mode (avoids Argo parameter size limits)
     python determine_datasets.py /data/config_list.txt /data/output/configs.json
 
-    # With completion tracking
+    # With completion tracking (use config-specific log file)
     python determine_datasets.py /data/config_list.txt /data/output/configs.json \\
-        --completion-log /data/completion-log.jsonl \\
-        --skip-if-complete postprocess \\
-        --config-id default
+        --completion-log /data/completion-log-default.jsonl \\
+        --skip-if-complete postprocess
         """,
     )
     parser.add_argument(
@@ -694,11 +689,6 @@ Examples:
         "none (default), metashape, postprocess, both",
     )
     parser.add_argument(
-        "--config-id",
-        default="default",
-        help="Photogrammetry config ID for completion tracking (default: 'default')",
-    )
-    parser.add_argument(
         "--workflow-name",
         default="",
         help="Argo workflow name for logging",
@@ -711,6 +701,5 @@ Examples:
         output_file_path=args.output_file_path,
         completion_log=args.completion_log,
         skip_if_complete=args.skip_if_complete,
-        config_id=args.config_id,
         workflow_name=args.workflow_name,
     )

@@ -3,10 +3,12 @@
 Generate a config list of projects not yet completed.
 
 Usage:
-    python generate_remaining_configs.py <config_list> <completion_log> [--config-id ID] [--level LEVEL]
+    python generate_remaining_configs.py <config_list> <completion_log> [--level LEVEL]
 
 Example:
-    python generate_remaining_configs.py /data/config_list.txt /data/completion-log.jsonl --level postprocess
+    python generate_remaining_configs.py /data/config_list.txt /data/completion-log-default.jsonl --level postprocess
+
+Note: Use config-specific completion log files (e.g., completion-log-default.jsonl, completion-log-highres.jsonl)
 """
 
 import argparse
@@ -16,10 +18,15 @@ import sys
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Generate remaining config list")
+    parser = argparse.ArgumentParser(
+        description="Generate remaining config list. "
+        "Note: Use config-specific completion log files (e.g., completion-log-default.jsonl)"
+    )
     parser.add_argument("config_list", help="Original config list file")
-    parser.add_argument("completion_log", help="Completion log file")
-    parser.add_argument("--config-id", default="default", help="Config ID to check")
+    parser.add_argument(
+        "completion_log",
+        help="Config-specific completion log file (e.g., completion-log-default.jsonl)",
+    )
     parser.add_argument(
         "--level",
         choices=["metashape", "postprocess"],
@@ -30,7 +37,7 @@ def main():
 
     args = parser.parse_args()
 
-    # Load completion log
+    # Load completion log (assumed to be config-specific)
     completed = set()
     if os.path.exists(args.completion_log):
         with open(args.completion_log) as f:
@@ -40,11 +47,13 @@ def main():
                     continue
                 try:
                     entry = json.loads(line)
-                    if entry["config_id"] == args.config_id:
-                        if args.level == "metashape" or entry["completion_level"] == "postprocess":
-                            completed.add(entry["project_name"])
-                        elif args.level == "postprocess" and entry["completion_level"] == "postprocess":
-                            completed.add(entry["project_name"])
+                    # Check completion level based on --level argument
+                    if args.level == "metashape":
+                        # Skip if any completion (metashape or postprocess)
+                        completed.add(entry["project_name"])
+                    elif args.level == "postprocess" and entry["completion_level"] == "postprocess":
+                        # Skip only if postprocess complete
+                        completed.add(entry["project_name"])
                 except (json.JSONDecodeError, KeyError):
                     continue
 

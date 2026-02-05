@@ -27,16 +27,14 @@ Preprocessing script for the step-based photogrammetry workflow. Reads mission c
 python3 /app/determine_datasets.py <config_list_path> [output_file] \
   [--completion-log LOG_PATH] \
   [--skip-if-complete {none,metashape,postprocess,both}] \
-  [--config-id CONFIG_ID] \
   [--workflow-name WORKFLOW_NAME]
 ```
 
 **Arguments:**
 - `config_list_path`: Path to text file listing config files (relative to `/data`)
 - `output_file`: Optional output file for configs (default: stdout)
-- `--completion-log`: Path to completion log file for skip-if-complete feature
+- `--completion-log`: Path to config-specific completion log file (e.g., `completion-log-default.jsonl`)
 - `--skip-if-complete`: Skip mode (default: `none`)
-- `--config-id`: Photogrammetry config ID (default: `default`)
 - `--workflow-name`: Workflow name for logging
 
 **Output:**
@@ -94,24 +92,23 @@ Utility script to generate a new config list containing only projects that have 
 **Usage:**
 ```bash
 python3 /app/generate_remaining_configs.py <config_list> <completion_log> \
-  [--config-id CONFIG_ID] \
   [--level {metashape,postprocess}] \
   [--output OUTPUT_FILE]
 ```
 
 **Arguments:**
 - `config_list`: Original config list file path
-- `completion_log`: Completion log file path
-- `--config-id`: Config ID to check (default: `default`)
+- `completion_log`: Config-specific completion log file path (e.g., `completion-log-default.jsonl`)
 - `--level`: Completion level to check (default: `postprocess`)
 - `--output, -o`: Output file (default: stdout)
 
 **Example:**
 ```bash
 # Generate list of projects that haven't completed postprocessing
+# Note: Use config-specific completion log file
 python3 /app/generate_remaining_configs.py \
   /data/argo-input/configs/batch1.txt \
-  /data/argo-input/config-lists/completion-log.jsonl \
+  /data/argo-input/config-lists/completion-log-default.jsonl \
   --level postprocess \
   -o /data/argo-input/configs/batch1-remaining.txt
 ```
@@ -136,7 +133,6 @@ python3 /app/generate_retroactive_log.py \
   --internal-prefix PREFIX \
   [--public-bucket BUCKET] \
   [--public-prefix PREFIX] \
-  [--config-id CONFIG_ID] \
   [--level {metashape,postprocess,both}] \
   --output OUTPUT_FILE \
   [--append] \
@@ -145,12 +141,11 @@ python3 /app/generate_retroactive_log.py \
 
 **Arguments:**
 - `--internal-bucket`: S3 bucket for internal/Metashape products (required)
-- `--internal-prefix`: S3 prefix for Metashape products, including any config-specific subdirectories (required, e.g., `photogrammetry/default-run` or `photogrammetry/default-run/photogrammetry_highres`)
+- `--internal-prefix`: S3 prefix for Metashape products, including any config-specific subdirectories (required, e.g., `photogrammetry/default-run` for default config, or `photogrammetry/default-run/photogrammetry_highres` for highres config)
 - `--public-bucket`: S3 bucket for public/postprocessed products
 - `--public-prefix`: S3 prefix for postprocessed products
-- `--config-id`: Config ID to use in log entries (default: `default`)
 - `--level`: Which levels to detect (default: `both`)
-- `--output, -o`: Output file path (required)
+- `--output, -o`: Output file path (required). **Use config-specific names** (e.g., `completion-log-default.jsonl`, `completion-log-highres.jsonl`)
 - `--append`: Append to existing log instead of overwriting
 - `--dry-run`: Preview output without writing
 
@@ -161,14 +156,21 @@ export S3_ENDPOINT=https://s3.example.com
 export AWS_ACCESS_KEY_ID=your-access-key
 export AWS_SECRET_ACCESS_KEY=your-secret-key
 
-# Generate completion log from existing S3 products
+# Generate completion log from existing S3 products for default config
 python3 /app/generate_retroactive_log.py \
   --internal-bucket ofo-internal \
   --internal-prefix photogrammetry/default-run \
   --public-bucket ofo-public \
   --public-prefix postprocessed \
-  --config-id default \
-  --output /data/argo-input/config-lists/completion-log.jsonl
+  --output /data/argo-input/config-lists/completion-log-default.jsonl
+
+# For highres config, use config-specific prefix and output file
+python3 /app/generate_retroactive_log.py \
+  --internal-bucket ofo-internal \
+  --internal-prefix photogrammetry/default-run/photogrammetry_highres \
+  --public-bucket ofo-public \
+  --public-prefix postprocessed \
+  --output /data/argo-input/config-lists/completion-log-highres.jsonl
 
 # Dry run to preview results
 python3 /app/generate_retroactive_log.py \
@@ -177,12 +179,20 @@ python3 /app/generate_retroactive_log.py \
   --public-bucket ofo-public \
   --public-prefix postprocessed \
   --dry-run \
-  --output /tmp/completion-log.jsonl
+  --output /tmp/completion-log-default.jsonl
 ```
+
+**Note on multiple configs:**
+- Use separate output files for different configs
+- The log file name should indicate which config it's for
+- Examples:
+  - `completion-log-default.jsonl` (for default/NONE config)
+  - `completion-log-highres.jsonl` (for highres config)
+  - `completion-log-lowquality.jsonl` (for lowquality config)
 
 **Sentinel files for completion detection:**
 - **Metashape complete**: `*_report.pdf`
-- **Postprocess complete**: `<project_name>_ortho.tif`
+- **Postprocess complete**: `*_report.pdf` (now uses same sentinel as metashape)
 
 ### `db_logger.py`
 

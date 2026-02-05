@@ -657,8 +657,8 @@ When `COMPLETION_LOG_PATH` is set, the workflow:
 The completion log is a JSON Lines file (`.jsonl`) where each line represents a completed project stage:
 
 ```jsonl
-{"project_name":"mission_001","config_id":"default","completion_level":"postprocess","timestamp":"2024-01-15T10:30:00Z","workflow_name":"automate-metashape-workflow-abc123"}
-{"project_name":"mission_002","config_id":"highres","completion_level":"metashape","timestamp":"2024-01-15T11:45:00Z","workflow_name":"automate-metashape-workflow-def456"}
+{"project_name":"mission_001","completion_level":"postprocess","timestamp":"2024-01-15T10:30:00Z","workflow_name":"automate-metashape-workflow-abc123"}
+{"project_name":"mission_002","completion_level":"metashape","timestamp":"2024-01-15T11:45:00Z","workflow_name":"automate-metashape-workflow-def456"}
 ```
 
 **Fields:**
@@ -666,15 +666,15 @@ The completion log is a JSON Lines file (`.jsonl`) where each line represents a 
 | Field | Description |
 |-------|-------------|
 | `project_name` | Project identifier from config file |
-| `config_id` | Photogrammetry config ID (matches `PHOTOGRAMMETRY_CONFIG_ID` parameter, or `"default"` if none) |
 | `completion_level` | Either `"metashape"` (Metashape processing complete) or `"postprocess"` (postprocessing complete) |
 | `timestamp` | ISO 8601 UTC timestamp when the stage completed |
 | `workflow_name` | Argo workflow name for traceability |
 
 **Key behavior:**
 
-- Each `(project_name, config_id)` pair can have at most two entries: one for `metashape` and one for `postprocess`
-- If multiple entries exist for the same project/config, the highest completion level is used (`postprocess` > `metashape`)
+- **Use separate log files for different configs** (e.g., `completion-log-default.jsonl`, `completion-log-highres.jsonl`)
+- Each project can have at most two entries in a log file: one for `metashape` and one for `postprocess`
+- If multiple entries exist for the same project, the highest completion level is used (`postprocess` > `metashape`)
 - The log file is created automatically if it doesn't exist
 - Concurrent writes from parallel projects are handled safely with file locking
 
@@ -706,7 +706,7 @@ If a workflow was cancelled or failed partway through, resubmit with the same co
 ```bash
 argo submit -n argo photogrammetry-workflow-stepbased.yaml \
   -p CONFIG_LIST=/data/argo-input/configs/batch1.txt \
-  -p COMPLETION_LOG_PATH=/data/argo-input/config-lists/completion-log.jsonl \
+  -p COMPLETION_LOG_PATH=/data/argo-input/config-lists/completion-log-default.jsonl \
   -p SKIP_IF_COMPLETE=postprocess \
   -p TEMP_WORKING_DIR=/data/argo-output/tmp/batch1 \
   # ... other parameters ...
@@ -721,7 +721,7 @@ If you want to adjust postprocessing parameters (e.g., clipping boundaries, COG 
 ```bash
 argo submit -n argo photogrammetry-workflow-stepbased.yaml \
   -p CONFIG_LIST=/data/argo-input/configs/batch1.txt \
-  -p COMPLETION_LOG_PATH=/data/argo-input/config-lists/completion-log.jsonl \
+  -p COMPLETION_LOG_PATH=/data/argo-input/config-lists/completion-log-default.jsonl \
   -p SKIP_IF_COMPLETE=both \
   -p TEMP_WORKING_DIR=/data/argo-output/tmp/batch1-reprocess \
   # ... other parameters ...
@@ -736,7 +736,7 @@ To reprocess everything regardless of completion log (useful for testing or when
 ```bash
 argo submit -n argo photogrammetry-workflow-stepbased.yaml \
   -p CONFIG_LIST=/data/argo-input/configs/batch1.txt \
-  -p COMPLETION_LOG_PATH=/data/argo-input/config-lists/completion-log.jsonl \
+  -p COMPLETION_LOG_PATH=/data/argo-input/config-lists/completion-log-default.jsonl \
   -p SKIP_IF_COMPLETE=none \
   # ... other parameters ...
 ```
@@ -750,7 +750,7 @@ Enable completion tracking from the start to make future reruns easier:
 ```bash
 argo submit -n argo photogrammetry-workflow-stepbased.yaml \
   -p CONFIG_LIST=/data/argo-input/configs/batch1.txt \
-  -p COMPLETION_LOG_PATH=/data/argo-input/config-lists/completion-log.jsonl \
+  -p COMPLETION_LOG_PATH=/data/argo-input/config-lists/completion-log-default.jsonl \
   -p SKIP_IF_COMPLETE=none \
   # ... other parameters ...
 ```
@@ -772,14 +772,21 @@ export S3_ENDPOINT=https://s3.example.com
 export AWS_ACCESS_KEY_ID=your-access-key
 export AWS_SECRET_ACCESS_KEY=your-secret-key
 
-# Generate log from existing S3 products
-python docker-workflow-utils/generate_retroactive_log.py \
+# Generate log from existing S3 products for default config
+python docker-workflow-utils/manually-run-utilities/generate_retroactive_log.py \
   --internal-bucket ofo-internal \
   --internal-prefix photogrammetry/default-run \
   --public-bucket ofo-public \
   --public-prefix postprocessed \
-  --config-id default \
-  --output /data/argo-input/config-lists/completion-log.jsonl
+  --output /data/argo-input/config-lists/completion-log-default.jsonl
+
+# For a specific config (e.g., highres), use config-specific prefix and output file
+python docker-workflow-utils/manually-run-utilities/generate_retroactive_log.py \
+  --internal-bucket ofo-internal \
+  --internal-prefix photogrammetry/default-run/photogrammetry_highres \
+  --public-bucket ofo-public \
+  --public-prefix postprocessed \
+  --output /data/argo-input/config-lists/completion-log-highres.jsonl
 ```
 
 **Script options:**
@@ -787,25 +794,24 @@ python docker-workflow-utils/generate_retroactive_log.py \
 | Option | Description |
 |--------|-------------|
 | `--internal-bucket` | S3 bucket for internal/Metashape products |
-| `--internal-prefix` | S3 prefix for Metashape products, including any config-specific subdirectories (e.g., `photogrammetry/default-run` or `photogrammetry/default-run/photogrammetry_highres`) |
+| `--internal-prefix` | S3 prefix for Metashape products, including any config-specific subdirectories (e.g., `photogrammetry/default-run` for default config, or `photogrammetry/default-run/photogrammetry_highres` for highres config) |
 | `--public-bucket` | S3 bucket for public/postprocessed products |
 | `--public-prefix` | S3 prefix for postprocessed products |
-| `--config-id` | Config ID to use in log entries (default: `default`) |
 | `--level` | Which completion levels to detect: `metashape`, `postprocess`, or `both` (default: `both`) |
-| `--output` | Output file path for completion log |
+| `--output` | Output file path for completion log. **Use config-specific names** (e.g., `completion-log-default.jsonl`, `completion-log-highres.jsonl`) |
 | `--append` | Append to existing log instead of overwriting |
 | `--dry-run` | Preview what would be written without actually writing |
 
 **Example dry run to preview results:**
 
 ```bash
-python docker-workflow-utils/generate_retroactive_log.py \
+python docker-workflow-utils/manually-run-utilities/generate_retroactive_log.py \
   --internal-bucket ofo-internal \
   --internal-prefix photogrammetry/default-run \
   --public-bucket ofo-public \
   --public-prefix postprocessed \
   --dry-run \
-  --output /tmp/completion-log.jsonl
+  --output /tmp/completion-log-default.jsonl
 ```
 
 The script detects completed projects by looking for sentinel files:
@@ -818,15 +824,14 @@ The script detects completed projects by looking for sentinel files:
 If you need to create a new config list containing only uncompleted projects (useful for manual workflow management):
 
 ```bash
-python docker-workflow-utils/generate_remaining_configs.py \
+python docker-workflow-utils/manually-run-utilities/generate_remaining_configs.py \
   /data/argo-input/configs/batch1.txt \
-  /data/argo-input/config-lists/completion-log.jsonl \
+  /data/argo-input/config-lists/completion-log-default.jsonl \
   --level postprocess \
-  --config-id default \
   -o /data/argo-input/configs/batch1-remaining.txt
 ```
 
-This reads the original config list, filters out completed projects, and outputs a new config list with only remaining projects.
+This reads the original config list, filters out completed projects, and outputs a new config list with only remaining projects. **Note:** Use the config-specific completion log file (e.g., `completion-log-default.jsonl`).
 
 ### Troubleshooting Completion Tracking
 
@@ -834,8 +839,8 @@ This reads the original config list, filters out completed projects, and outputs
 
 **Possible causes:**
 
-1. **Config ID mismatch**: The `PHOTOGRAMMETRY_CONFIG_ID` parameter doesn't match the `config_id` in the log
-   - **Solution**: Verify both parameters match, or use `default` for both if not using config IDs
+1. **Wrong completion log file**: Using the wrong config-specific log file
+   - **Solution**: Ensure `COMPLETION_LOG_PATH` points to the correct config-specific log (e.g., `completion-log-default.jsonl` for default config, `completion-log-highres.jsonl` for highres config)
 
 2. **Project name mismatch**: The project name in the log doesn't match the config file's project name
    - **Debug**: Check the `determine-projects` step logs to see extracted project names
@@ -855,8 +860,8 @@ This reads the original config list, filters out completed projects, and outputs
 1. **Stale log entries**: The log contains entries from previous runs that should be removed
    - **Solution**: Manually edit the `.jsonl` file to remove unwanted entries, or start with a fresh log
 
-2. **Different config produces same project name**: Multiple configs in different runs created projects with the same name
-   - **Solution**: Use distinct project names or config IDs for different processing runs
+2. **Wrong log file**: Using a log file from a different configuration
+   - **Solution**: Verify you're using the correct config-specific log file (e.g., `completion-log-default.jsonl` for default config, not a log from highres config)
 
 #### Completion log corruption or malformed entries
 
