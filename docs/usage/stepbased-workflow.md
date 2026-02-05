@@ -572,6 +572,8 @@ Database parameters (not currently functional):
 | `AUTOMATE_METASHAPE_IMAGE_TAG` | Docker image tag for the automate-metashape container (default: `latest`). Use a specific branch name or tag to test development versions |
 | `LICENSE_RETRY_INTERVAL` | Seconds to wait between license acquisition retries (default: `300` = 5 minutes). See [License Retry Behavior](#license-retry-behavior) |
 | `LICENSE_MAX_RETRIES` | Maximum license retry attempts. `0` = no retries (fail immediately, default), `-1` = unlimited retries, `>0` = that many retries. See [License Retry Behavior](#license-retry-behavior) |
+| `COMPLETION_LOG_PATH` | Path to completion log file for tracking finished projects (default: `""`). When set, the workflow logs completed projects and can skip already-completed work. See [Completion Tracking and Skip-If-Complete](#completion-tracking-and-skip-if-complete) |
+| `SKIP_IF_COMPLETE` | Skip projects based on completion status (default: `"none"`). Options: `none` (never skip), `metashape` (skip if metashape or postprocess complete), `postprocess` (skip only if postprocess complete), `both` (granular: skip metashape if done, run postprocessing). See [Completion Tracking and Skip-If-Complete](#completion-tracking-and-skip-if-complete) |
 | `DB_*` | Database parameters for logging Argo status (not currently functional; credentials in [OFO credentials document](https://docs.google.com/document/d/155AP0P3jkVa-yT53a-QLp7vBAfjRa78gdST1Dfb4fls/edit?tab=t.0)) |
 
 **Secrets configuration:**
@@ -631,6 +633,266 @@ License server 149.165.171.237:5842: OK
 !!! tip "When to enable retries"
     - **High contention (many parallel workflows)**: Set `LICENSE_MAX_RETRIES=-1` for unlimited retries, or a reasonable limit like `288` (24 hours at 5-minute intervals)
     - **Low contention**: Keep the default (`0`) - if a license isn't available, something is likely wrong
+
+## Completion Tracking and Skip-If-Complete
+
+The workflow includes a completion tracking system that logs finished projects and can automatically skip already-completed work. This is useful for:
+
+- **Resuming cancelled workflows**: Resubmit a workflow and automatically skip projects that already completed
+- **Iterative processing**: Re-run with different postprocessing settings without redoing Metashape processing
+- **Cost optimization**: Avoid wasting compute resources on already-completed projects
+- **Partial reruns**: Selectively reprocess only Metashape or only postprocessing steps
+
+### How It Works
+
+When `COMPLETION_LOG_PATH` is set, the workflow:
+
+1. **Reads the completion log** at workflow start to determine which projects are already complete
+2. **Filters projects** based on `SKIP_IF_COMPLETE` setting before creating processing tasks
+3. **Logs completion** after successful Metashape processing and after successful postprocessing
+4. **Enables granular skipping** (with `SKIP_IF_COMPLETE=both`): Skip only Metashape if it's done, still run postprocessing
+
+### Completion Log Format
+
+The completion log is a JSON Lines file (`.jsonl`) where each line represents a completed project stage:
+
+```jsonl
+{"project_name":"mission_001","config_id":"default","completion_level":"postprocess","timestamp":"2024-01-15T10:30:00Z","workflow_name":"automate-metashape-workflow-abc123"}
+{"project_name":"mission_002","config_id":"highres","completion_level":"metashape","timestamp":"2024-01-15T11:45:00Z","workflow_name":"automate-metashape-workflow-def456"}
+```
+
+**Fields:**
+
+| Field | Description |
+|-------|-------------|
+| `project_name` | Project identifier from config file |
+| `config_id` | Photogrammetry config ID (matches `PHOTOGRAMMETRY_CONFIG_ID` parameter, or `"default"` if none) |
+| `completion_level` | Either `"metashape"` (Metashape processing complete) or `"postprocess"` (postprocessing complete) |
+| `timestamp` | ISO 8601 UTC timestamp when the stage completed |
+| `workflow_name` | Argo workflow name for traceability |
+
+**Key behavior:**
+
+- Each `(project_name, config_id)` pair can have at most two entries: one for `metashape` and one for `postprocess`
+- If multiple entries exist for the same project/config, the highest completion level is used (`postprocess` > `metashape`)
+- The log file is created automatically if it doesn't exist
+- Concurrent writes from parallel projects are handled safely with file locking
+
+### Skip Modes
+
+The `SKIP_IF_COMPLETE` parameter controls which projects are skipped:
+
+| Mode | Behavior | Use Case |
+|------|----------|----------|
+| `none` (default) | Never skip any projects | Fresh processing run |
+| `metashape` | Skip entire project if metashape OR postprocess is complete | Resume after cancellation, avoiding all completed work |
+| `postprocess` | Skip entire project only if postprocess is complete | Conservative: only skip fully finished projects |
+| `both` | **Granular skipping**: Skip entire project if postprocess complete; skip only Metashape steps if metashape complete (still run postprocessing) | Re-run postprocessing with different settings |
+
+**Granular skipping with `both` mode:**
+
+When a project has `metashape` completion but not `postprocess` completion:
+
+- All 10 Metashape processing steps are skipped
+- Postprocessing still runs, using the previously uploaded Metashape outputs from S3
+- Useful for tweaking postprocessing parameters without rerunning expensive Metashape steps
+
+### Usage Examples
+
+#### Resume a cancelled workflow
+
+If a workflow was cancelled or failed partway through, resubmit with the same completion log to skip already-finished projects:
+
+```bash
+argo submit -n argo photogrammetry-workflow-stepbased.yaml \
+  -p CONFIG_LIST=/data/argo-input/configs/batch1.txt \
+  -p COMPLETION_LOG_PATH=/data/argo-input/config-lists/completion-log.jsonl \
+  -p SKIP_IF_COMPLETE=postprocess \
+  -p TEMP_WORKING_DIR=/data/argo-output/tmp/batch1 \
+  # ... other parameters ...
+```
+
+Only projects that haven't completed postprocessing will run.
+
+#### Re-run postprocessing only
+
+If you want to adjust postprocessing parameters (e.g., clipping boundaries, COG settings) without redoing Metashape processing:
+
+```bash
+argo submit -n argo photogrammetry-workflow-stepbased.yaml \
+  -p CONFIG_LIST=/data/argo-input/configs/batch1.txt \
+  -p COMPLETION_LOG_PATH=/data/argo-input/config-lists/completion-log.jsonl \
+  -p SKIP_IF_COMPLETE=both \
+  -p TEMP_WORKING_DIR=/data/argo-output/tmp/batch1-reprocess \
+  # ... other parameters ...
+```
+
+Projects with completed Metashape will skip all Metashape steps but run postprocessing.
+
+#### Force complete reprocessing
+
+To reprocess everything regardless of completion log (useful for testing or when products need to be regenerated):
+
+```bash
+argo submit -n argo photogrammetry-workflow-stepbased.yaml \
+  -p CONFIG_LIST=/data/argo-input/configs/batch1.txt \
+  -p COMPLETION_LOG_PATH=/data/argo-input/config-lists/completion-log.jsonl \
+  -p SKIP_IF_COMPLETE=none \
+  # ... other parameters ...
+```
+
+All projects will run, but completion will still be logged for future use.
+
+#### First-time processing with completion tracking
+
+Enable completion tracking from the start to make future reruns easier:
+
+```bash
+argo submit -n argo photogrammetry-workflow-stepbased.yaml \
+  -p CONFIG_LIST=/data/argo-input/configs/batch1.txt \
+  -p COMPLETION_LOG_PATH=/data/argo-input/config-lists/completion-log.jsonl \
+  -p SKIP_IF_COMPLETE=none \
+  # ... other parameters ...
+```
+
+The log will be created and populated as projects complete.
+
+### Bootstrapping from Existing Products
+
+If you have projects that were processed before completion tracking was implemented, you can generate a retroactive completion log by scanning S3 buckets for existing products.
+
+Use the `generate_retroactive_log.py` utility script (requires `boto3` Python package):
+
+```bash
+# Install dependency
+pip install boto3
+
+# Set S3 credentials (for non-AWS S3 like Ceph/MinIO)
+export S3_ENDPOINT=https://s3.example.com
+export AWS_ACCESS_KEY_ID=your-access-key
+export AWS_SECRET_ACCESS_KEY=your-secret-key
+
+# Generate log from existing S3 products
+python docker-workflow-utils/generate_retroactive_log.py \
+  --internal-bucket ofo-internal \
+  --internal-prefix photogrammetry/default-run \
+  --public-bucket ofo-public \
+  --public-prefix postprocessed \
+  --config-id default \
+  --output /data/argo-input/config-lists/completion-log.jsonl
+```
+
+**Script options:**
+
+| Option | Description |
+|--------|-------------|
+| `--internal-bucket` | S3 bucket for internal/Metashape products |
+| `--internal-prefix` | S3 prefix for Metashape products (e.g., `photogrammetry/default-run`) |
+| `--config-subfolder` | Optional config subfolder (e.g., `photogrammetry_highres`) |
+| `--public-bucket` | S3 bucket for public/postprocessed products |
+| `--public-prefix` | S3 prefix for postprocessed products |
+| `--config-id` | Config ID to use in log entries (default: `default`) |
+| `--level` | Which completion levels to detect: `metashape`, `postprocess`, or `both` (default: `both`) |
+| `--output` | Output file path for completion log |
+| `--append` | Append to existing log instead of overwriting |
+| `--dry-run` | Preview what would be written without actually writing |
+
+**Example dry run to preview results:**
+
+```bash
+python docker-workflow-utils/generate_retroactive_log.py \
+  --internal-bucket ofo-internal \
+  --internal-prefix photogrammetry/default-run \
+  --public-bucket ofo-public \
+  --public-prefix postprocessed \
+  --dry-run \
+  --output /tmp/completion-log.jsonl
+```
+
+The script detects completed projects by looking for sentinel files:
+
+- **Metashape complete**: `*_ortho.tif`, `*_dsm-ptcloud.tif`, or `*_ptcloud.las/laz` in the project folder
+- **Postprocess complete**: `<project_name>_ortho.tif` in the public bucket
+
+### Generating Remaining Configs After Cancellation
+
+If you need to create a new config list containing only uncompleted projects (useful for manual workflow management):
+
+```bash
+python docker-workflow-utils/generate_remaining_configs.py \
+  /data/argo-input/configs/batch1.txt \
+  /data/argo-input/config-lists/completion-log.jsonl \
+  --level postprocess \
+  --config-id default \
+  -o /data/argo-input/configs/batch1-remaining.txt
+```
+
+This reads the original config list, filters out completed projects, and outputs a new config list with only remaining projects.
+
+### Troubleshooting Completion Tracking
+
+#### Projects not being skipped when they should be
+
+**Possible causes:**
+
+1. **Config ID mismatch**: The `PHOTOGRAMMETRY_CONFIG_ID` parameter doesn't match the `config_id` in the log
+   - **Solution**: Verify both parameters match, or use `default` for both if not using config IDs
+
+2. **Project name mismatch**: The project name in the log doesn't match the config file's project name
+   - **Debug**: Check the `determine-projects` step logs to see extracted project names
+   - **Solution**: Ensure `project.project_name` in config matches the log entry
+
+3. **Wrong skip mode**: `SKIP_IF_COMPLETE` is set to `none` or a mode that doesn't match completion level
+   - **Solution**: Use `postprocess` for conservative skipping, or `both` for granular control
+
+4. **Completion log path incorrect**: The log file isn't where the workflow expects
+   - **Debug**: Check workflow logs for "completion log not found" messages
+   - **Solution**: Verify `COMPLETION_LOG_PATH` is correct and accessible from containers
+
+#### Projects being skipped when they shouldn't be
+
+**Possible causes:**
+
+1. **Stale log entries**: The log contains entries from previous runs that should be removed
+   - **Solution**: Manually edit the `.jsonl` file to remove unwanted entries, or start with a fresh log
+
+2. **Different config produces same project name**: Multiple configs in different runs created projects with the same name
+   - **Solution**: Use distinct project names or config IDs for different processing runs
+
+#### Completion log corruption or malformed entries
+
+**Symptoms:** Warnings in `determine-projects` logs about "malformed line" or "skipping line"
+
+**Causes:**
+
+- Manual editing introduced invalid JSON
+- Concurrent writes without proper locking (shouldn't happen with the workflow, but possible with external tools)
+
+**Solutions:**
+
+1. **Validate the JSON Lines file:**
+   ```bash
+   python3 -c "
+   import json, sys
+   for i, line in enumerate(open('/path/to/completion-log.jsonl'), 1):
+       if line.strip():
+           try:
+               json.loads(line)
+           except json.JSONDecodeError as e:
+               print(f'Line {i}: {e}')
+   "
+   ```
+
+2. **Regenerate from S3** using `generate_retroactive_log.py`
+
+3. **Manual fix**: Edit the `.jsonl` file with a text editor, ensuring each line is valid JSON
+
+#### Disk space issues with completion log
+
+**Unlikely scenario**, but if the log grows very large (thousands of projects over many months):
+
+- **Solution**: Archive or split old log entries by date/config_id
+- **Note**: The log file size is minimal (~150 bytes per entry), so this is rarely a concern
 
 ## Monitor the workflow
 
