@@ -55,6 +55,13 @@ spec:
         value: "300"
       - name: LICENSE_MAX_RETRIES
         value: "0"
+      # Completion tracking and skip behavior
+      # Path to completion log file (empty = disable skip/logging)
+      - name: COMPLETION_LOG_PATH
+        value: ""
+      # Skip projects based on completion status: "none", "metashape", "postprocess", "both"
+      - name: SKIP_IF_COMPLETE
+        value: "none"
 
   # Defining where to read raw drone imagery data and write out imagery products to `/ofo-share`
   volumes:
@@ -134,6 +141,15 @@ spec:
           - "{{workflow.parameters.CONFIG_LIST}}"
           # Write full configs to shared file (artifact mode) to avoid withParam size limits
           - "{{workflow.parameters.TEMP_WORKING_DIR}}/{{workflow.name}}/project-configs.json"
+          # Completion tracking arguments
+          - "--completion-log"
+          - "{{workflow.parameters.COMPLETION_LOG_PATH}}"
+          - "--skip-if-complete"
+          - "{{workflow.parameters.SKIP_IF_COMPLETE}}"
+          - "--config-id"
+          - "{{=workflow.parameters.PHOTOGRAMMETRY_CONFIG_ID != 'NONE' ? workflow.parameters.PHOTOGRAMMETRY_CONFIG_ID : 'default'}}"
+          - "--workflow-name"
+          - "{{workflow.name}}"
       outputs:
         parameters:
           - name: configs-file

@@ -7,7 +7,7 @@ This determines which processing steps are enabled and whether GPU or CPU nodes
 should be used for GPU-capable steps.
 
 Usage:
-    python determine_datasets.py <config_list_path> [output_file_path]
+    python determine_datasets.py <config_list_path> [output_file_path] [options]
 
 Arguments:
     config_list_path: Path to text file listing config files
@@ -15,17 +15,25 @@ Arguments:
                       If provided, stdout will contain only minimal references.
                       If not provided, stdout will contain full configs (legacy behavior).
 
+Options:
+    --completion-log PATH     Path to completion log file (JSON Lines format)
+    --skip-if-complete MODE   Skip projects based on completion status:
+                              none (default), metashape, postprocess, both
+    --config-id ID            Photogrammetry config ID for this run (default: "default")
+    --workflow-name NAME      Argo workflow name for logging
+
 Output:
     - If output_file_path provided: Writes full configs to file, outputs minimal refs to stdout
     - If output_file_path not provided: Outputs full configs to stdout (legacy)
 """
 
+import argparse
 import json
 import os
 import re
 import sys
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 import yaml
 
@@ -102,6 +110,98 @@ def sanitize_dns1123(name: str) -> str:
     sanitized = sanitized.rstrip("-.")
 
     return sanitized
+
+
+def load_completion_log(log_path: str) -> Dict[Tuple[str, str], str]:
+    """
+    Load completion log and return lookup table.
+
+    Args:
+        log_path: Path to JSON Lines completion log
+
+    Returns:
+        Dict mapping (project_name, config_id) -> completion_level
+        If duplicate entries exist, keeps the highest level (postprocess > metashape)
+    """
+    completions: Dict[Tuple[str, str], str] = {}
+    if not os.path.exists(log_path):
+        return completions
+
+    level_priority = {"metashape": 1, "postprocess": 2}
+
+    with open(log_path, "r") as f:
+        for line_num, line in enumerate(f, 1):
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                entry = json.loads(line)
+                key = (entry["project_name"], entry["config_id"])
+                level = entry["completion_level"]
+                # Keep highest completion level
+                if key not in completions or level_priority.get(
+                    level, 0
+                ) > level_priority.get(completions[key], 0):
+                    completions[key] = level
+            except (json.JSONDecodeError, KeyError) as e:
+                print(
+                    f"Warning: Skipping malformed line {line_num} in completion log: {e}",
+                    file=sys.stderr,
+                )
+
+    return completions
+
+
+def should_skip_project(
+    project_name: str,
+    config_id: str,
+    completions: Dict[Tuple[str, str], str],
+    skip_mode: str,
+) -> Tuple[bool, bool]:
+    """
+    Determine if project should be skipped based on completion status.
+
+    Args:
+        project_name: Project identifier
+        config_id: Photogrammetry config ID
+        completions: Completion lookup from load_completion_log()
+        skip_mode: One of "none", "metashape", "postprocess", "both"
+
+    Returns:
+        Tuple of (skip_entirely, skip_metashape_only)
+        - skip_entirely: Don't include project in output at all
+        - skip_metashape_only: Include project but set skip_metashape=True (for "both" mode)
+    """
+    if skip_mode == "none":
+        return (False, False)
+
+    key = (project_name, config_id)
+    completion_level = completions.get(key)
+
+    if completion_level is None:
+        # Not in log, don't skip
+        return (False, False)
+
+    if skip_mode == "metashape":
+        # Skip if metashape OR postprocess complete
+        return (True, False)
+
+    if skip_mode == "postprocess":
+        # Skip only if postprocess complete
+        if completion_level == "postprocess":
+            return (True, False)
+        return (False, False)
+
+    if skip_mode == "both":
+        # Skip entirely if postprocess complete
+        # Skip metashape only if metashape complete (but postprocess not)
+        if completion_level == "postprocess":
+            return (True, False)
+        if completion_level == "metashape":
+            return (False, True)  # Partial skip
+        return (False, False)
+
+    return (False, False)
 
 
 def process_config_file(config_path: str, index: int) -> Dict[str, Any]:
@@ -433,7 +533,14 @@ def process_config_file(config_path: str, index: int) -> Dict[str, Any]:
     return mission
 
 
-def main(config_list_path: str, output_file_path: Optional[str] = None) -> None:
+def main(
+    config_list_path: str,
+    output_file_path: Optional[str] = None,
+    completion_log: Optional[str] = None,
+    skip_if_complete: str = "none",
+    config_id: str = "default",
+    workflow_name: str = "",
+) -> None:
     """
     Main entry point for preprocessing script.
 
@@ -444,8 +551,27 @@ def main(config_list_path: str, output_file_path: Optional[str] = None) -> None:
             Inline comments (# after filename) are also supported.
         output_file_path: Optional path to write full configs JSON. If provided,
             stdout will contain only minimal references (to avoid Argo parameter size limits).
+        completion_log: Optional path to completion log file (JSON Lines format).
+        skip_if_complete: Skip mode - "none", "metashape", "postprocess", or "both".
+        config_id: Photogrammetry config ID for completion tracking.
+        workflow_name: Argo workflow name for logging (unused in filtering, passed for reference).
     """
+    # Load completion log if provided
+    completions: Dict[Tuple[str, str], str] = {}
+    if completion_log and skip_if_complete != "none":
+        completions = load_completion_log(completion_log)
+        print(
+            f"Loaded {len(completions)} entries from completion log", file=sys.stderr
+        )
+
+    # Create completion log file if it doesn't exist (for later appending by workflow)
+    if completion_log and not os.path.exists(completion_log):
+        os.makedirs(os.path.dirname(completion_log), exist_ok=True)
+        Path(completion_log).touch()
+        print(f"Created completion log file: {completion_log}", file=sys.stderr)
+
     missions: List[Dict[str, Any]] = []
+    skipped_count = 0
 
     # Get directory containing the config list for resolving relative filenames
     config_list_dir = os.path.dirname(config_list_path)
@@ -467,10 +593,34 @@ def main(config_list_path: str, output_file_path: Optional[str] = None) -> None:
     for index, config_path in enumerate(config_paths):
         try:
             mission = process_config_file(config_path, index)
+
+            # Check if should skip based on completion status
+            skip_entirely, skip_metashape = should_skip_project(
+                mission["project_name"], config_id, completions, skip_if_complete
+            )
+
+            if skip_entirely:
+                level = completions.get((mission["project_name"], config_id), "unknown")
+                print(
+                    f"Skipping {mission['project_name']} (config_id={config_id}): "
+                    f"already complete at level '{level}'",
+                    file=sys.stderr,
+                )
+                skipped_count += 1
+                continue
+
+            # Add skip_metashape flag for "both" mode partial skipping
+            mission["skip_metashape"] = skip_metashape
+
             missions.append(mission)
         except Exception as e:
             print(f"Error processing config {config_path}: {e}", file=sys.stderr)
             raise
+
+    print(
+        f"Processing {len(missions)} projects, skipped {skipped_count} as already complete",
+        file=sys.stderr,
+    )
 
     if output_file_path:
         # Artifact-based mode: write full configs to file, output minimal refs to stdout
@@ -501,33 +651,66 @@ def main(config_list_path: str, output_file_path: Optional[str] = None) -> None:
 
 
 if __name__ == "__main__":
-    if len(sys.argv) < 2 or len(sys.argv) > 3:
-        print(
-            "Usage: determine_datasets.py <config_list_path> [output_file_path]",
-            file=sys.stderr,
-        )
-        print(
-            "  config_list_path: Absolute path to text file listing config files.",
-            file=sys.stderr,
-        )
-        print(
-            "                    Each line can be a filename (resolved relative to config list dir)",
-            file=sys.stderr,
-        )
-        print(
-            "                    or an absolute path. Lines starting with # are comments.",
-            file=sys.stderr,
-        )
-        print(
-            "  output_file_path: Optional. If provided, full configs are written to this file",
-            file=sys.stderr,
-        )
-        print(
-            "                    and only minimal refs are output to stdout (artifact mode).",
-            file=sys.stderr,
-        )
-        sys.exit(1)
+    parser = argparse.ArgumentParser(
+        description="Preprocess config files for Argo workflow",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+    # Basic usage (legacy mode)
+    python determine_datasets.py /data/config_list.txt
 
-    config_list_path = sys.argv[1]
-    output_file_path = sys.argv[2] if len(sys.argv) == 3 else None
-    main(config_list_path, output_file_path)
+    # Artifact mode (avoids Argo parameter size limits)
+    python determine_datasets.py /data/config_list.txt /data/output/configs.json
+
+    # With completion tracking
+    python determine_datasets.py /data/config_list.txt /data/output/configs.json \\
+        --completion-log /data/completion-log.jsonl \\
+        --skip-if-complete postprocess \\
+        --config-id default
+        """,
+    )
+    parser.add_argument(
+        "config_list_path",
+        help="Path to text file listing config files. Each line can be a filename "
+        "(resolved relative to config list dir) or an absolute path. "
+        "Lines starting with # are comments.",
+    )
+    parser.add_argument(
+        "output_file_path",
+        nargs="?",
+        default=None,
+        help="Optional output file for configs JSON. If provided, full configs are "
+        "written to this file and only minimal refs are output to stdout (artifact mode).",
+    )
+    parser.add_argument(
+        "--completion-log",
+        help="Path to completion log file (JSON Lines format)",
+    )
+    parser.add_argument(
+        "--skip-if-complete",
+        choices=["none", "metashape", "postprocess", "both"],
+        default="none",
+        help="Skip projects based on completion status: "
+        "none (default), metashape, postprocess, both",
+    )
+    parser.add_argument(
+        "--config-id",
+        default="default",
+        help="Photogrammetry config ID for completion tracking (default: 'default')",
+    )
+    parser.add_argument(
+        "--workflow-name",
+        default="",
+        help="Argo workflow name for logging",
+    )
+
+    args = parser.parse_args()
+
+    main(
+        config_list_path=args.config_list_path,
+        output_file_path=args.output_file_path,
+        completion_log=args.completion_log,
+        skip_if_complete=args.skip_if_complete,
+        config_id=args.config_id,
+        workflow_name=args.workflow_name,
+    )
