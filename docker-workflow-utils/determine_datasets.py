@@ -483,7 +483,10 @@ def main(config_list_path: str, output_file_path: Optional[str] = None) -> None:
         with open(output_file_path, "w") as f:
             json.dump(missions, f)
 
-        print(f"Wrote {len(missions)} project configs to {output_file_path}", file=sys.stderr)
+        print(
+            f"Wrote {len(missions)} project configs to {output_file_path}",
+            file=sys.stderr,
+        )
 
         # Output minimal references to stdout (just index and project_name)
         # These are small enough to pass via withParam without hitting size limits
