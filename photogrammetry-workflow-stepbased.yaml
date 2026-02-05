@@ -524,9 +524,41 @@ spec:
                 - name: photogrammetry-config-subfolder
                   value: "{{inputs.parameters.photogrammetry-config-subfolder}}"
 
-          # Cleanup task (runs after postprocessing completes)
-          - name: cleanup-iteration
+          # Log metashape completion (after rclone upload succeeds)
+          - name: log-metashape-complete
+            depends: "rclone-upload-task.Succeeded"
+            when: "{{workflow.parameters.COMPLETION_LOG_PATH}} != ''"
+            template: log-completion-template
+            arguments:
+              parameters:
+                - name: project-name
+                  value: "{{inputs.parameters.project-name}}"
+                - name: config-id
+                  value: "{{=workflow.parameters.PHOTOGRAMMETRY_CONFIG_ID != 'NONE' ? workflow.parameters.PHOTOGRAMMETRY_CONFIG_ID : 'default'}}"
+                - name: completion-level
+                  value: "metashape"
+                - name: completion-log-path
+                  value: "{{workflow.parameters.COMPLETION_LOG_PATH}}"
+
+          # Log postprocess completion (after postprocessing succeeds)
+          - name: log-postprocess-complete
             depends: "postprocessing-task.Succeeded"
+            when: "{{workflow.parameters.COMPLETION_LOG_PATH}} != ''"
+            template: log-completion-template
+            arguments:
+              parameters:
+                - name: project-name
+                  value: "{{inputs.parameters.project-name}}"
+                - name: config-id
+                  value: "{{=workflow.parameters.PHOTOGRAMMETRY_CONFIG_ID != 'NONE' ? workflow.parameters.PHOTOGRAMMETRY_CONFIG_ID : 'default'}}"
+                - name: completion-level
+                  value: "postprocess"
+                - name: completion-log-path
+                  value: "{{workflow.parameters.COMPLETION_LOG_PATH}}"
+
+          # Cleanup task (runs after postprocessing and logging completes)
+          - name: cleanup-iteration
+            depends: "(postprocessing-task.Succeeded || postprocessing-task.Skipped) && (log-postprocess-complete.Succeeded || log-postprocess-complete.Skipped)"
             template: cleanup-iteration-template
             arguments:
               parameters:
@@ -891,6 +923,62 @@ spec:
             echo "[cleanup] Removing iteration directory: $ITERATION_DIR"
             rm -rf "$ITERATION_DIR"
             echo "[cleanup] Done"
+        resources:
+          requests:
+            cpu: "100m"
+            memory: "64Mi"
+
+    #--------- LOG COMPLETION ---------
+    # Appends completion entry to the shared completion log file
+    # Uses file locking to handle concurrent writes from parallel projects
+    - name: log-completion-template
+      inputs:
+        parameters:
+          - name: project-name
+          - name: config-id
+          - name: completion-level  # "metashape" or "postprocess"
+          - name: completion-log-path
+      nodeSelector:
+        feature.node.kubernetes.io/workload-type: cpu
+      script:
+        image: python:3.9-slim
+        volumeMounts:
+          - name: data
+            mountPath: /data
+        command: ["python3"]
+        source: |
+          import json
+          import fcntl
+          import os
+          from datetime import datetime, timezone
+
+          log_path = "{{inputs.parameters.completion-log-path}}"
+
+          # Skip if no log path configured
+          if not log_path:
+              print("No completion log path configured, skipping")
+              exit(0)
+
+          entry = {
+              "project_name": "{{inputs.parameters.project-name}}",
+              "config_id": "{{inputs.parameters.config-id}}",
+              "completion_level": "{{inputs.parameters.completion-level}}",
+              "timestamp": datetime.now(timezone.utc).isoformat(),
+              "workflow_name": "{{workflow.name}}"
+          }
+
+          line = json.dumps(entry) + "\n"
+
+          # Ensure directory exists
+          os.makedirs(os.path.dirname(log_path), exist_ok=True)
+
+          # Append with exclusive lock for concurrency safety
+          with open(log_path, "a") as f:
+              fcntl.flock(f.fileno(), fcntl.LOCK_EX)
+              f.write(line)
+              f.flush()
+
+          print(f"Logged completion: {entry['project_name']} at level {entry['completion_level']}")
         resources:
           requests:
             cpu: "100m"
