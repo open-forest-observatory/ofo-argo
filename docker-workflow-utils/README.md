@@ -134,7 +134,6 @@ Utility script to generate a completion log by scanning S3 buckets for existing 
 python3 /app/generate_retroactive_log.py \
   --internal-bucket BUCKET \
   --internal-prefix PREFIX \
-  [--config-subfolder SUBFOLDER] \
   [--public-bucket BUCKET] \
   [--public-prefix PREFIX] \
   [--config-id CONFIG_ID] \
@@ -146,11 +145,10 @@ python3 /app/generate_retroactive_log.py \
 
 **Arguments:**
 - `--internal-bucket`: S3 bucket for internal/Metashape products (required)
-- `--internal-prefix`: S3 prefix for Metashape products (required)
-- `--config-subfolder`: Optional config subfolder (e.g., `photogrammetry_highres`)
+- `--internal-prefix`: S3 prefix for Metashape products, including any config-specific subdirectories (required, e.g., `photogrammetry/default-run` or `photogrammetry/default-run/photogrammetry_highres`)
 - `--public-bucket`: S3 bucket for public/postprocessed products
 - `--public-prefix`: S3 prefix for postprocessed products
-- `--config-id`: Config ID for log entries (default: `default`)
+- `--config-id`: Config ID to use in log entries (default: `default`)
 - `--level`: Which levels to detect (default: `both`)
 - `--output, -o`: Output file path (required)
 - `--append`: Append to existing log instead of overwriting
@@ -183,7 +181,7 @@ python3 /app/generate_retroactive_log.py \
 ```
 
 **Sentinel files for completion detection:**
-- **Metashape complete**: `*_ortho.tif`, `*_dsm-ptcloud.tif`, or `*_ptcloud.las/laz`
+- **Metashape complete**: `*_report.pdf`
 - **Postprocess complete**: `<project_name>_ortho.tif`
 
 ### `db_logger.py`

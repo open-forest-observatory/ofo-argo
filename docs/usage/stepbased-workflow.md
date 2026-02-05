@@ -787,8 +787,7 @@ python docker-workflow-utils/generate_retroactive_log.py \
 | Option | Description |
 |--------|-------------|
 | `--internal-bucket` | S3 bucket for internal/Metashape products |
-| `--internal-prefix` | S3 prefix for Metashape products (e.g., `photogrammetry/default-run`) |
-| `--config-subfolder` | Optional config subfolder (e.g., `photogrammetry_highres`) |
+| `--internal-prefix` | S3 prefix for Metashape products, including any config-specific subdirectories (e.g., `photogrammetry/default-run` or `photogrammetry/default-run/photogrammetry_highres`) |
 | `--public-bucket` | S3 bucket for public/postprocessed products |
 | `--public-prefix` | S3 prefix for postprocessed products |
 | `--config-id` | Config ID to use in log entries (default: `default`) |
@@ -811,7 +810,7 @@ python docker-workflow-utils/generate_retroactive_log.py \
 
 The script detects completed projects by looking for sentinel files:
 
-- **Metashape complete**: `*_ortho.tif`, `*_dsm-ptcloud.tif`, or `*_ptcloud.las/laz` in the project folder
+- **Metashape complete**: `*_report.pdf` in the project folder
 - **Postprocess complete**: `<project_name>_ortho.tif` in the public bucket
 
 ### Generating Remaining Configs After Cancellation

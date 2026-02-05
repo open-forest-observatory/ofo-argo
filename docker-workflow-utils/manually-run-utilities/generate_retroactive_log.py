@@ -103,20 +103,16 @@ def extract_project_name_from_key(key: str, prefix: str) -> Optional[str]:
 
 
 def detect_metashape_complete(
-    client, bucket: str, prefix: str, config_subfolder: Optional[str] = None
+    client, bucket: str, prefix: str
 ) -> Dict[str, datetime]:
     """
     Detect projects with completed metashape products.
 
     Returns dict mapping project_name -> latest LastModified timestamp.
     """
-    full_prefix = prefix
-    if config_subfolder:
-        full_prefix = f"{prefix}/{config_subfolder}"
+    print(f"Scanning s3://{bucket}/{prefix} for metashape products...", file=sys.stderr)
 
-    print(f"Scanning s3://{bucket}/{full_prefix} for metashape products...", file=sys.stderr)
-
-    objects = list_s3_objects(client, bucket, full_prefix)
+    objects = list_s3_objects(client, bucket, prefix)
     print(f"  Found {len(objects)} objects", file=sys.stderr)
 
     # Sentinel patterns that indicate completion
@@ -134,7 +130,7 @@ def detect_metashape_complete(
         if not is_sentinel:
             continue
 
-        project_name = extract_project_name_from_key(key, full_prefix)
+        project_name = extract_project_name_from_key(key, prefix)
         if project_name:
             timestamp = obj["LastModified"]
             if project_name not in projects or timestamp > projects[project_name]:
@@ -225,13 +221,13 @@ Examples:
         --internal-prefix photogrammetry/default-run \\
         --public-bucket ofo-public \\
         --public-prefix postprocessed \\
+        --config-id default \\
         --output completion-log.jsonl
 
-    # With config subfolder
+    # With specific config (include in prefix)
     python generate_retroactive_log.py \\
         --internal-bucket ofo-internal \\
-        --internal-prefix photogrammetry/default-run \\
-        --config-subfolder photogrammetry_highres \\
+        --internal-prefix photogrammetry/default-run/photogrammetry_highres \\
         --public-bucket ofo-public \\
         --public-prefix postprocessed \\
         --config-id highres \\
@@ -241,6 +237,7 @@ Examples:
     python generate_retroactive_log.py \\
         --internal-bucket ofo-internal \\
         --internal-prefix photogrammetry/default-run \\
+        --config-id default \\
         --level metashape \\
         --output completion-log.jsonl
         """,
@@ -249,9 +246,7 @@ Examples:
     parser.add_argument("--internal-bucket", required=True,
                         help="S3 bucket for internal/metashape products")
     parser.add_argument("--internal-prefix", required=True,
-                        help="S3 prefix for metashape products (e.g., photogrammetry/default-run)")
-    parser.add_argument("--config-subfolder", default="",
-                        help="Optional config subfolder (e.g., photogrammetry_highres)")
+                        help="S3 prefix for metashape products (e.g., photogrammetry/default-run or photogrammetry/default-run/photogrammetry_highres)")
     parser.add_argument("--public-bucket", default="",
                         help="S3 bucket for public/postprocessed products (optional)")
     parser.add_argument("--public-prefix", default="",
@@ -282,7 +277,7 @@ Examples:
 
     if args.level in ["metashape", "both"]:
         metashape_projects = detect_metashape_complete(
-            client, args.internal_bucket, args.internal_prefix, args.config_subfolder or None
+            client, args.internal_bucket, args.internal_prefix
         )
 
     if args.level in ["postprocess", "both"]:
