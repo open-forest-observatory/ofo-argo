@@ -50,6 +50,11 @@ spec:
       # Docker image tag for automate-metashape container
       - name: AUTOMATE_METASHAPE_IMAGE_TAG
         value: "latest"
+      # License retry settings for Metashape license acquisition
+      - name: LICENSE_RETRY_INTERVAL
+        value: "300"
+      - name: LICENSE_MAX_RETRIES
+        value: "0"
 
   # Defining where to read raw drone imagery data and write out imagery products to `/ofo-share`
   volumes:
@@ -554,8 +559,8 @@ spec:
             echo "[cleanup] Cleanup complete (preserved downloaded-raw-imagery if present)"
           fi
 
-          # Run the Metashape step
-          python3 /app/python/metashape_workflow.py \
+          # Run the Metashape step with license retry wrapper
+          python3 /app/python/license_retry_wrapper.py \
             --config-file "{{inputs.parameters.config-file}}" \
             --project-path "{{workflow.parameters.TEMP_WORKING_DIR}}/{{workflow.name}}/{{inputs.parameters.iteration-id}}/photogrammetry/project" \
             --output-path "{{workflow.parameters.TEMP_WORKING_DIR}}/{{workflow.name}}/{{inputs.parameters.iteration-id}}/photogrammetry/output" \
@@ -567,6 +572,10 @@ spec:
               secretKeyRef:
                 name: agisoft-license
                 key: license_server
+          - name: LICENSE_RETRY_INTERVAL
+            value: "{{workflow.parameters.LICENSE_RETRY_INTERVAL}}"
+          - name: LICENSE_MAX_RETRIES
+            value: "{{workflow.parameters.LICENSE_MAX_RETRIES}}"
 
     # GPU step template for Metashape processing
     # Supports dynamic GPU resource selection (full GPU or MIG partitions) and count
@@ -597,8 +606,8 @@ spec:
         source: |
           set -e
 
-          # Run the Metashape step
-          python3 /app/python/metashape_workflow.py \
+          # Run the Metashape step with license retry wrapper
+          python3 /app/python/license_retry_wrapper.py \
             --config-file "{{inputs.parameters.config-file}}" \
             --project-path "{{workflow.parameters.TEMP_WORKING_DIR}}/{{workflow.name}}/{{inputs.parameters.iteration-id}}/photogrammetry/project" \
             --output-path "{{workflow.parameters.TEMP_WORKING_DIR}}/{{workflow.name}}/{{inputs.parameters.iteration-id}}/photogrammetry/output" \
@@ -610,6 +619,10 @@ spec:
               secretKeyRef:
                 name: agisoft-license
                 key: license_server
+          - name: LICENSE_RETRY_INTERVAL
+            value: "{{workflow.parameters.LICENSE_RETRY_INTERVAL}}"
+          - name: LICENSE_MAX_RETRIES
+            value: "{{workflow.parameters.LICENSE_MAX_RETRIES}}"
 
     # --------- S3 IMAGERY DOWNLOAD ---------
     # Downloads and extracts zip files containing imagery from S3

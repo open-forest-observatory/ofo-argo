@@ -570,6 +570,8 @@ Database parameters (not currently functional):
 | `S3_BOUNDARY_DIR` | Parent directory in `S3_BUCKET_PUBLIC` where mission boundary polygons reside (used to clip imagery). The structure beneath this directory is assumed to be: `<S3_BOUNDARY_DIR>/<mission_name>/metadata-mission/<mission_name>_mission-metadata.gpkg`. Example: `drone/missions_03` |
 | `OFO_ARGO_IMAGES_TAG` | Docker image tag for OFO Argo containers (postprocessing and argo-workflow-utils) (default: `latest`). Use a specific branch name or tag to test development versions (e.g., `dy-manila`) |
 | `AUTOMATE_METASHAPE_IMAGE_TAG` | Docker image tag for the automate-metashape container (default: `latest`). Use a specific branch name or tag to test development versions |
+| `LICENSE_RETRY_INTERVAL` | Seconds to wait between license acquisition retries (default: `300` = 5 minutes). See [License Retry Behavior](#license-retry-behavior) |
+| `LICENSE_MAX_RETRIES` | Maximum license retry attempts. `0` = no retries (fail immediately, default), `-1` = unlimited retries, `>0` = that many retries. See [License Retry Behavior](#license-retry-behavior) |
 | `DB_*` | Database parameters for logging Argo status (not currently functional; credentials in [OFO credentials document](https://docs.google.com/document/d/155AP0P3jkVa-yT53a-QLp7vBAfjRa78gdST1Dfb4fls/edit?tab=t.0)) |
 
 **Secrets configuration:**
@@ -579,6 +581,56 @@ Database parameters (not currently functional):
   `agisoft-license` Kubernetes secret
 
 These secrets should have been created (within the `argo` namespace) during [cluster creation](../admin/cluster-creation-and-resizing.md).
+
+### License Retry Behavior
+
+Metashape requires a floating license from the Agisoft license server. When multiple workflows compete for limited licenses, some pods may fail to acquire a license at startup. The workflow includes optional retry logic to handle this.
+
+**By default, retries are disabled** (`LICENSE_MAX_RETRIES=0`). If no license is available, the step fails immediately. To enable retries, set `LICENSE_MAX_RETRIES` to a positive number or `-1` for unlimited.
+
+**How it works (when retries are enabled):**
+
+1. When a Metashape step starts, it checks for license availability in the first 20 lines of output
+2. If "license not found" is detected, the process terminates immediately (avoiding wasted compute)
+3. After waiting `LICENSE_RETRY_INTERVAL` seconds (default: 300 = 5 minutes), the step retries
+4. This continues until either a license is acquired or `LICENSE_MAX_RETRIES` is reached
+
+**`LICENSE_MAX_RETRIES` values:**
+
+| Value | Behavior |
+|-------|----------|
+| `0` (default) | No retries - fail immediately if no license |
+| `-1` | Unlimited retries |
+| `>0` | Retry up to that many times |
+
+**Example output when retries are disabled (default):**
+```
+[license-wrapper] Starting Metashape workflow (attempt 1)...
+No nodelocked license found
+License server 149.165.171.237:5842: License not found
+[license-wrapper] No license available and retries disabled (LICENSE_MAX_RETRIES=0)
+```
+
+**Example output when retries are enabled:**
+```
+[license-wrapper] Starting Metashape workflow (attempt 1)...
+No nodelocked license found
+License server 149.165.171.237:5842: License not found
+[license-wrapper] No license available. Waiting 300s before retry...
+[license-wrapper] Starting Metashape workflow (attempt 2)...
+```
+
+**Example output when license is acquired:**
+```
+[license-wrapper] Starting Metashape workflow (attempt 1)...
+No nodelocked license found
+License server 149.165.171.237:5842: OK
+[license-wrapper] License check passed, proceeding with workflow...
+```
+
+!!! tip "When to enable retries"
+    - **High contention (many parallel workflows)**: Set `LICENSE_MAX_RETRIES=-1` for unlimited retries, or a reasonable limit like `288` (24 hours at 5-minute intervals)
+    - **Low contention**: Keep the default (`0`) - if a license isn't available, something is likely wrong
 
 ## Monitor the workflow
 
