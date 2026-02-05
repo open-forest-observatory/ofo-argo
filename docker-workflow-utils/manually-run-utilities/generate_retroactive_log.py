@@ -121,9 +121,7 @@ def detect_metashape_complete(
 
     # Sentinel patterns that indicate completion
     sentinel_patterns = [
-        r"_ortho\.tif$",
-        r"_dsm-ptcloud\.tif$",
-        r"_ptcloud\.(las|laz)$",
+        r"_report\.pdf$",
     ]
 
     projects: Dict[str, datetime] = {}
@@ -159,14 +157,14 @@ def detect_postprocess_complete(
     objects = list_s3_objects(client, bucket, prefix)
     print(f"  Found {len(objects)} objects", file=sys.stderr)
 
-    # Look for ortho COGs as sentinel (always produced by postprocessing)
+    # Look for report PDF as sentinel (last file produced by postprocessing)
     projects: Dict[str, datetime] = {}
 
     for obj in objects:
         key = obj["Key"]
 
-        # Only consider ortho files as sentinel for postprocess completion
-        if not re.search(r"_ortho\.tif$", key):
+        # Only consider report PDF as sentinel for postprocess completion
+        if not re.search(r"_report\.pdf$", key):
             continue
 
         project_name = extract_project_name_from_key(key, prefix)
