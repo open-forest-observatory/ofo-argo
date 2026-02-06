@@ -130,26 +130,40 @@ def get_camera_locations(camera_file):
 
 
 def compute_height_above_ground(camera_file, dtm_file):
-    cam_locations = get_camera_locations(camera_file=camera_file)
+    cameras_gdf = get_camera_locations(camera_file=camera_file)
 
     with rio.open(dtm_file) as dtm:
-        dtm_crs = dtm.crs
         # Project to the CRS of the DTM
-        DTM_crs_cam_locations = cam_locations.to_crs(dtm_crs)
+        # Note that any reasonable CRS for a raster (not ECEF) will have a meters-based altitude
+        # above ground as the z dimension.
+        cameras_gdf = cameras_gdf.to_crs(dtm.crs)
 
         # Step 3: Extract X, Y from projected points
-        sample_coords = [(pt.x, pt.y) for pt in DTM_crs_cam_locations.geometry]
+        sample_coords = [(pt.x, pt.y) for pt in cameras_gdf.geometry]
 
         # Step 4: Sample DTM at these coordinates with masking
         elevations = list(dtm.sample(sample_coords, masked=True))
 
-    camera_elevations = DTM_crs_cam_locations.copy()
-    camera_elevations["ground_elevation"] = [
+    # Record which cameras had a corresponding non-null DTM value
+    cameras_gdf["valid_elevation"] = [not elev.mask[0] for elev in elevations]
+    # TODO there might be a simpler version of this where you just replace the nodata value with
+    # nan
+    cameras_gdf["ground_elevation"] = [
         elev.data[0] if not elev.mask[0] else np.nan for elev in elevations
     ]
-    camera_elevations["valid"] = [not elev.mask[0] for elev in elevations]
-    camera_elevations["altitude_agl"] = (
-        camera_elevations.geometry.z - camera_elevations["ground_elevation"]
+    # Compute the difference between the ground elevation and the camera elevation
+    # TODO figure out how this would work with invalid data
+    cameras_gdf["altitude_agl"] = (
+        cameras_gdf.geometry.z - cameras_gdf["ground_elevation"]
     )
 
-    return camera_elevations
+    return cameras_gdf
+
+
+if __name__ == "__main__":
+    cameras_file = "/ofo-share/argo-data/argo-output/archive_20260202/species_project/0068_000434_000440/output/0068_000434_000440_cameras.xml"
+    dtm_file = "/ofo-share/argo-data/argo-output/archive_20260202/species_project/0068_000434_000440/output/0068_000434_000440_dtm-ptcloud.tif"
+    heights_above_ground = compute_height_above_ground(
+        camera_file=cameras_file, dtm_file=dtm_file
+    )
+    breakpoint()
