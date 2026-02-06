@@ -55,7 +55,7 @@ def parse_transform_metashape(camera_file: str):
     assert len(components) == 1
     transform = components.find("component").find("transform")
     if transform is None:
-        return None
+        raise ValueError("Could not find transform")
 
     rotation = transform.find("rotation").text
     translation = transform.find("translation").text
@@ -179,8 +179,7 @@ def compute_height_above_ground(camera_file: str, dtm_file: str) -> gpd.GeoDataF
     # Set all ground elevations to nan if the corresponding elevation was not valid
     cameras_gdf.loc[~cameras_gdf.valid_elevation, "ground_elevation"] = np.nan
 
-    # Compute the difference between the ground elevation and the camera elevation
-    # TODO figure out how this would work with invalid data
+    # Compute the difference between the ground elevation and the camera elevation.
     cameras_gdf["altitude"] = cameras_gdf.geometry.z - cameras_gdf["ground_elevation"]
 
     # Create a geodataframe for unaligned cameras with default values for all fields
