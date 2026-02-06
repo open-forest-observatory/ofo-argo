@@ -528,7 +528,7 @@ spec:
           # Log metashape completion (after rclone upload succeeds)
           - name: log-metashape-complete
             depends: "rclone-upload-task.Succeeded"
-            when: "{{workflow.parameters.COMPLETION_LOG_PATH}} != '' && {{=sprig.fromJson(tasks['load-config'].outputs.result).skip_metashape != true}}"
+            when: "{{=workflow.parameters.COMPLETION_LOG_PATH != '' && sprig.fromJson(tasks['load-config'].outputs.result).skip_metashape != true}}"
             template: log-completion-template
             arguments:
               parameters:
@@ -542,7 +542,7 @@ spec:
           # Log postprocess completion (after postprocessing succeeds)
           - name: log-postprocess-complete
             depends: "postprocessing-task.Succeeded"
-            when: "{{workflow.parameters.COMPLETION_LOG_PATH}} != ''"
+            when: "{{=workflow.parameters.COMPLETION_LOG_PATH != ''}}"
             template: log-completion-template
             arguments:
               parameters:
