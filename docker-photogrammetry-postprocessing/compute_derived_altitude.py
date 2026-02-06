@@ -3,6 +3,7 @@ import xml.etree.ElementTree as ET
 from pathlib import Path
 
 import geopandas as gpd
+import pandas as pd
 import numpy as np
 import rasterio as rio
 import shapely
@@ -75,6 +76,7 @@ def get_camera_locations(camera_file):
     Returns:
         gpd.GeoDataFrame: GeoDataFrame with camera locations as Point geometries in EPSG:4978 (ECEF),
                           with a 'label' column for camera labels.
+        List[str]: The labels of un-aligned cameras
     """
     # Load and parse the XML file
     tree = ET.parse(camera_file)
@@ -93,18 +95,23 @@ def get_camera_locations(camera_file):
     camera_locations_local = []
     camera_labels = []
 
+    # Record the labels of cameras which did not align
+    unaligned_cameras = []
+
     # Extract the locations of each camera from the 4x4 transform matrix representing both the
     # rotation and translation of the camera, in local chunk coordinates.
     for cam in ungrouped_cameras:
         transform = cam.find("transform")
+        label = cam.get("label")
         # Skip un-aligned cameras
         if transform is None:
+            unaligned_cameras.append(label)
             continue
 
         # Convert the string representation into a 4x4 numpy array and extract the translation column
         location = np.fromstring(transform.text, sep=" ").reshape(4, 4)[:, 3:]
 
-        camera_labels.append(cam.get("label"))
+        camera_labels.append(label)
         camera_locations_local.append(location)
 
     camera_locations_local = np.concatenate(camera_locations_local, axis=1)
@@ -128,7 +135,7 @@ def get_camera_locations(camera_file):
         {"label": camera_labels}, geometry=points, crs="EPSG:4978"
     )
 
-    return points_gdf
+    return points_gdf, unaligned_cameras
 
 
 def compute_height_above_ground(camera_file: str, dtm_file: str) -> gpd.GeoDataFrame:
@@ -148,7 +155,8 @@ def compute_height_above_ground(camera_file: str, dtm_file: str) -> gpd.GeoDataF
             * 'altitude_agl' contains the image altitude above ground level in meters
             * 'valid_elevation' contains whether there was a corresponding non-null DTM value
     """
-    cameras_gdf = get_camera_locations(camera_file=camera_file)
+    # Parse aligned cameras as geodataframe and record labels of unaligned ones
+    cameras_gdf, unaligned_cameras = get_camera_locations(camera_file=camera_file)
 
     with rio.open(dtm_file) as dtm:
         # Project to the CRS of the DTM
@@ -158,21 +166,39 @@ def compute_height_above_ground(camera_file: str, dtm_file: str) -> gpd.GeoDataF
 
         # Step 3: Extract X, Y from projected points
         sample_coords = [(pt.x, pt.y) for pt in cameras_gdf.geometry]
+        # Sort for performance
+        sample_coords = rio.sample.sort_xy(sample_coords)
 
         # Step 4: Sample DTM at these coordinates with masking
         elevations = list(dtm.sample(sample_coords, masked=True))
 
     # Record which cameras had a corresponding non-null DTM value
     cameras_gdf["valid_elevation"] = [not elev.mask[0] for elev in elevations]
-    # TODO there might be a simpler version of this where you just replace the nodata value with
-    # nan
-    cameras_gdf["ground_elevation"] = [
-        elev.data[0] if not elev.mask[0] else np.nan for elev in elevations
-    ]
+    # Record sampled ground elevation
+    cameras_gdf["ground_elevation"] = [elev.data[0] for elev in elevations]
+    # Set all ground elevations to nan if the corresponding elevation was not valid
+    cameras_gdf.loc[~cameras_gdf.valid_elevation, "ground_elevation"] = np.nan
+
     # Compute the difference between the ground elevation and the camera elevation
     # TODO figure out how this would work with invalid data
-    cameras_gdf["altitude_agl"] = (
-        cameras_gdf.geometry.z - cameras_gdf["ground_elevation"]
+    cameras_gdf["altitude"] = cameras_gdf.geometry.z - cameras_gdf["ground_elevation"]
+
+    # Create a geodataframe for unaligned cameras with default values for all fields
+    n_unaligned_cameras = len(unaligned_cameras)
+    unaligned_cameras_gdf = gpd.GeoDataFrame(
+        {
+            "label": unaligned_cameras,
+            "valid_elevations": [False] * n_unaligned_cameras,
+            "ground_elevation": [np.nan] * n_unaligned_cameras,
+            "altitude_agl": [np.nan] * n_unaligned_cameras,
+            "geometry": [None] * n_unaligned_cameras,
+        },
+        crs=cameras_gdf.crs,
+    )
+
+    # Add the un-aligned cameras to the geodataframe
+    cameras_gdf = gpd.GeoDataFrame(
+        pd.concat((cameras_gdf, unaligned_cameras_gdf)), crs=cameras_gdf.crs
     )
 
     return cameras_gdf
