@@ -1,4 +1,6 @@
+import argparse
 import xml.etree.ElementTree as ET
+from pathlib import Path
 
 import geopandas as gpd
 import numpy as np
@@ -129,7 +131,23 @@ def get_camera_locations(camera_file):
     return points_gdf
 
 
-def compute_height_above_ground(camera_file, dtm_file):
+def compute_height_above_ground(camera_file: str, dtm_file: str) -> gpd.GeoDataFrame:
+    """
+    Take the camera locations and DTM from Metashape and produce a height above ground for each camera
+    that is aligned and has a valid DTM entry for the corresponding location.
+
+    Args
+        camera_file (str):
+            Path to the Metashape camera file (.xml)
+        dtm_file (str):
+            Path to the Metashape DTM (.tif)
+    Returns:
+        gpd.GeoDataFrame:
+            GeoDataFrame with camera locations as Point geometries in the CRS of the DTM.
+            * 'label' column contains the image path
+            * 'altitude_agl' contains the image altitude above ground level in meters
+            * 'valid_elevation' contains whether there was a corresponding non-null DTM value
+    """
     cameras_gdf = get_camera_locations(camera_file=camera_file)
 
     with rio.open(dtm_file) as dtm:
@@ -160,10 +178,29 @@ def compute_height_above_ground(camera_file, dtm_file):
     return cameras_gdf
 
 
-if __name__ == "__main__":
-    cameras_file = "/ofo-share/argo-data/argo-output/archive_20260202/species_project/0068_000434_000440/output/0068_000434_000440_cameras.xml"
-    dtm_file = "/ofo-share/argo-data/argo-output/archive_20260202/species_project/0068_000434_000440/output/0068_000434_000440_dtm-ptcloud.tif"
-    heights_above_ground = compute_height_above_ground(
-        camera_file=cameras_file, dtm_file=dtm_file
+def parse_args():
+    parser = argparse.ArgumentParser(
+        description="Compute altitude above ground for camera locations using a DTM"
     )
-    breakpoint()
+    parser.add_argument(
+        "camera_file", type=str, help="Path to the Metashape .xml camera export file"
+    )
+    parser.add_argument(
+        "dtm_file", type=str, help="Path to the DTM (Digital Terrain Model) raster file"
+    )
+    parser.add_argument(
+        "output_file",
+        type=Path,
+        help="Path to write out camera metadata. Should be a geospatial vector file format.",
+    )
+    return parser.parse_args()
+
+
+if __name__ == "__main__":
+    args = parse_args()
+    # Main processing
+    heights_above_ground = compute_height_above_ground(
+        camera_file=args.camera_file, dtm_file=args.dtm_file
+    )
+    args.output_file.parent.mkdir(parents=True, exist_ok=True)
+    heights_above_ground.to_file(args.output_file)
