@@ -150,7 +150,7 @@ def compute_height_above_ground(camera_file: str, dtm_file: str) -> gpd.GeoDataF
             Path to the Metashape DTM (.tif)
     Returns:
         gpd.GeoDataFrame:
-            GeoDataFrame with camera locations as Point geometries in the CRS of the DTM.
+            GeoDataFrame with camera locations as Point geometries in EPSG:4326.
             * 'label' column contains the image path
             * 'altitude' contains the image altitude above ground level in meters
             * 'valid_elevation' contains whether there was a corresponding non-null DTM value
