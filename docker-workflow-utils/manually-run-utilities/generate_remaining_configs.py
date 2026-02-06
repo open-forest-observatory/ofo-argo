@@ -51,7 +51,10 @@ def main():
                     if args.level == "metashape":
                         # Skip if any completion (metashape or postprocess)
                         completed.add(entry["project_name"])
-                    elif args.level == "postprocess" and entry["completion_level"] == "postprocess":
+                    elif (
+                        args.level == "postprocess"
+                        and entry["completion_level"] == "postprocess"
+                    ):
                         # Skip only if postprocess complete
                         completed.add(entry["project_name"])
                 except (json.JSONDecodeError, KeyError):
@@ -86,10 +89,15 @@ def main():
     if args.output:
         with open(args.output, "w") as f:
             f.write(output)
-        print(f"Wrote {len(remaining)} remaining configs to {args.output}", file=sys.stderr)
+        print(
+            f"Wrote {len(remaining)} remaining configs to {args.output}",
+            file=sys.stderr,
+        )
     else:
         sys.stdout.write(output)
-        print(f"# {len(remaining)} remaining, {len(completed)} completed", file=sys.stderr)
+        print(
+            f"# {len(remaining)} remaining, {len(completed)} completed", file=sys.stderr
+        )
 
 
 if __name__ == "__main__":

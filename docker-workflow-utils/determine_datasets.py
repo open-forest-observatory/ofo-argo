@@ -556,9 +556,7 @@ def main(
     completions: Dict[str, str] = {}
     if completion_log and skip_if_complete != "none":
         completions = load_completion_log(completion_log)
-        print(
-            f"Loaded {len(completions)} entries from completion log", file=sys.stderr
-        )
+        print(f"Loaded {len(completions)} entries from completion log", file=sys.stderr)
 
     # Create completion log file if it doesn't exist (for later appending by workflow)
     if completion_log and not os.path.exists(completion_log):

@@ -50,15 +50,19 @@ def get_s3_client():
         return boto3.client(
             "s3",
             endpoint_url=endpoint,
-            aws_access_key_id=os.environ.get("AWS_ACCESS_KEY_ID") or os.environ.get("S3_ACCESS_KEY"),
-            aws_secret_access_key=os.environ.get("AWS_SECRET_ACCESS_KEY") or os.environ.get("S3_SECRET_KEY"),
+            aws_access_key_id=os.environ.get("AWS_ACCESS_KEY_ID")
+            or os.environ.get("S3_ACCESS_KEY"),
+            aws_secret_access_key=os.environ.get("AWS_SECRET_ACCESS_KEY")
+            or os.environ.get("S3_SECRET_KEY"),
             config=Config(signature_version="s3v4"),
         )
     else:
         return boto3.client("s3")
 
 
-def list_s3_objects(client, bucket: str, prefix: str, max_keys: int = 10000) -> List[dict]:
+def list_s3_objects(
+    client, bucket: str, prefix: str, max_keys: int = 10000
+) -> List[dict]:
     """
     List objects in S3 bucket with prefix.
 
@@ -83,7 +87,7 @@ def extract_project_name_from_sentinel(key: str, prefix: str) -> Optional[str]:
         prefix/project_name_report.pdf -> project_name (flat)
     """
     # Remove prefix
-    relative = key[len(prefix):].lstrip("/")
+    relative = key[len(prefix) :].lstrip("/")
 
     parts = relative.split("/")
     if len(parts) >= 2:
@@ -94,7 +98,7 @@ def extract_project_name_from_sentinel(key: str, prefix: str) -> Optional[str]:
         filename = parts[0]
         # Remove _report.pdf suffix
         if filename.endswith("_report.pdf"):
-            return filename[:-len("_report.pdf")]
+            return filename[: -len("_report.pdf")]
 
     return None
 
@@ -205,28 +209,55 @@ Note on multiple configs:
         """,
     )
 
-    parser.add_argument("--internal-bucket", required=True,
-                        help="S3 bucket for internal/metashape products")
-    parser.add_argument("--internal-prefix", required=True,
-                        help="S3 prefix for metashape products (e.g., photogrammetry/default-run or photogrammetry/default-run/photogrammetry_highres)")
-    parser.add_argument("--public-bucket", default="",
-                        help="S3 bucket for public/postprocessed products (optional)")
-    parser.add_argument("--public-prefix", default="",
-                        help="S3 prefix for postprocessed products (optional)")
-    parser.add_argument("--level", choices=["metashape", "postprocess", "both"], default="both",
-                        help="Which completion levels to detect")
-    parser.add_argument("--output", "-o", required=True,
-                        help="Output file path for completion log")
-    parser.add_argument("--append", action="store_true",
-                        help="Append to existing log instead of overwriting")
-    parser.add_argument("--dry-run", action="store_true",
-                        help="Print what would be written without writing")
+    parser.add_argument(
+        "--internal-bucket",
+        required=True,
+        help="S3 bucket for internal/metashape products",
+    )
+    parser.add_argument(
+        "--internal-prefix",
+        required=True,
+        help="S3 prefix for metashape products (e.g., photogrammetry/default-run or photogrammetry/default-run/photogrammetry_highres)",
+    )
+    parser.add_argument(
+        "--public-bucket",
+        default="",
+        help="S3 bucket for public/postprocessed products (optional)",
+    )
+    parser.add_argument(
+        "--public-prefix",
+        default="",
+        help="S3 prefix for postprocessed products (optional)",
+    )
+    parser.add_argument(
+        "--level",
+        choices=["metashape", "postprocess", "both"],
+        default="both",
+        help="Which completion levels to detect",
+    )
+    parser.add_argument(
+        "--output", "-o", required=True, help="Output file path for completion log"
+    )
+    parser.add_argument(
+        "--append",
+        action="store_true",
+        help="Append to existing log instead of overwriting",
+    )
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Print what would be written without writing",
+    )
 
     args = parser.parse_args()
 
     # Validate args
-    if args.level in ["postprocess", "both"] and (not args.public_bucket or not args.public_prefix):
-        parser.error("--public-bucket and --public-prefix required when checking postprocess level")
+    if args.level in ["postprocess", "both"] and (
+        not args.public_bucket or not args.public_prefix
+    ):
+        parser.error(
+            "--public-bucket and --public-prefix required when checking postprocess level"
+        )
 
     # Create S3 client
     client = get_s3_client()
@@ -250,7 +281,9 @@ Note on multiple configs:
 
     print(f"\nGenerated {len(entries)} log entries:", file=sys.stderr)
     metashape_only = sum(1 for e in entries if e["completion_level"] == "metashape")
-    postprocess_count = sum(1 for e in entries if e["completion_level"] == "postprocess")
+    postprocess_count = sum(
+        1 for e in entries if e["completion_level"] == "postprocess"
+    )
     print(f"  - metashape level: {metashape_only}", file=sys.stderr)
     print(f"  - postprocess level: {postprocess_count}", file=sys.stderr)
 
