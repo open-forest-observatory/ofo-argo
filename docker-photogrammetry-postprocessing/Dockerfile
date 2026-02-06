@@ -17,6 +17,7 @@ WORKDIR /app
 # Copy Python scripts and requirements
 COPY requirements.txt .
 COPY postprocess.py .
+COPY compute_derived_altitude.py .
 COPY entrypoint.py .
 COPY docker-entrypoint.sh .
 
