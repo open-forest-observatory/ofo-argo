@@ -189,7 +189,7 @@ def compute_height_above_ground(camera_file: str, dtm_file: str) -> gpd.GeoDataF
     unaligned_cameras_gdf = gpd.GeoDataFrame(
         {
             "label": unaligned_cameras,
-            "valid_elevations": [False] * n_unaligned_cameras,
+            "valid_elevation": [False] * n_unaligned_cameras,
             "ground_elevation": [np.nan] * n_unaligned_cameras,
             "altitude": [np.nan] * n_unaligned_cameras,
             "geometry": [None] * n_unaligned_cameras,
