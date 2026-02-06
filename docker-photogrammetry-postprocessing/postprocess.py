@@ -596,27 +596,6 @@ def postprocess_photogrammetry_containerized(
         except Exception as e:
             print(f"Failed to create chm-mesh: {e}")
 
-    ## Copy non-raster files
-
-    other_files = photogrammetry_output_files[
-        ~photogrammetry_output_files["extension"].isin(["tif", "tiff"])
-    ]
-
-    if len(other_files) > 0:
-        print(f"Copying {len(other_files)} non-raster files")
-
-        for _, row in other_files.iterrows():
-            try:
-                output_filepath = os.path.join(
-                    postprocessed_path, "full", row["postprocessed_filename"]
-                )
-                shutil.copy(row["full_path"], output_filepath)
-                print(f"  Copied: {row['postprocessed_filename']}")
-            except Exception as e:
-                print(
-                    f"Warning: Failed to copy {row['photogrammetry_output_filename']}: {e}"
-                )
-
     ## Create thumbnails
 
     output_max_dim = int(os.environ.get("OUTPUT_MAX_DIM", "800"))
@@ -639,6 +618,27 @@ def postprocess_photogrammetry_containerized(
 
         except Exception as e:
             print(f"Warning: Failed to create thumbnail for {tif_file}: {e}")
+
+    ## Copy non-raster files
+
+    other_files = photogrammetry_output_files[
+        ~photogrammetry_output_files["extension"].isin(["tif", "tiff"])
+    ]
+
+    if len(other_files) > 0:
+        print(f"Copying {len(other_files)} non-raster files")
+
+        for _, row in other_files.iterrows():
+            try:
+                output_filepath = os.path.join(
+                    postprocessed_path, "full", row["postprocessed_filename"]
+                )
+                shutil.copy(row["full_path"], output_filepath)
+                print(f"  Copied: {row['postprocessed_filename']}")
+            except Exception as e:
+                print(
+                    f"Warning: Failed to copy {row['photogrammetry_output_filename']}: {e}"
+                )
 
     # Count output files
     full_files = os.listdir(os.path.join(postprocessed_path, "full"))

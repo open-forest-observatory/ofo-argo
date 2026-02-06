@@ -17,7 +17,8 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
 
-RUN chmod +x *.py
+# Make all Python scripts executable, including those in subdirectories
+RUN find /app -name "*.py" -type f -exec chmod +x {} \;
 
 
 CMD ["python", "-c", "import sys; print('Ofo-argo-utils running, reference a specific script')"]

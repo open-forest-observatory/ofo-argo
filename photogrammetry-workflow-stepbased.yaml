@@ -50,6 +50,18 @@ spec:
       # Docker image tag for automate-metashape container
       - name: AUTOMATE_METASHAPE_IMAGE_TAG
         value: "latest"
+      # License retry settings for Metashape license acquisition
+      - name: LICENSE_RETRY_INTERVAL
+        value: "300"
+      - name: LICENSE_MAX_RETRIES
+        value: "0"
+      # Completion tracking and skip behavior
+      # Path to completion log file (empty = disable skip/logging)
+      - name: COMPLETION_LOG_PATH
+        value: ""
+      # Skip projects based on completion status: "none", "metashape", "postprocess", "both"
+      - name: SKIP_IF_COMPLETE
+        value: "none"
 
   # Defining where to read raw drone imagery data and write out imagery products to `/ofo-share`
   volumes:
@@ -129,6 +141,13 @@ spec:
           - "{{workflow.parameters.CONFIG_LIST}}"
           # Write full configs to shared file (artifact mode) to avoid withParam size limits
           - "{{workflow.parameters.TEMP_WORKING_DIR}}/{{workflow.name}}/project-configs.json"
+          # Completion tracking arguments
+          - "--completion-log"
+          - "{{workflow.parameters.COMPLETION_LOG_PATH}}"
+          - "--skip-if-complete"
+          - "{{workflow.parameters.SKIP_IF_COMPLETE}}"
+          - "--workflow-name"
+          - "{{workflow.name}}"
       outputs:
         parameters:
           - name: configs-file
@@ -209,6 +228,7 @@ spec:
           - name: setup
             template: metashape-cpu-step
             depends: "load-config.Succeeded && (transform-config.Succeeded || transform-config.Skipped)"
+            when: "{{=sprig.fromJson(tasks['load-config'].outputs.result).skip_metashape != true}}"
             arguments:
               parameters:
                 - name: project-name
@@ -227,8 +247,8 @@ spec:
 
           # Step 2: Match Photos (conditional, GPU or CPU based on config)
           - name: match-photos-gpu
-            depends: "setup.Succeeded"
-            when: "{{=sprig.fromJson(tasks['load-config'].outputs.result).match_photos_enabled == true && sprig.fromJson(tasks['load-config'].outputs.result).match_photos_use_gpu == true}}"
+            depends: "setup.Succeeded || setup.Skipped"
+            when: "{{=sprig.fromJson(tasks['load-config'].outputs.result).skip_metashape != true && sprig.fromJson(tasks['load-config'].outputs.result).match_photos_enabled == true && sprig.fromJson(tasks['load-config'].outputs.result).match_photos_use_gpu == true}}"
             template: metashape-gpu-step
             arguments:
               parameters:
@@ -250,8 +270,8 @@ spec:
                   value: "{{=sprig.fromJson(tasks['load-config'].outputs.result).match_photos_memory_request}}"
 
           - name: match-photos-cpu
-            depends: "setup.Succeeded"
-            when: "{{=sprig.fromJson(tasks['load-config'].outputs.result).match_photos_enabled == true && sprig.fromJson(tasks['load-config'].outputs.result).match_photos_use_gpu == false}}"
+            depends: "setup.Succeeded || setup.Skipped"
+            when: "{{=sprig.fromJson(tasks['load-config'].outputs.result).skip_metashape != true && sprig.fromJson(tasks['load-config'].outputs.result).match_photos_enabled == true && sprig.fromJson(tasks['load-config'].outputs.result).match_photos_use_gpu == false}}"
             template: metashape-cpu-step
             arguments:
               parameters:
@@ -271,7 +291,7 @@ spec:
           # Step 3: Align Cameras (conditional, CPU only)
           - name: align-cameras
             depends: "match-photos-gpu.Succeeded || match-photos-gpu.Skipped || match-photos-cpu.Succeeded || match-photos-cpu.Skipped"
-            when: "{{=sprig.fromJson(tasks['load-config'].outputs.result).align_cameras_enabled == true}}"
+            when: "{{=sprig.fromJson(tasks['load-config'].outputs.result).skip_metashape != true && sprig.fromJson(tasks['load-config'].outputs.result).align_cameras_enabled == true}}"
             template: metashape-cpu-step
             arguments:
               parameters:
@@ -291,7 +311,7 @@ spec:
           # Step 4: Build Depth Maps (conditional, GPU only)
           - name: build-depth-maps
             depends: "align-cameras.Succeeded || align-cameras.Skipped"
-            when: "{{=sprig.fromJson(tasks['load-config'].outputs.result).build_depth_maps_enabled == true}}"
+            when: "{{=sprig.fromJson(tasks['load-config'].outputs.result).skip_metashape != true && sprig.fromJson(tasks['load-config'].outputs.result).build_depth_maps_enabled == true}}"
             template: metashape-gpu-step
             arguments:
               parameters:
@@ -315,7 +335,7 @@ spec:
           # Step 5: Build Point Cloud (conditional, CPU only)
           - name: build-point-cloud
             depends: "build-depth-maps.Succeeded || build-depth-maps.Skipped"
-            when: "{{=sprig.fromJson(tasks['load-config'].outputs.result).build_point_cloud_enabled == true}}"
+            when: "{{=sprig.fromJson(tasks['load-config'].outputs.result).skip_metashape != true && sprig.fromJson(tasks['load-config'].outputs.result).build_point_cloud_enabled == true}}"
             template: metashape-cpu-step
             arguments:
               parameters:
@@ -335,7 +355,7 @@ spec:
           # Step 6: Build Mesh (conditional, GPU or CPU based on config)
           - name: build-mesh-gpu
             depends: "build-point-cloud.Succeeded || build-point-cloud.Skipped"
-            when: "{{=sprig.fromJson(tasks['load-config'].outputs.result).build_mesh_enabled == true && sprig.fromJson(tasks['load-config'].outputs.result).build_mesh_use_gpu == true}}"
+            when: "{{=sprig.fromJson(tasks['load-config'].outputs.result).skip_metashape != true && sprig.fromJson(tasks['load-config'].outputs.result).build_mesh_enabled == true && sprig.fromJson(tasks['load-config'].outputs.result).build_mesh_use_gpu == true}}"
             template: metashape-gpu-step
             arguments:
               parameters:
@@ -358,7 +378,7 @@ spec:
 
           - name: build-mesh-cpu
             depends: "build-point-cloud.Succeeded || build-point-cloud.Skipped"
-            when: "{{=sprig.fromJson(tasks['load-config'].outputs.result).build_mesh_enabled == true && sprig.fromJson(tasks['load-config'].outputs.result).build_mesh_use_gpu == false}}"
+            when: "{{=sprig.fromJson(tasks['load-config'].outputs.result).skip_metashape != true && sprig.fromJson(tasks['load-config'].outputs.result).build_mesh_enabled == true && sprig.fromJson(tasks['load-config'].outputs.result).build_mesh_use_gpu == false}}"
             template: metashape-cpu-step
             arguments:
               parameters:
@@ -378,7 +398,7 @@ spec:
           # Step 7: Build DEM/Orthomosaic (conditional, CPU only)
           - name: build-dem-orthomosaic
             depends: "(build-point-cloud.Succeeded || build-point-cloud.Skipped) && (build-mesh-gpu.Succeeded || build-mesh-gpu.Skipped || build-mesh-cpu.Succeeded || build-mesh-cpu.Skipped)"
-            when: "{{=sprig.fromJson(tasks['load-config'].outputs.result).build_dem_orthomosaic_enabled == true}}"
+            when: "{{=sprig.fromJson(tasks['load-config'].outputs.result).skip_metashape != true && sprig.fromJson(tasks['load-config'].outputs.result).build_dem_orthomosaic_enabled == true}}"
             template: metashape-cpu-step
             arguments:
               parameters:
@@ -398,7 +418,7 @@ spec:
           # Step 8: Match Photos Secondary (conditional, GPU or CPU based on config)
           - name: match-photos-secondary-gpu
             depends: "build-dem-orthomosaic.Succeeded || build-dem-orthomosaic.Skipped"
-            when: "{{=sprig.fromJson(tasks['load-config'].outputs.result).match_photos_secondary_enabled == true && sprig.fromJson(tasks['load-config'].outputs.result).match_photos_secondary_use_gpu == true}}"
+            when: "{{=sprig.fromJson(tasks['load-config'].outputs.result).skip_metashape != true && sprig.fromJson(tasks['load-config'].outputs.result).match_photos_secondary_enabled == true && sprig.fromJson(tasks['load-config'].outputs.result).match_photos_secondary_use_gpu == true}}"
             template: metashape-gpu-step
             arguments:
               parameters:
@@ -421,7 +441,7 @@ spec:
 
           - name: match-photos-secondary-cpu
             depends: "build-dem-orthomosaic.Succeeded || build-dem-orthomosaic.Skipped"
-            when: "{{=sprig.fromJson(tasks['load-config'].outputs.result).match_photos_secondary_enabled == true && sprig.fromJson(tasks['load-config'].outputs.result).match_photos_secondary_use_gpu == false}}"
+            when: "{{=sprig.fromJson(tasks['load-config'].outputs.result).skip_metashape != true && sprig.fromJson(tasks['load-config'].outputs.result).match_photos_secondary_enabled == true && sprig.fromJson(tasks['load-config'].outputs.result).match_photos_secondary_use_gpu == false}}"
             template: metashape-cpu-step
             arguments:
               parameters:
@@ -441,7 +461,7 @@ spec:
           # Step 9: Align Cameras Secondary (conditional, CPU only)
           - name: align-cameras-secondary
             depends: "match-photos-secondary-gpu.Succeeded || match-photos-secondary-gpu.Skipped || match-photos-secondary-cpu.Succeeded || match-photos-secondary-cpu.Skipped"
-            when: "{{=sprig.fromJson(tasks['load-config'].outputs.result).align_cameras_secondary_enabled == true}}"
+            when: "{{=sprig.fromJson(tasks['load-config'].outputs.result).skip_metashape != true && sprig.fromJson(tasks['load-config'].outputs.result).align_cameras_secondary_enabled == true}}"
             template: metashape-cpu-step
             arguments:
               parameters:
@@ -461,6 +481,7 @@ spec:
           # Step 10: Finalize (always runs, CPU only)
           - name: finalize
             depends: "(build-dem-orthomosaic.Succeeded || build-dem-orthomosaic.Skipped) && (align-cameras-secondary.Succeeded || align-cameras-secondary.Skipped)"
+            when: "{{=sprig.fromJson(tasks['load-config'].outputs.result).skip_metashape != true}}"
             template: metashape-cpu-step
             arguments:
               parameters:
@@ -479,7 +500,8 @@ spec:
 
           # Upload task (runs after finalize completes)
           - name: rclone-upload-task
-            depends: "finalize.Succeeded"
+            depends: "finalize.Succeeded || finalize.Skipped"
+            when: "{{=sprig.fromJson(tasks['load-config'].outputs.result).skip_metashape != true}}"
             template: rclone-upload-template
             arguments:
               parameters:
@@ -490,9 +512,9 @@ spec:
                 - name: photogrammetry-config-subfolder
                   value: "{{inputs.parameters.photogrammetry-config-subfolder}}"
 
-          # Post-processing task (runs after upload completes)
+          # Post-processing task (runs after upload completes or is skipped)
           - name: postprocessing-task
-            depends: "rclone-upload-task.Succeeded"
+            depends: "rclone-upload-task.Succeeded || rclone-upload-task.Skipped"
             template: postprocessing-template
             arguments:
               parameters:
@@ -503,9 +525,37 @@ spec:
                 - name: photogrammetry-config-subfolder
                   value: "{{inputs.parameters.photogrammetry-config-subfolder}}"
 
-          # Cleanup task (runs after postprocessing completes)
-          - name: cleanup-iteration
+          # Log metashape completion (after rclone upload succeeds)
+          - name: log-metashape-complete
+            depends: "rclone-upload-task.Succeeded"
+            when: "{{=workflow.parameters.COMPLETION_LOG_PATH != '' && sprig.fromJson(tasks['load-config'].outputs.result).skip_metashape != true}}"
+            template: log-completion-template
+            arguments:
+              parameters:
+                - name: project-name
+                  value: "{{inputs.parameters.project-name}}"
+                - name: completion-level
+                  value: "metashape"
+                - name: completion-log-path
+                  value: "{{workflow.parameters.COMPLETION_LOG_PATH}}"
+
+          # Log postprocess completion (after postprocessing succeeds)
+          - name: log-postprocess-complete
             depends: "postprocessing-task.Succeeded"
+            when: "{{=workflow.parameters.COMPLETION_LOG_PATH != ''}}"
+            template: log-completion-template
+            arguments:
+              parameters:
+                - name: project-name
+                  value: "{{inputs.parameters.project-name}}"
+                - name: completion-level
+                  value: "postprocess"
+                - name: completion-log-path
+                  value: "{{workflow.parameters.COMPLETION_LOG_PATH}}"
+
+          # Cleanup task (runs after postprocessing and logging completes)
+          - name: cleanup-iteration
+            depends: "(postprocessing-task.Succeeded || postprocessing-task.Skipped) && (log-postprocess-complete.Succeeded || log-postprocess-complete.Skipped)"
             template: cleanup-iteration-template
             arguments:
               parameters:
@@ -554,8 +604,8 @@ spec:
             echo "[cleanup] Cleanup complete (preserved downloaded-raw-imagery if present)"
           fi
 
-          # Run the Metashape step
-          python3 /app/python/metashape_workflow.py \
+          # Run the Metashape step with license retry wrapper
+          python3 /app/python/license_retry_wrapper.py \
             --config-file "{{inputs.parameters.config-file}}" \
             --project-path "{{workflow.parameters.TEMP_WORKING_DIR}}/{{workflow.name}}/{{inputs.parameters.iteration-id}}/photogrammetry/project" \
             --output-path "{{workflow.parameters.TEMP_WORKING_DIR}}/{{workflow.name}}/{{inputs.parameters.iteration-id}}/photogrammetry/output" \
@@ -567,6 +617,10 @@ spec:
               secretKeyRef:
                 name: agisoft-license
                 key: license_server
+          - name: LICENSE_RETRY_INTERVAL
+            value: "{{workflow.parameters.LICENSE_RETRY_INTERVAL}}"
+          - name: LICENSE_MAX_RETRIES
+            value: "{{workflow.parameters.LICENSE_MAX_RETRIES}}"
 
     # GPU step template for Metashape processing
     # Supports dynamic GPU resource selection (full GPU or MIG partitions) and count
@@ -597,8 +651,8 @@ spec:
         source: |
           set -e
 
-          # Run the Metashape step
-          python3 /app/python/metashape_workflow.py \
+          # Run the Metashape step with license retry wrapper
+          python3 /app/python/license_retry_wrapper.py \
             --config-file "{{inputs.parameters.config-file}}" \
             --project-path "{{workflow.parameters.TEMP_WORKING_DIR}}/{{workflow.name}}/{{inputs.parameters.iteration-id}}/photogrammetry/project" \
             --output-path "{{workflow.parameters.TEMP_WORKING_DIR}}/{{workflow.name}}/{{inputs.parameters.iteration-id}}/photogrammetry/output" \
@@ -610,6 +664,10 @@ spec:
               secretKeyRef:
                 name: agisoft-license
                 key: license_server
+          - name: LICENSE_RETRY_INTERVAL
+            value: "{{workflow.parameters.LICENSE_RETRY_INTERVAL}}"
+          - name: LICENSE_MAX_RETRIES
+            value: "{{workflow.parameters.LICENSE_MAX_RETRIES}}"
 
     # --------- S3 IMAGERY DOWNLOAD ---------
     # Downloads and extracts zip files containing imagery from S3
@@ -862,6 +920,60 @@ spec:
             echo "[cleanup] Removing iteration directory: $ITERATION_DIR"
             rm -rf "$ITERATION_DIR"
             echo "[cleanup] Done"
+        resources:
+          requests:
+            cpu: "100m"
+            memory: "64Mi"
+
+    #--------- LOG COMPLETION ---------
+    # Appends completion entry to the shared completion log file
+    # Uses file locking to handle concurrent writes from parallel projects
+    - name: log-completion-template
+      inputs:
+        parameters:
+          - name: project-name
+          - name: completion-level  # "metashape" or "postprocess"
+          - name: completion-log-path
+      nodeSelector:
+        feature.node.kubernetes.io/workload-type: cpu
+      script:
+        image: python:3.9-slim
+        volumeMounts:
+          - name: data
+            mountPath: /data
+        command: ["python3"]
+        source: |
+          import json
+          import fcntl
+          import os
+          from datetime import datetime, timezone
+
+          log_path = "{{inputs.parameters.completion-log-path}}"
+
+          # Skip if no log path configured
+          if not log_path:
+              print("No completion log path configured, skipping")
+              exit(0)
+
+          entry = {
+              "project_name": "{{inputs.parameters.project-name}}",
+              "completion_level": "{{inputs.parameters.completion-level}}",
+              "timestamp": datetime.now(timezone.utc).isoformat(),
+              "workflow_name": "{{workflow.name}}"
+          }
+
+          line = json.dumps(entry) + "\n"
+
+          # Ensure directory exists
+          os.makedirs(os.path.dirname(log_path), exist_ok=True)
+
+          # Append with exclusive lock for concurrency safety
+          with open(log_path, "a") as f:
+              fcntl.flock(f.fileno(), fcntl.LOCK_EX)
+              f.write(line)
+              f.flush()
+
+          print(f"Logged completion: {entry['project_name']} at level {entry['completion_level']}")
         resources:
           requests:
             cpu: "100m"
