@@ -200,6 +200,8 @@ def compute_height_above_ground(camera_file: str, dtm_file: str) -> gpd.GeoDataF
     cameras_gdf = gpd.GeoDataFrame(
         pd.concat((cameras_gdf, unaligned_cameras_gdf)), crs=cameras_gdf.crs
     )
+    # Convert to lat lon
+    cameras_gdf.to_crs(4326, inplace=True)
 
     return cameras_gdf
 
