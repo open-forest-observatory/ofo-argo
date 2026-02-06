@@ -152,8 +152,10 @@ def compute_height_above_ground(camera_file: str, dtm_file: str) -> gpd.GeoDataF
         gpd.GeoDataFrame:
             GeoDataFrame with camera locations as Point geometries in the CRS of the DTM.
             * 'label' column contains the image path
-            * 'altitude_agl' contains the image altitude above ground level in meters
+            * 'altitude' contains the image altitude above ground level in meters
             * 'valid_elevation' contains whether there was a corresponding non-null DTM value
+            * 'ground_elevation' the height of the ground in meters
+
     """
     # Parse aligned cameras as geodataframe and record labels of unaligned ones
     cameras_gdf, unaligned_cameras = get_camera_locations(camera_file=camera_file)
@@ -189,7 +191,7 @@ def compute_height_above_ground(camera_file: str, dtm_file: str) -> gpd.GeoDataF
             "label": unaligned_cameras,
             "valid_elevations": [False] * n_unaligned_cameras,
             "ground_elevation": [np.nan] * n_unaligned_cameras,
-            "altitude_agl": [np.nan] * n_unaligned_cameras,
+            "altitude": [np.nan] * n_unaligned_cameras,
             "geometry": [None] * n_unaligned_cameras,
         },
         crs=cameras_gdf.crs,
