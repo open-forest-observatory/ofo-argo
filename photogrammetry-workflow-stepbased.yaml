@@ -287,7 +287,7 @@ spec:
           # Step 1: Setup (always runs, CPU only)
           - name: setup
             template: metashape-cpu-step
-            depends: "transform-config.Succeeded"
+            depends: "load-config.Succeeded && transform-config.Succeeded"
             when: "{{=sprig.fromJson(tasks['load-config'].outputs.result).skip_metashape != true}}"
             arguments:
               parameters:
