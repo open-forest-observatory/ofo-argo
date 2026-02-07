@@ -139,7 +139,7 @@ spec:
         args:
           - "/app/determine_datasets.py"
           - "{{workflow.parameters.CONFIG_LIST}}"
-          # Write full configs to shared file (artifact mode) to avoid withParam size limits
+          # Write full configs to shared file (file-based mode) to avoid withParam size limits
           - "{{workflow.parameters.TEMP_WORKING_DIR}}/{{workflow.name}}/project-configs.json"
           # Completion tracking arguments
           - "--completion-log"
