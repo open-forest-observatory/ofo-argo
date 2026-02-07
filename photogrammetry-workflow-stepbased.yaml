@@ -123,28 +123,6 @@ spec:
     # processing steps are enabled. It also determines GPU vs CPU node scheduling for GPU-capable steps.
     # Uses containerized preprocessing script from argo-workflow-utils.
     #
-    # ===== WHY JSON STRUCTURE EXISTS =====
-    # Argo workflows have limitations that require preprocessing mission configs into JSON format:
-    # 
-    # 1. PRE-POD-CREATION EVALUATION: Argo evaluates `when` conditions and resource requests 
-    #    (CPU/memory/GPU) before creating pods. This means these values must be available as 
-    #    simple parameter expressions, not computed inside containers.
-    #
-    # 2. AVOIDING 20+ SCRIPT STEPS: Without JSON preprocessing, we'd need separate script steps 
-    #    for each value extraction (enabled flags, resource requests, paths, etc.), creating 
-    #    a complex DAG with 20+ preprocessing tasks per project.
-    #
-    # 3. CENTRALIZED FALLBACK LOGIC: The JSON structure allows determine_datasets.py to implement 
-    #    multi-level fallback chains (step-specific → user defaults → hardcoded defaults) and 
-    #    derived computations (iteration_id, sanitized names) in one place.
-    #
-    # 4. WHAT'S IN JSON VS YAML:
-    #    - JSON contains: Argo orchestration metadata (enabled flags, resource requests, file paths,
-    #      iteration IDs, download settings, derived values like project_name_sanitized)
-    #    - YAML contains: Metashape processing parameters (downscale, filter_mode, blending, 
-    #      quality settings, etc.)
-    #    - Processing containers read YAML configs directly for all Metashape-specific parameters
-    #
     # To avoid Argo's parameter size limit (default 256KB), this step writes full configs to a
     # shared file and outputs only minimal references (index + project_name) to stdout.
     # Each project iteration loads its full config from the shared file at runtime.
@@ -176,22 +154,7 @@ spec:
             value: "{{workflow.parameters.TEMP_WORKING_DIR}}/{{workflow.name}}/project-configs.json"
 
     # Load a single project's configuration from the shared configs file
-    #
-    # ===== SHARED FILE APPROACH =====
-    # This design avoids Argo's parameter size limit (default 256KB) which would be exceeded
-    # when processing many projects in parallel:
-    #
-    # 1. ARTIFACT-BASED WORKFLOW: determine-projects writes full configs to a shared file on
-    #    the persistent volume, then outputs only minimal references via stdout
-    #
-    # 2. MINIMAL REFERENCES: Only index and project_name pass through withParam (a few bytes 
-    #    per project vs. several KB for full config JSON)
-    #
-    # 3. RUNTIME LOADING: Each project iteration loads its full config from the shared file
-    #    when needed, making the approach scalable to hundreds of projects
-    #
-    # This pattern is critical for batch processing workflows where parameter size limits 
-    # would otherwise constrain parallelism.
+    # This avoids passing large JSON through Argo parameters (which has size limits)
     - name: load-project-config
       inputs:
         parameters:
