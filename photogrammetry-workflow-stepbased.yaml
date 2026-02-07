@@ -160,7 +160,8 @@ spec:
             value: "{{workflow.parameters.TEMP_WORKING_DIR}}/{{workflow.name}}/project-configs.json"
 
     # Load a single project's configuration from the shared configs file
-    # This avoids passing large JSON through Argo parameters (which has size limits)
+    # Outputs config as artifact and extracts individual parameters using jqFilter
+    # This eliminates the need for sprig.fromJson() parsing throughout the workflow
     - name: load-project-config
       inputs:
         parameters:
@@ -179,7 +180,211 @@ spec:
           with open("{{inputs.parameters.configs-file}}", "r") as f:
               configs = json.load(f)
           project_config = configs[{{inputs.parameters.project-index}}]
-          print(json.dumps(project_config))
+          
+          # Write to artifact file
+          with open('/tmp/config.json', 'w') as out:
+              json.dump(project_config, out)
+      outputs:
+        artifacts:
+          - name: config-json
+            path: /tmp/config.json
+        parameters:
+          # Extract all config fields as parameters using jqFilter
+          # This allows direct parameter references instead of JSON parsing
+          - name: project-name
+            valueFrom:
+              path: /tmp/config.json
+              jqFilter: .project_name
+          - name: project-name-sanitized
+            valueFrom:
+              path: /tmp/config.json
+              jqFilter: .project_name_sanitized
+          - name: config
+            valueFrom:
+              path: /tmp/config.json
+              jqFilter: .config
+          - name: iteration-id
+            valueFrom:
+              path: /tmp/config.json
+              jqFilter: .iteration_id
+          - name: imagery-download-enabled
+            valueFrom:
+              path: /tmp/config.json
+              jqFilter: .imagery_download_enabled
+          - name: imagery-zip-downloads
+            valueFrom:
+              path: /tmp/config.json
+              jqFilter: .imagery_zip_downloads | tojson
+          - name: skip-metashape
+            valueFrom:
+              path: /tmp/config.json
+              jqFilter: .skip_metashape // false
+          # Setup step
+          - name: setup-cpu-request
+            valueFrom:
+              path: /tmp/config.json
+              jqFilter: .setup_cpu_request
+          - name: setup-memory-request
+            valueFrom:
+              path: /tmp/config.json
+              jqFilter: .setup_memory_request
+          # Match photos primary
+          - name: match-photos-enabled
+            valueFrom:
+              path: /tmp/config.json
+              jqFilter: .match_photos_enabled
+          - name: match-photos-use-gpu
+            valueFrom:
+              path: /tmp/config.json
+              jqFilter: .match_photos_use_gpu
+          - name: match-photos-gpu-resource
+            valueFrom:
+              path: /tmp/config.json
+              jqFilter: .match_photos_gpu_resource
+          - name: match-photos-gpu-count
+            valueFrom:
+              path: /tmp/config.json
+              jqFilter: .match_photos_gpu_count
+          - name: match-photos-cpu-request
+            valueFrom:
+              path: /tmp/config.json
+              jqFilter: .match_photos_cpu_request
+          - name: match-photos-memory-request
+            valueFrom:
+              path: /tmp/config.json
+              jqFilter: .match_photos_memory_request
+          # Align cameras
+          - name: align-cameras-enabled
+            valueFrom:
+              path: /tmp/config.json
+              jqFilter: .align_cameras_enabled
+          - name: align-cameras-cpu-request
+            valueFrom:
+              path: /tmp/config.json
+              jqFilter: .align_cameras_cpu_request
+          - name: align-cameras-memory-request
+            valueFrom:
+              path: /tmp/config.json
+              jqFilter: .align_cameras_memory_request
+          # Build depth maps
+          - name: build-depth-maps-enabled
+            valueFrom:
+              path: /tmp/config.json
+              jqFilter: .build_depth_maps_enabled
+          - name: build-depth-maps-gpu-resource
+            valueFrom:
+              path: /tmp/config.json
+              jqFilter: .build_depth_maps_gpu_resource
+          - name: build-depth-maps-gpu-count
+            valueFrom:
+              path: /tmp/config.json
+              jqFilter: .build_depth_maps_gpu_count
+          - name: build-depth-maps-cpu-request
+            valueFrom:
+              path: /tmp/config.json
+              jqFilter: .build_depth_maps_cpu_request
+          - name: build-depth-maps-memory-request
+            valueFrom:
+              path: /tmp/config.json
+              jqFilter: .build_depth_maps_memory_request
+          # Build point cloud
+          - name: build-point-cloud-enabled
+            valueFrom:
+              path: /tmp/config.json
+              jqFilter: .build_point_cloud_enabled
+          - name: build-point-cloud-cpu-request
+            valueFrom:
+              path: /tmp/config.json
+              jqFilter: .build_point_cloud_cpu_request
+          - name: build-point-cloud-memory-request
+            valueFrom:
+              path: /tmp/config.json
+              jqFilter: .build_point_cloud_memory_request
+          # Build mesh
+          - name: build-mesh-enabled
+            valueFrom:
+              path: /tmp/config.json
+              jqFilter: .build_mesh_enabled
+          - name: build-mesh-use-gpu
+            valueFrom:
+              path: /tmp/config.json
+              jqFilter: .build_mesh_use_gpu
+          - name: build-mesh-gpu-resource
+            valueFrom:
+              path: /tmp/config.json
+              jqFilter: .build_mesh_gpu_resource
+          - name: build-mesh-gpu-count
+            valueFrom:
+              path: /tmp/config.json
+              jqFilter: .build_mesh_gpu_count
+          - name: build-mesh-cpu-request
+            valueFrom:
+              path: /tmp/config.json
+              jqFilter: .build_mesh_cpu_request
+          - name: build-mesh-memory-request
+            valueFrom:
+              path: /tmp/config.json
+              jqFilter: .build_mesh_memory_request
+          # Build DEM/Orthomosaic
+          - name: build-dem-orthomosaic-enabled
+            valueFrom:
+              path: /tmp/config.json
+              jqFilter: .build_dem_orthomosaic_enabled
+          - name: build-dem-orthomosaic-cpu-request
+            valueFrom:
+              path: /tmp/config.json
+              jqFilter: .build_dem_orthomosaic_cpu_request
+          - name: build-dem-orthomosaic-memory-request
+            valueFrom:
+              path: /tmp/config.json
+              jqFilter: .build_dem_orthomosaic_memory_request
+          # Match photos secondary
+          - name: match-photos-secondary-enabled
+            valueFrom:
+              path: /tmp/config.json
+              jqFilter: .match_photos_secondary_enabled
+          - name: match-photos-secondary-use-gpu
+            valueFrom:
+              path: /tmp/config.json
+              jqFilter: .match_photos_secondary_use_gpu
+          - name: match-photos-secondary-gpu-resource
+            valueFrom:
+              path: /tmp/config.json
+              jqFilter: .match_photos_secondary_gpu_resource
+          - name: match-photos-secondary-gpu-count
+            valueFrom:
+              path: /tmp/config.json
+              jqFilter: .match_photos_secondary_gpu_count
+          - name: match-photos-secondary-cpu-request
+            valueFrom:
+              path: /tmp/config.json
+              jqFilter: .match_photos_secondary_cpu_request
+          - name: match-photos-secondary-memory-request
+            valueFrom:
+              path: /tmp/config.json
+              jqFilter: .match_photos_secondary_memory_request
+          # Align cameras secondary
+          - name: align-cameras-secondary-enabled
+            valueFrom:
+              path: /tmp/config.json
+              jqFilter: .align_cameras_secondary_enabled
+          - name: align-cameras-secondary-cpu-request
+            valueFrom:
+              path: /tmp/config.json
+              jqFilter: .align_cameras_secondary_cpu_request
+          - name: align-cameras-secondary-memory-request
+            valueFrom:
+              path: /tmp/config.json
+              jqFilter: .align_cameras_secondary_memory_request
+          # Finalize
+          - name: finalize-cpu-request
+            valueFrom:
+              path: /tmp/config.json
+              jqFilter: .finalize_cpu_request
+          - name: finalize-memory-request
+            valueFrom:
+              path: /tmp/config.json
+              jqFilter: .finalize_memory_request
 
     # Multi-step photogrammetry workflow with conditional GPU/CPU execution
     # Config is loaded from shared file at runtime to avoid Argo parameter size limits
@@ -196,6 +401,9 @@ spec:
     #      file path references
     #    - Example fields: imagery_download_enabled, match_photos_use_gpu, 
     #      setup_cpu_request, build_mesh_gpu_resource
+    #    - **Passed as artifact**: Config JSON is output as an artifact to the S3 artifact 
+    #      repository, and individual parameters are extracted using jqFilter (Argo's 
+    #      documented pattern for large parameters)
     #
     # 2. YAML CONFIG (Metashape processing config):
     #    - Purpose: Metashape photogrammetry processing parameters
@@ -207,6 +415,9 @@ spec:
     #
     # This separation keeps orchestration logic (Argo) independent from processing 
     # parameters (Metashape), making the workflow easier to maintain and extend.
+    #
+    # Using artifacts with parameter extraction eliminates the need for JSON parsing
+    # (sprig.fromJson) in YAML expressions, making the workflow much cleaner and easier to read.
     - name: process-project-workflow
       inputs:
         parameters:
@@ -216,8 +427,8 @@ spec:
           - name: photogrammetry-config-subfolder
       dag:
         tasks:
-          # First task: Load full project config from shared file
-          # All subsequent tasks depend on this and use expressions to extract config values
+          # First task: Load full project config from shared file and extract parameters
+          # Config is output as artifact with all fields extracted as parameters via jqFilter
           - name: load-config
             template: load-project-config
             arguments:
@@ -231,13 +442,13 @@ spec:
           - name: download-imagery
             depends: "load-config.Succeeded"
             template: download-imagery
-            when: "{{=sprig.fromJson(tasks['load-config'].outputs.result).imagery_download_enabled == 'true'}}"
+            when: "{{tasks.load-config.outputs.parameters.imagery-download-enabled}} == 'true'"
             arguments:
               parameters:
                 - name: imagery-zip-downloads
-                  value: "{{=toJson(sprig.fromJson(tasks['load-config'].outputs.result).imagery_zip_downloads)}}"
+                  value: "{{tasks.load-config.outputs.parameters.imagery-zip-downloads}}"
                 - name: iteration-id
-                  value: "{{=sprig.fromJson(tasks['load-config'].outputs.result).iteration_id}}"
+                  value: "{{tasks.load-config.outputs.parameters.iteration-id}}"
 
           # Step 0b: Transform config to resolve __DOWNLOADED__ paths (always runs, idempotent)
           # If no downloads occurred, the transform is a no-op (copies config unchanged)
@@ -247,9 +458,9 @@ spec:
             arguments:
               parameters:
                 - name: config-file
-                  value: "{{=sprig.fromJson(tasks['load-config'].outputs.result).config}}"
+                  value: "{{tasks.load-config.outputs.parameters.config}}"
                 - name: iteration-id
-                  value: "{{=sprig.fromJson(tasks['load-config'].outputs.result).iteration_id}}"
+                  value: "{{tasks.load-config.outputs.parameters.iteration-id}}"
                 - name: project-name
                   value: "{{inputs.parameters.project-name}}"
 
@@ -257,7 +468,7 @@ spec:
           - name: setup
             template: metashape-cpu-step
             depends: "load-config.Succeeded && transform-config.Succeeded"
-            when: "{{=sprig.fromJson(tasks['load-config'].outputs.result).skip_metashape != true}}"
+            when: "{{tasks.load-config.outputs.parameters.skip-metashape}} != true"
             arguments:
               parameters:
                 - name: project-name
@@ -267,16 +478,16 @@ spec:
                 - name: step
                   value: "setup"
                 - name: iteration-id
-                  value: "{{=sprig.fromJson(tasks['load-config'].outputs.result).iteration_id}}"
+                  value: "{{tasks.load-config.outputs.parameters.iteration-id}}"
                 - name: cpu-request
-                  value: "{{=sprig.fromJson(tasks['load-config'].outputs.result).setup_cpu_request}}"
+                  value: "{{tasks.load-config.outputs.parameters.setup-cpu-request}}"
                 - name: memory-request
-                  value: "{{=sprig.fromJson(tasks['load-config'].outputs.result).setup_memory_request}}"
+                  value: "{{tasks.load-config.outputs.parameters.setup-memory-request}}"
 
           # Step 2: Match Photos (conditional, GPU or CPU based on config)
           - name: match-photos-gpu
             depends: "setup.Succeeded || setup.Skipped"
-            when: "{{=sprig.fromJson(tasks['load-config'].outputs.result).skip_metashape != true && sprig.fromJson(tasks['load-config'].outputs.result).match_photos_enabled == true && sprig.fromJson(tasks['load-config'].outputs.result).match_photos_use_gpu == true}}"
+            when: "{{tasks.load-config.outputs.parameters.skip-metashape}} != true && {{tasks.load-config.outputs.parameters.match-photos-enabled}} == true && {{tasks.load-config.outputs.parameters.match-photos-use-gpu}} == true"
             template: metashape-gpu-step
             arguments:
               parameters:
@@ -287,19 +498,19 @@ spec:
                 - name: step
                   value: "match_photos"
                 - name: iteration-id
-                  value: "{{=sprig.fromJson(tasks['load-config'].outputs.result).iteration_id}}"
+                  value: "{{tasks.load-config.outputs.parameters.iteration-id}}"
                 - name: gpu-resource
-                  value: "{{=sprig.fromJson(tasks['load-config'].outputs.result).match_photos_gpu_resource}}"
+                  value: "{{tasks.load-config.outputs.parameters.match-photos-gpu-resource}}"
                 - name: gpu-count
-                  value: "{{=sprig.fromJson(tasks['load-config'].outputs.result).match_photos_gpu_count}}"
+                  value: "{{tasks.load-config.outputs.parameters.match-photos-gpu-count}}"
                 - name: cpu-request
-                  value: "{{=sprig.fromJson(tasks['load-config'].outputs.result).match_photos_cpu_request}}"
+                  value: "{{tasks.load-config.outputs.parameters.match-photos-cpu-request}}"
                 - name: memory-request
-                  value: "{{=sprig.fromJson(tasks['load-config'].outputs.result).match_photos_memory_request}}"
+                  value: "{{tasks.load-config.outputs.parameters.match-photos-memory-request}}"
 
           - name: match-photos-cpu
             depends: "setup.Succeeded || setup.Skipped"
-            when: "{{=sprig.fromJson(tasks['load-config'].outputs.result).skip_metashape != true && sprig.fromJson(tasks['load-config'].outputs.result).match_photos_enabled == true && sprig.fromJson(tasks['load-config'].outputs.result).match_photos_use_gpu == false}}"
+            when: "{{tasks.load-config.outputs.parameters.skip-metashape}} != true && {{tasks.load-config.outputs.parameters.match-photos-enabled}} == true && {{tasks.load-config.outputs.parameters.match-photos-use-gpu}} == false"
             template: metashape-cpu-step
             arguments:
               parameters:
@@ -310,16 +521,16 @@ spec:
                 - name: step
                   value: "match_photos"
                 - name: iteration-id
-                  value: "{{=sprig.fromJson(tasks['load-config'].outputs.result).iteration_id}}"
+                  value: "{{tasks.load-config.outputs.parameters.iteration-id}}"
                 - name: cpu-request
-                  value: "{{=sprig.fromJson(tasks['load-config'].outputs.result).match_photos_cpu_request}}"
+                  value: "{{tasks.load-config.outputs.parameters.match-photos-cpu-request}}"
                 - name: memory-request
-                  value: "{{=sprig.fromJson(tasks['load-config'].outputs.result).match_photos_memory_request}}"
+                  value: "{{tasks.load-config.outputs.parameters.match-photos-memory-request}}"
 
           # Step 3: Align Cameras (conditional, CPU only)
           - name: align-cameras
             depends: "match-photos-gpu.Succeeded || match-photos-gpu.Skipped || match-photos-cpu.Succeeded || match-photos-cpu.Skipped"
-            when: "{{=sprig.fromJson(tasks['load-config'].outputs.result).skip_metashape != true && sprig.fromJson(tasks['load-config'].outputs.result).align_cameras_enabled == true}}"
+            when: "{{tasks.load-config.outputs.parameters.skip-metashape}} != true && {{tasks.load-config.outputs.parameters.align-cameras-enabled}} == true"
             template: metashape-cpu-step
             arguments:
               parameters:
@@ -330,16 +541,16 @@ spec:
                 - name: step
                   value: "align_cameras"
                 - name: iteration-id
-                  value: "{{=sprig.fromJson(tasks['load-config'].outputs.result).iteration_id}}"
+                  value: "{{tasks.load-config.outputs.parameters.iteration-id}}"
                 - name: cpu-request
-                  value: "{{=sprig.fromJson(tasks['load-config'].outputs.result).align_cameras_cpu_request}}"
+                  value: "{{tasks.load-config.outputs.parameters.align-cameras-cpu-request}}"
                 - name: memory-request
-                  value: "{{=sprig.fromJson(tasks['load-config'].outputs.result).align_cameras_memory_request}}"
+                  value: "{{tasks.load-config.outputs.parameters.align-cameras-memory-request}}"
 
           # Step 4: Build Depth Maps (conditional, GPU only)
           - name: build-depth-maps
             depends: "align-cameras.Succeeded || align-cameras.Skipped"
-            when: "{{=sprig.fromJson(tasks['load-config'].outputs.result).skip_metashape != true && sprig.fromJson(tasks['load-config'].outputs.result).build_depth_maps_enabled == true}}"
+            when: "{{tasks.load-config.outputs.parameters.skip-metashape}} != true && {{tasks.load-config.outputs.parameters.build-depth-maps-enabled}} == true"
             template: metashape-gpu-step
             arguments:
               parameters:
@@ -350,20 +561,20 @@ spec:
                 - name: step
                   value: "build_depth_maps"
                 - name: iteration-id
-                  value: "{{=sprig.fromJson(tasks['load-config'].outputs.result).iteration_id}}"
+                  value: "{{tasks.load-config.outputs.parameters.iteration-id}}"
                 - name: gpu-resource
-                  value: "{{=sprig.fromJson(tasks['load-config'].outputs.result).build_depth_maps_gpu_resource}}"
+                  value: "{{tasks.load-config.outputs.parameters.build-depth-maps-gpu-resource}}"
                 - name: gpu-count
-                  value: "{{=sprig.fromJson(tasks['load-config'].outputs.result).build_depth_maps_gpu_count}}"
+                  value: "{{tasks.load-config.outputs.parameters.build-depth-maps-gpu-count}}"
                 - name: cpu-request
-                  value: "{{=sprig.fromJson(tasks['load-config'].outputs.result).build_depth_maps_cpu_request}}"
+                  value: "{{tasks.load-config.outputs.parameters.build-depth-maps-cpu-request}}"
                 - name: memory-request
-                  value: "{{=sprig.fromJson(tasks['load-config'].outputs.result).build_depth_maps_memory_request}}"
+                  value: "{{tasks.load-config.outputs.parameters.build-depth-maps-memory-request}}"
 
           # Step 5: Build Point Cloud (conditional, CPU only)
           - name: build-point-cloud
             depends: "build-depth-maps.Succeeded || build-depth-maps.Skipped"
-            when: "{{=sprig.fromJson(tasks['load-config'].outputs.result).skip_metashape != true && sprig.fromJson(tasks['load-config'].outputs.result).build_point_cloud_enabled == true}}"
+            when: "{{tasks.load-config.outputs.parameters.skip-metashape}} != true && {{tasks.load-config.outputs.parameters.build-point-cloud-enabled}} == true"
             template: metashape-cpu-step
             arguments:
               parameters:
@@ -374,16 +585,16 @@ spec:
                 - name: step
                   value: "build_point_cloud"
                 - name: iteration-id
-                  value: "{{=sprig.fromJson(tasks['load-config'].outputs.result).iteration_id}}"
+                  value: "{{tasks.load-config.outputs.parameters.iteration-id}}"
                 - name: cpu-request
-                  value: "{{=sprig.fromJson(tasks['load-config'].outputs.result).build_point_cloud_cpu_request}}"
+                  value: "{{tasks.load-config.outputs.parameters.build-point-cloud-cpu-request}}"
                 - name: memory-request
-                  value: "{{=sprig.fromJson(tasks['load-config'].outputs.result).build_point_cloud_memory_request}}"
+                  value: "{{tasks.load-config.outputs.parameters.build-point-cloud-memory-request}}"
 
           # Step 6: Build Mesh (conditional, GPU or CPU based on config)
           - name: build-mesh-gpu
             depends: "build-point-cloud.Succeeded || build-point-cloud.Skipped"
-            when: "{{=sprig.fromJson(tasks['load-config'].outputs.result).skip_metashape != true && sprig.fromJson(tasks['load-config'].outputs.result).build_mesh_enabled == true && sprig.fromJson(tasks['load-config'].outputs.result).build_mesh_use_gpu == true}}"
+            when: "{{tasks.load-config.outputs.parameters.skip-metashape}} != true && {{tasks.load-config.outputs.parameters.build-mesh-enabled}} == true && {{tasks.load-config.outputs.parameters.build-mesh-use-gpu}} == true"
             template: metashape-gpu-step
             arguments:
               parameters:
@@ -394,19 +605,19 @@ spec:
                 - name: step
                   value: "build_mesh"
                 - name: iteration-id
-                  value: "{{=sprig.fromJson(tasks['load-config'].outputs.result).iteration_id}}"
+                  value: "{{tasks.load-config.outputs.parameters.iteration-id}}"
                 - name: gpu-resource
-                  value: "{{=sprig.fromJson(tasks['load-config'].outputs.result).build_mesh_gpu_resource}}"
+                  value: "{{tasks.load-config.outputs.parameters.build-mesh-gpu-resource}}"
                 - name: gpu-count
-                  value: "{{=sprig.fromJson(tasks['load-config'].outputs.result).build_mesh_gpu_count}}"
+                  value: "{{tasks.load-config.outputs.parameters.build-mesh-gpu-count}}"
                 - name: cpu-request
-                  value: "{{=sprig.fromJson(tasks['load-config'].outputs.result).build_mesh_cpu_request}}"
+                  value: "{{tasks.load-config.outputs.parameters.build-mesh-cpu-request}}"
                 - name: memory-request
-                  value: "{{=sprig.fromJson(tasks['load-config'].outputs.result).build_mesh_memory_request}}"
+                  value: "{{tasks.load-config.outputs.parameters.build-mesh-memory-request}}"
 
           - name: build-mesh-cpu
             depends: "build-point-cloud.Succeeded || build-point-cloud.Skipped"
-            when: "{{=sprig.fromJson(tasks['load-config'].outputs.result).skip_metashape != true && sprig.fromJson(tasks['load-config'].outputs.result).build_mesh_enabled == true && sprig.fromJson(tasks['load-config'].outputs.result).build_mesh_use_gpu == false}}"
+            when: "{{tasks.load-config.outputs.parameters.skip-metashape}} != true && {{tasks.load-config.outputs.parameters.build-mesh-enabled}} == true && {{tasks.load-config.outputs.parameters.build-mesh-use-gpu}} == false"
             template: metashape-cpu-step
             arguments:
               parameters:
@@ -417,16 +628,16 @@ spec:
                 - name: step
                   value: "build_mesh"
                 - name: iteration-id
-                  value: "{{=sprig.fromJson(tasks['load-config'].outputs.result).iteration_id}}"
+                  value: "{{tasks.load-config.outputs.parameters.iteration-id}}"
                 - name: cpu-request
-                  value: "{{=sprig.fromJson(tasks['load-config'].outputs.result).build_mesh_cpu_request}}"
+                  value: "{{tasks.load-config.outputs.parameters.build-mesh-cpu-request}}"
                 - name: memory-request
-                  value: "{{=sprig.fromJson(tasks['load-config'].outputs.result).build_mesh_memory_request}}"
+                  value: "{{tasks.load-config.outputs.parameters.build-mesh-memory-request}}"
 
           # Step 7: Build DEM/Orthomosaic (conditional, CPU only)
           - name: build-dem-orthomosaic
             depends: "(build-point-cloud.Succeeded || build-point-cloud.Skipped) && (build-mesh-gpu.Succeeded || build-mesh-gpu.Skipped || build-mesh-cpu.Succeeded || build-mesh-cpu.Skipped)"
-            when: "{{=sprig.fromJson(tasks['load-config'].outputs.result).skip_metashape != true && sprig.fromJson(tasks['load-config'].outputs.result).build_dem_orthomosaic_enabled == true}}"
+            when: "{{tasks.load-config.outputs.parameters.skip-metashape}} != true && {{tasks.load-config.outputs.parameters.build-dem-orthomosaic-enabled}} == true"
             template: metashape-cpu-step
             arguments:
               parameters:
@@ -437,16 +648,16 @@ spec:
                 - name: step
                   value: "build_dem_orthomosaic"
                 - name: iteration-id
-                  value: "{{=sprig.fromJson(tasks['load-config'].outputs.result).iteration_id}}"
+                  value: "{{tasks.load-config.outputs.parameters.iteration-id}}"
                 - name: cpu-request
-                  value: "{{=sprig.fromJson(tasks['load-config'].outputs.result).build_dem_orthomosaic_cpu_request}}"
+                  value: "{{tasks.load-config.outputs.parameters.build-dem-orthomosaic-cpu-request}}"
                 - name: memory-request
-                  value: "{{=sprig.fromJson(tasks['load-config'].outputs.result).build_dem_orthomosaic_memory_request}}"
+                  value: "{{tasks.load-config.outputs.parameters.build-dem-orthomosaic-memory-request}}"
 
           # Step 8: Match Photos Secondary (conditional, GPU or CPU based on config)
           - name: match-photos-secondary-gpu
             depends: "build-dem-orthomosaic.Succeeded || build-dem-orthomosaic.Skipped"
-            when: "{{=sprig.fromJson(tasks['load-config'].outputs.result).skip_metashape != true && sprig.fromJson(tasks['load-config'].outputs.result).match_photos_secondary_enabled == true && sprig.fromJson(tasks['load-config'].outputs.result).match_photos_secondary_use_gpu == true}}"
+            when: "{{tasks.load-config.outputs.parameters.skip-metashape}} != true && {{tasks.load-config.outputs.parameters.match-photos-secondary-enabled}} == true && {{tasks.load-config.outputs.parameters.match-photos-secondary-use-gpu}} == true"
             template: metashape-gpu-step
             arguments:
               parameters:
@@ -457,19 +668,19 @@ spec:
                 - name: step
                   value: "match_photos_secondary"
                 - name: iteration-id
-                  value: "{{=sprig.fromJson(tasks['load-config'].outputs.result).iteration_id}}"
+                  value: "{{tasks.load-config.outputs.parameters.iteration-id}}"
                 - name: gpu-resource
-                  value: "{{=sprig.fromJson(tasks['load-config'].outputs.result).match_photos_secondary_gpu_resource}}"
+                  value: "{{tasks.load-config.outputs.parameters.match-photos-secondary-gpu-resource}}"
                 - name: gpu-count
-                  value: "{{=sprig.fromJson(tasks['load-config'].outputs.result).match_photos_secondary_gpu_count}}"
+                  value: "{{tasks.load-config.outputs.parameters.match-photos-secondary-gpu-count}}"
                 - name: cpu-request
-                  value: "{{=sprig.fromJson(tasks['load-config'].outputs.result).match_photos_secondary_cpu_request}}"
+                  value: "{{tasks.load-config.outputs.parameters.match-photos-secondary-cpu-request}}"
                 - name: memory-request
-                  value: "{{=sprig.fromJson(tasks['load-config'].outputs.result).match_photos_secondary_memory_request}}"
+                  value: "{{tasks.load-config.outputs.parameters.match-photos-secondary-memory-request}}"
 
           - name: match-photos-secondary-cpu
             depends: "build-dem-orthomosaic.Succeeded || build-dem-orthomosaic.Skipped"
-            when: "{{=sprig.fromJson(tasks['load-config'].outputs.result).skip_metashape != true && sprig.fromJson(tasks['load-config'].outputs.result).match_photos_secondary_enabled == true && sprig.fromJson(tasks['load-config'].outputs.result).match_photos_secondary_use_gpu == false}}"
+            when: "{{tasks.load-config.outputs.parameters.skip-metashape}} != true && {{tasks.load-config.outputs.parameters.match-photos-secondary-enabled}} == true && {{tasks.load-config.outputs.parameters.match-photos-secondary-use-gpu}} == false"
             template: metashape-cpu-step
             arguments:
               parameters:
@@ -480,16 +691,16 @@ spec:
                 - name: step
                   value: "match_photos_secondary"
                 - name: iteration-id
-                  value: "{{=sprig.fromJson(tasks['load-config'].outputs.result).iteration_id}}"
+                  value: "{{tasks.load-config.outputs.parameters.iteration-id}}"
                 - name: cpu-request
-                  value: "{{=sprig.fromJson(tasks['load-config'].outputs.result).match_photos_secondary_cpu_request}}"
+                  value: "{{tasks.load-config.outputs.parameters.match-photos-secondary-cpu-request}}"
                 - name: memory-request
-                  value: "{{=sprig.fromJson(tasks['load-config'].outputs.result).match_photos_secondary_memory_request}}"
+                  value: "{{tasks.load-config.outputs.parameters.match-photos-secondary-memory-request}}"
 
           # Step 9: Align Cameras Secondary (conditional, CPU only)
           - name: align-cameras-secondary
             depends: "match-photos-secondary-gpu.Succeeded || match-photos-secondary-gpu.Skipped || match-photos-secondary-cpu.Succeeded || match-photos-secondary-cpu.Skipped"
-            when: "{{=sprig.fromJson(tasks['load-config'].outputs.result).skip_metashape != true && sprig.fromJson(tasks['load-config'].outputs.result).align_cameras_secondary_enabled == true}}"
+            when: "{{tasks.load-config.outputs.parameters.skip-metashape}} != true && {{tasks.load-config.outputs.parameters.align-cameras-secondary-enabled}} == true"
             template: metashape-cpu-step
             arguments:
               parameters:
@@ -500,16 +711,16 @@ spec:
                 - name: step
                   value: "align_cameras_secondary"
                 - name: iteration-id
-                  value: "{{=sprig.fromJson(tasks['load-config'].outputs.result).iteration_id}}"
+                  value: "{{tasks.load-config.outputs.parameters.iteration-id}}"
                 - name: cpu-request
-                  value: "{{=sprig.fromJson(tasks['load-config'].outputs.result).align_cameras_secondary_cpu_request}}"
+                  value: "{{tasks.load-config.outputs.parameters.align-cameras-secondary-cpu-request}}"
                 - name: memory-request
-                  value: "{{=sprig.fromJson(tasks['load-config'].outputs.result).align_cameras_secondary_memory_request}}"
+                  value: "{{tasks.load-config.outputs.parameters.align-cameras-secondary-memory-request}}"
 
           # Step 10: Finalize (always runs, CPU only)
           - name: finalize
             depends: "(build-dem-orthomosaic.Succeeded || build-dem-orthomosaic.Skipped) && (align-cameras-secondary.Succeeded || align-cameras-secondary.Skipped)"
-            when: "{{=sprig.fromJson(tasks['load-config'].outputs.result).skip_metashape != true}}"
+            when: "{{tasks.load-config.outputs.parameters.skip-metashape}} != true"
             template: metashape-cpu-step
             arguments:
               parameters:
@@ -520,23 +731,23 @@ spec:
                 - name: step
                   value: "finalize"
                 - name: iteration-id
-                  value: "{{=sprig.fromJson(tasks['load-config'].outputs.result).iteration_id}}"
+                  value: "{{tasks.load-config.outputs.parameters.iteration-id}}"
                 - name: cpu-request
-                  value: "{{=sprig.fromJson(tasks['load-config'].outputs.result).finalize_cpu_request}}"
+                  value: "{{tasks.load-config.outputs.parameters.finalize-cpu-request}}"
                 - name: memory-request
-                  value: "{{=sprig.fromJson(tasks['load-config'].outputs.result).finalize_memory_request}}"
+                  value: "{{tasks.load-config.outputs.parameters.finalize-memory-request}}"
 
           # Upload task (runs after finalize completes)
           - name: rclone-upload-task
             depends: "finalize.Succeeded || finalize.Skipped"
-            when: "{{=sprig.fromJson(tasks['load-config'].outputs.result).skip_metashape != true}}"
+            when: "{{tasks.load-config.outputs.parameters.skip-metashape}} != true"
             template: rclone-upload-template
             arguments:
               parameters:
                 - name: project-name
                   value: "{{inputs.parameters.project-name}}"
                 - name: iteration-id
-                  value: "{{=sprig.fromJson(tasks['load-config'].outputs.result).iteration_id}}"
+                  value: "{{tasks.load-config.outputs.parameters.iteration-id}}"
                 - name: photogrammetry-config-subfolder
                   value: "{{inputs.parameters.photogrammetry-config-subfolder}}"
 
@@ -549,14 +760,14 @@ spec:
                 - name: project-name
                   value: "{{inputs.parameters.project-name}}"
                 - name: iteration-id
-                  value: "{{=sprig.fromJson(tasks['load-config'].outputs.result).iteration_id}}"
+                  value: "{{tasks.load-config.outputs.parameters.iteration-id}}"
                 - name: photogrammetry-config-subfolder
                   value: "{{inputs.parameters.photogrammetry-config-subfolder}}"
 
           # Log metashape completion (after rclone upload succeeds)
           - name: log-metashape-complete
             depends: "rclone-upload-task.Succeeded"
-            when: "{{=workflow.parameters.COMPLETION_LOG_PATH != '' && sprig.fromJson(tasks['load-config'].outputs.result).skip_metashape != true}}"
+            when: "{{=workflow.parameters.COMPLETION_LOG_PATH != ''}} && {{tasks.load-config.outputs.parameters.skip-metashape}} != true"
             template: log-completion-template
             arguments:
               parameters:
@@ -588,7 +799,7 @@ spec:
             arguments:
               parameters:
                 - name: iteration-id
-                  value: "{{=sprig.fromJson(tasks['load-config'].outputs.result).iteration_id}}"
+                  value: "{{tasks.load-config.outputs.parameters.iteration-id}}"
 
     ## Here we define what each step does in 'process-project-workflow' step
 
