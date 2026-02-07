@@ -11,7 +11,7 @@ Usage:
 
 Arguments:
     config_list_path: Path to text file listing config files
-    output_file_path: Optional path to write full configs JSON (for artifact-based workflow).
+    output_file_path: Optional path to write full configs JSON (for file-based workflow).
                       If provided, stdout will contain only minimal references.
                       If not provided, stdout will contain full configs (legacy behavior).
 
@@ -286,6 +286,8 @@ def process_config_file(config_path: str, index: int) -> Dict[str, Any]:
     # Apply translation logic from implementation plan
     mission = {
         "project_name": project_name,
+        # project_name_sanitized: DNS-1123 compliant version used to build iteration_id
+        # (iteration_id provides unique identification and Kubernetes-safe task names)
         "project_name_sanitized": project_name_sanitized,
         "config": config_path,
         # Iteration ID for unique per-project isolation (used in download paths, etc.)
@@ -617,7 +619,7 @@ def main(
     )
 
     if output_file_path:
-        # Artifact-based mode: write full configs to file, output minimal refs to stdout
+        # File-based mode: write full configs to file, output minimal refs to stdout
         # This avoids Argo's parameter size limit (default 256KB) for large batch runs
 
         # Ensure output directory exists
@@ -653,7 +655,7 @@ Examples:
     # Basic usage (legacy mode)
     python determine_datasets.py /data/config_list.txt
 
-    # Artifact mode (avoids Argo parameter size limits)
+    # File-based mode (avoids Argo parameter size limits)
     python determine_datasets.py /data/config_list.txt /data/output/configs.json
 
     # With completion tracking (use config-specific log file)
@@ -673,7 +675,7 @@ Examples:
         nargs="?",
         default=None,
         help="Optional output file for configs JSON. If provided, full configs are "
-        "written to this file and only minimal refs are output to stdout (artifact mode).",
+        "written to this file and only minimal refs are output to stdout (file-based mode).",
     )
     parser.add_argument(
         "--completion-log",
