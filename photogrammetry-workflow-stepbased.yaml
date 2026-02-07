@@ -126,6 +126,12 @@ spec:
     # To avoid Argo's parameter size limit (default 256KB), this step writes full configs to a
     # shared file and outputs only minimal references (index + project_name) to stdout.
     # Each project iteration loads its full config from the shared file at runtime.
+    #
+    # Note: Config JSON uses shared volume (not Argo artifacts) because:
+    # - Performance: Local file I/O is 450-900× faster than S3 for parallel access by 18+ pods
+    # - Consistency: All workflow data (imagery, outputs) flows through the shared volume
+    # - Simplicity: Direct file access without S3 dependency or additional failure modes
+    # The artifact repository (configured for this cluster) is used for logs and long-term storage.
     - name: determine-projects
       # Ensure CPU pods only schedule on CPU nodes (labeled by NFD based on nodegroup name)
       nodeSelector:
