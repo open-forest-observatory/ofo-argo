@@ -11,7 +11,7 @@ Usage:
 
 Arguments:
     config_list_path: Path to text file listing config files
-    output_file_path: Optional path to write full configs JSON (for file-based workflow).
+    output_file_path: Optional path to write full configs JSON (for artifact-based workflow).
                       If provided, stdout will contain only minimal references.
                       If not provided, stdout will contain full configs (legacy behavior).
 
@@ -619,7 +619,7 @@ def main(
     )
 
     if output_file_path:
-        # File-based mode: write full configs to file, output minimal refs to stdout
+        # Artifact-based mode: write full configs to file, output minimal refs to stdout
         # This avoids Argo's parameter size limit (default 256KB) for large batch runs
 
         # Ensure output directory exists
@@ -655,7 +655,7 @@ Examples:
     # Basic usage (legacy mode)
     python determine_datasets.py /data/config_list.txt
 
-    # File-based mode (avoids Argo parameter size limits)
+    # Artifact mode (avoids Argo parameter size limits)
     python determine_datasets.py /data/config_list.txt /data/output/configs.json
 
     # With completion tracking (use config-specific log file)
@@ -675,7 +675,7 @@ Examples:
         nargs="?",
         default=None,
         help="Optional output file for configs JSON. If provided, full configs are "
-        "written to this file and only minimal refs are output to stdout (file-based mode).",
+        "written to this file and only minimal refs are output to stdout (artifact mode).",
     )
     parser.add_argument(
         "--completion-log",
