@@ -286,6 +286,8 @@ def process_config_file(config_path: str, index: int) -> Dict[str, Any]:
     # Apply translation logic from implementation plan
     mission = {
         "project_name": project_name,
+        # project_name_sanitized: DNS-1123 compliant version used to build iteration_id
+        # (iteration_id provides unique identification and Kubernetes-safe task names)
         "project_name_sanitized": project_name_sanitized,
         "config": config_path,
         # Iteration ID for unique per-project isolation (used in download paths, etc.)

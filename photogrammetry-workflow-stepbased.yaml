@@ -123,6 +123,28 @@ spec:
     # processing steps are enabled. It also determines GPU vs CPU node scheduling for GPU-capable steps.
     # Uses containerized preprocessing script from argo-workflow-utils.
     #
+    # ===== WHY JSON STRUCTURE EXISTS =====
+    # Argo workflows have limitations that require preprocessing mission configs into JSON format:
+    # 
+    # 1. PRE-POD-CREATION EVALUATION: Argo evaluates `when` conditions and resource requests 
+    #    (CPU/memory/GPU) before creating pods. This means these values must be available as 
+    #    simple parameter expressions, not computed inside containers.
+    #
+    # 2. AVOIDING 20+ SCRIPT STEPS: Without JSON preprocessing, we'd need separate script steps 
+    #    for each value extraction (enabled flags, resource requests, paths, etc.), creating 
+    #    a complex DAG with 20+ preprocessing tasks per project.
+    #
+    # 3. CENTRALIZED FALLBACK LOGIC: The JSON structure allows determine_datasets.py to implement 
+    #    multi-level fallback chains (step-specific → user defaults → hardcoded defaults) and 
+    #    derived computations (iteration_id, sanitized names) in one place.
+    #
+    # 4. WHAT'S IN JSON VS YAML:
+    #    - JSON contains: Argo orchestration metadata (enabled flags, resource requests, file paths,
+    #      iteration IDs, download settings, derived values like project_name_sanitized)
+    #    - YAML contains: Metashape processing parameters (downscale, filter_mode, blending, 
+    #      quality settings, etc.)
+    #    - Processing containers read YAML configs directly for all Metashape-specific parameters
+    #
     # To avoid Argo's parameter size limit (default 256KB), this step writes full configs to a
     # shared file and outputs only minimal references (index + project_name) to stdout.
     # Each project iteration loads its full config from the shared file at runtime.
@@ -154,7 +176,22 @@ spec:
             value: "{{workflow.parameters.TEMP_WORKING_DIR}}/{{workflow.name}}/project-configs.json"
 
     # Load a single project's configuration from the shared configs file
-    # This avoids passing large JSON through Argo parameters (which has size limits)
+    #
+    # ===== SHARED FILE APPROACH =====
+    # This design avoids Argo's parameter size limit (default 256KB) which would be exceeded
+    # when processing many projects in parallel:
+    #
+    # 1. ARTIFACT-BASED WORKFLOW: determine-projects writes full configs to a shared file on
+    #    the persistent volume, then outputs only minimal references via stdout
+    #
+    # 2. MINIMAL REFERENCES: Only index and project_name pass through withParam (a few bytes 
+    #    per project vs. several KB for full config JSON)
+    #
+    # 3. RUNTIME LOADING: Each project iteration loads its full config from the shared file
+    #    when needed, making the approach scalable to hundreds of projects
+    #
+    # This pattern is critical for batch processing workflows where parameter size limits 
+    # would otherwise constrain parallelism.
     - name: load-project-config
       inputs:
         parameters:
@@ -177,6 +214,30 @@ spec:
 
     # Multi-step photogrammetry workflow with conditional GPU/CPU execution
     # Config is loaded from shared file at runtime to avoid Argo parameter size limits
+    #
+    # ===== CONFIG STRUCTURE AND USAGE =====
+    # The workflow uses TWO config representations for different purposes:
+    #
+    # 1. JSON CONFIG (from load-config task):
+    #    - Purpose: Argo workflow orchestration and scheduling
+    #    - Contains: enabled flags (match_photos_enabled, build_mesh_enabled), resource 
+    #      requests (cpu_request, memory_request, gpu_resource), file paths (config, 
+    #      iteration_id), download settings (imagery_zip_downloads), derived values
+    #    - Used by: Argo `when` conditions, dependency logic, resource allocation, 
+    #      file path references
+    #    - Example fields: imagery_download_enabled, match_photos_use_gpu, 
+    #      setup_cpu_request, build_mesh_gpu_resource
+    #
+    # 2. YAML CONFIG (Metashape processing config):
+    #    - Purpose: Metashape photogrammetry processing parameters
+    #    - Contains: quality settings (downscale, quality), filtering (filter_mode, 
+    #      depth_maps.filter_mode), blending modes, accuracy settings, project metadata
+    #    - Used by: Processing containers running automate-metashape scripts
+    #    - Passed via: config-file parameter (path to YAML file on shared volume)
+    #    - Metashape containers read YAML directly for all processing parameters
+    #
+    # This separation keeps orchestration logic (Argo) independent from processing 
+    # parameters (Metashape), making the workflow easier to maintain and extend.
     - name: process-project-workflow
       inputs:
         parameters:
@@ -209,11 +270,11 @@ spec:
                 - name: iteration-id
                   value: "{{=sprig.fromJson(tasks['load-config'].outputs.result).iteration_id}}"
 
-          # Step 0b: Transform config to resolve __DOWNLOADED__ paths (conditional, depends on download)
+          # Step 0b: Transform config to resolve __DOWNLOADED__ paths (always runs, idempotent)
+          # If no downloads occurred, the transform is a no-op (copies config unchanged)
           - name: transform-config
             template: transform-config
-            when: "{{=sprig.fromJson(tasks['load-config'].outputs.result).imagery_download_enabled == 'true'}}"
-            depends: "download-imagery.Succeeded"
+            depends: "(download-imagery.Succeeded || download-imagery.Skipped) && load-config.Succeeded"
             arguments:
               parameters:
                 - name: config-file
@@ -224,18 +285,16 @@ spec:
                   value: "{{inputs.parameters.project-name}}"
 
           # Step 1: Setup (always runs, CPU only)
-          # Depends on transform-config if downloads enabled, otherwise runs after load-config
           - name: setup
             template: metashape-cpu-step
-            depends: "load-config.Succeeded && (transform-config.Succeeded || transform-config.Skipped)"
+            depends: "transform-config.Succeeded"
             when: "{{=sprig.fromJson(tasks['load-config'].outputs.result).skip_metashape != true}}"
             arguments:
               parameters:
                 - name: project-name
                   value: "{{inputs.parameters.project-name}}"
                 - name: config-file
-                  # Use transformed config if downloads enabled, otherwise use original config
-                  value: "{{=sprig.fromJson(tasks['load-config'].outputs.result).imagery_download_enabled == 'true' ? tasks['transform-config'].outputs.parameters['transformed-config-path'] : sprig.fromJson(tasks['load-config'].outputs.result).config}}"
+                  value: "{{tasks.transform-config.outputs.parameters.transformed-config-path}}"
                 - name: step
                   value: "setup"
                 - name: iteration-id
@@ -255,7 +314,7 @@ spec:
                 - name: project-name
                   value: "{{inputs.parameters.project-name}}"
                 - name: config-file
-                  value: "{{=sprig.fromJson(tasks['load-config'].outputs.result).imagery_download_enabled == 'true' ? tasks['transform-config'].outputs.parameters['transformed-config-path'] : sprig.fromJson(tasks['load-config'].outputs.result).config}}"
+                  value: "{{tasks.transform-config.outputs.parameters.transformed-config-path}}"
                 - name: step
                   value: "match_photos"
                 - name: iteration-id
@@ -278,7 +337,7 @@ spec:
                 - name: project-name
                   value: "{{inputs.parameters.project-name}}"
                 - name: config-file
-                  value: "{{=sprig.fromJson(tasks['load-config'].outputs.result).imagery_download_enabled == 'true' ? tasks['transform-config'].outputs.parameters['transformed-config-path'] : sprig.fromJson(tasks['load-config'].outputs.result).config}}"
+                  value: "{{tasks.transform-config.outputs.parameters.transformed-config-path}}"
                 - name: step
                   value: "match_photos"
                 - name: iteration-id
@@ -298,7 +357,7 @@ spec:
                 - name: project-name
                   value: "{{inputs.parameters.project-name}}"
                 - name: config-file
-                  value: "{{=sprig.fromJson(tasks['load-config'].outputs.result).imagery_download_enabled == 'true' ? tasks['transform-config'].outputs.parameters['transformed-config-path'] : sprig.fromJson(tasks['load-config'].outputs.result).config}}"
+                  value: "{{tasks.transform-config.outputs.parameters.transformed-config-path}}"
                 - name: step
                   value: "align_cameras"
                 - name: iteration-id
@@ -318,7 +377,7 @@ spec:
                 - name: project-name
                   value: "{{inputs.parameters.project-name}}"
                 - name: config-file
-                  value: "{{=sprig.fromJson(tasks['load-config'].outputs.result).imagery_download_enabled == 'true' ? tasks['transform-config'].outputs.parameters['transformed-config-path'] : sprig.fromJson(tasks['load-config'].outputs.result).config}}"
+                  value: "{{tasks.transform-config.outputs.parameters.transformed-config-path}}"
                 - name: step
                   value: "build_depth_maps"
                 - name: iteration-id
@@ -342,7 +401,7 @@ spec:
                 - name: project-name
                   value: "{{inputs.parameters.project-name}}"
                 - name: config-file
-                  value: "{{=sprig.fromJson(tasks['load-config'].outputs.result).imagery_download_enabled == 'true' ? tasks['transform-config'].outputs.parameters['transformed-config-path'] : sprig.fromJson(tasks['load-config'].outputs.result).config}}"
+                  value: "{{tasks.transform-config.outputs.parameters.transformed-config-path}}"
                 - name: step
                   value: "build_point_cloud"
                 - name: iteration-id
@@ -362,7 +421,7 @@ spec:
                 - name: project-name
                   value: "{{inputs.parameters.project-name}}"
                 - name: config-file
-                  value: "{{=sprig.fromJson(tasks['load-config'].outputs.result).imagery_download_enabled == 'true' ? tasks['transform-config'].outputs.parameters['transformed-config-path'] : sprig.fromJson(tasks['load-config'].outputs.result).config}}"
+                  value: "{{tasks.transform-config.outputs.parameters.transformed-config-path}}"
                 - name: step
                   value: "build_mesh"
                 - name: iteration-id
@@ -385,7 +444,7 @@ spec:
                 - name: project-name
                   value: "{{inputs.parameters.project-name}}"
                 - name: config-file
-                  value: "{{=sprig.fromJson(tasks['load-config'].outputs.result).imagery_download_enabled == 'true' ? tasks['transform-config'].outputs.parameters['transformed-config-path'] : sprig.fromJson(tasks['load-config'].outputs.result).config}}"
+                  value: "{{tasks.transform-config.outputs.parameters.transformed-config-path}}"
                 - name: step
                   value: "build_mesh"
                 - name: iteration-id
@@ -405,7 +464,7 @@ spec:
                 - name: project-name
                   value: "{{inputs.parameters.project-name}}"
                 - name: config-file
-                  value: "{{=sprig.fromJson(tasks['load-config'].outputs.result).imagery_download_enabled == 'true' ? tasks['transform-config'].outputs.parameters['transformed-config-path'] : sprig.fromJson(tasks['load-config'].outputs.result).config}}"
+                  value: "{{tasks.transform-config.outputs.parameters.transformed-config-path}}"
                 - name: step
                   value: "build_dem_orthomosaic"
                 - name: iteration-id
@@ -425,7 +484,7 @@ spec:
                 - name: project-name
                   value: "{{inputs.parameters.project-name}}"
                 - name: config-file
-                  value: "{{=sprig.fromJson(tasks['load-config'].outputs.result).imagery_download_enabled == 'true' ? tasks['transform-config'].outputs.parameters['transformed-config-path'] : sprig.fromJson(tasks['load-config'].outputs.result).config}}"
+                  value: "{{tasks.transform-config.outputs.parameters.transformed-config-path}}"
                 - name: step
                   value: "match_photos_secondary"
                 - name: iteration-id
@@ -448,7 +507,7 @@ spec:
                 - name: project-name
                   value: "{{inputs.parameters.project-name}}"
                 - name: config-file
-                  value: "{{=sprig.fromJson(tasks['load-config'].outputs.result).imagery_download_enabled == 'true' ? tasks['transform-config'].outputs.parameters['transformed-config-path'] : sprig.fromJson(tasks['load-config'].outputs.result).config}}"
+                  value: "{{tasks.transform-config.outputs.parameters.transformed-config-path}}"
                 - name: step
                   value: "match_photos_secondary"
                 - name: iteration-id
@@ -468,7 +527,7 @@ spec:
                 - name: project-name
                   value: "{{inputs.parameters.project-name}}"
                 - name: config-file
-                  value: "{{=sprig.fromJson(tasks['load-config'].outputs.result).imagery_download_enabled == 'true' ? tasks['transform-config'].outputs.parameters['transformed-config-path'] : sprig.fromJson(tasks['load-config'].outputs.result).config}}"
+                  value: "{{tasks.transform-config.outputs.parameters.transformed-config-path}}"
                 - name: step
                   value: "align_cameras_secondary"
                 - name: iteration-id
@@ -488,7 +547,7 @@ spec:
                 - name: project-name
                   value: "{{inputs.parameters.project-name}}"
                 - name: config-file
-                  value: "{{=sprig.fromJson(tasks['load-config'].outputs.result).imagery_download_enabled == 'true' ? tasks['transform-config'].outputs.parameters['transformed-config-path'] : sprig.fromJson(tasks['load-config'].outputs.result).config}}"
+                  value: "{{tasks.transform-config.outputs.parameters.transformed-config-path}}"
                 - name: step
                   value: "finalize"
                 - name: iteration-id
