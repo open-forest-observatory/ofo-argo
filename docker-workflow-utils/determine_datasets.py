@@ -642,10 +642,7 @@ def main(
 
         # Output minimal references to stdout (just project_name)
         # These are small enough to pass via withParam without hitting size limits
-        refs = [
-            {"project_name": m["project_name"]}
-            for m in missions
-        ]
+        refs = [{"project_name": m["project_name"]} for m in missions]
         json.dump(refs, sys.stdout)
     else:
         # Legacy mode: output full configs to stdout
