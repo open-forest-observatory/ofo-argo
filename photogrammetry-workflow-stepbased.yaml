@@ -81,15 +81,13 @@ spec:
             template: compute-photogrammetry-config-subfolder
           - name: determine-projects
             template: determine-projects
-        # withParam now receives only minimal references (index + project_name) to avoid
+        # withParam now receives only minimal references (project_name) to avoid
         # Argo's parameter size limit. Each project loads its full config from the shared file.
         - - name: process-projects
             template: process-project-workflow
             arguments:
               parameters:
                 # Minimal reference - full config loaded from file at runtime
-                - name: project-index
-                  value: "{{item.index}}"
                 - name: project-name
                   value: "{{item.project_name}}"
                 # Path to shared configs file
@@ -124,8 +122,8 @@ spec:
     # Uses containerized preprocessing script from argo-workflow-utils.
     #
     # To avoid Argo's parameter size limit (default 256KB), this step writes full configs to a
-    # shared file and outputs only minimal references (index + project_name) to stdout.
-    # Each project iteration loads its full config from the shared file at runtime.
+    # shared file and outputs only minimal references (project_name + project_name_sanitized) to stdout.
+    # Each project loads its full config from the shared file at runtime.
     - name: determine-projects
       # Ensure CPU pods only schedule on CPU nodes (labeled by NFD based on nodegroup name)
       nodeSelector:
@@ -159,7 +157,7 @@ spec:
       inputs:
         parameters:
           - name: configs-file
-          - name: project-index
+          - name: project-name
       nodeSelector:
         feature.node.kubernetes.io/workload-type: cpu
       script:
@@ -172,15 +170,38 @@ spec:
           import json
           with open("{{inputs.parameters.configs-file}}", "r") as f:
               configs = json.load(f)
-          project_config = configs[{{inputs.parameters.project-index}}]
+          project_config = configs["{{inputs.parameters.project-name}}"]
           print(json.dumps(project_config))
 
     # Multi-step photogrammetry workflow with conditional GPU/CPU execution
     # Config is loaded from shared file at runtime to avoid Argo parameter size limits
+    #
+    # ===== CONFIG STRUCTURE AND USAGE =====
+    # The workflow uses TWO config representations for different purposes:
+    #
+    # 1. JSON CONFIG (from load-config task):
+    #    - Purpose: Argo workflow orchestration and scheduling
+    #    - Contains: enabled flags (match_photos_enabled, build_mesh_enabled), resource 
+    #      requests (cpu_request, memory_request, gpu_resource), file paths (config,
+    #      project_name_sanitized), download settings (imagery_zip_downloads), derived values
+    #    - Used by: Argo `when` conditions, dependency logic, resource allocation, 
+    #      file path references
+    #    - Example fields: imagery_download_enabled, match_photos_use_gpu, 
+    #      setup_cpu_request, build_mesh_gpu_resource
+    #
+    # 2. YAML CONFIG (Metashape processing config):
+    #    - Purpose: Metashape photogrammetry processing parameters
+    #    - Contains: quality settings (downscale, quality), filtering (filter_mode, 
+    #      depth_maps.filter_mode), blending modes, accuracy settings, project metadata
+    #    - Used by: Processing containers running automate-metashape scripts
+    #    - Passed via: config-file parameter (path to YAML file on shared volume)
+    #    - Metashape containers read YAML directly for all processing parameters
+    #
+    # This separation keeps orchestration logic (Argo) independent from processing 
+    # parameters (Metashape), making the workflow easier to maintain and extend.
     - name: process-project-workflow
       inputs:
         parameters:
-          - name: project-index
           - name: project-name
           - name: configs-file
           - name: photogrammetry-config-subfolder
@@ -194,8 +215,8 @@ spec:
               parameters:
                 - name: configs-file
                   value: "{{inputs.parameters.configs-file}}"
-                - name: project-index
-                  value: "{{inputs.parameters.project-index}}"
+                - name: project-name
+                  value: "{{inputs.parameters.project-name}}"
 
           # Step 0a: Download imagery from S3 (conditional, runs after config loaded)
           - name: download-imagery
@@ -206,40 +227,38 @@ spec:
               parameters:
                 - name: imagery-zip-downloads
                   value: "{{=toJson(sprig.fromJson(tasks['load-config'].outputs.result).imagery_zip_downloads)}}"
-                - name: iteration-id
-                  value: "{{=sprig.fromJson(tasks['load-config'].outputs.result).iteration_id}}"
+                - name: project-name-sanitized
+                  value: "{{=sprig.fromJson(tasks['load-config'].outputs.result).project_name_sanitized}}"
 
-          # Step 0b: Transform config to resolve __DOWNLOADED__ paths (conditional, depends on download)
+          # Step 0b: Transform config to resolve __DOWNLOADED__ paths (always runs, idempotent)
+          # If no downloads occurred, the transform is a no-op (copies config unchanged)
           - name: transform-config
             template: transform-config
-            when: "{{=sprig.fromJson(tasks['load-config'].outputs.result).imagery_download_enabled == 'true'}}"
-            depends: "download-imagery.Succeeded"
+            depends: "(download-imagery.Succeeded || download-imagery.Skipped) && load-config.Succeeded"
             arguments:
               parameters:
                 - name: config-file
                   value: "{{=sprig.fromJson(tasks['load-config'].outputs.result).config}}"
-                - name: iteration-id
-                  value: "{{=sprig.fromJson(tasks['load-config'].outputs.result).iteration_id}}"
+                - name: project-name-sanitized
+                  value: "{{=sprig.fromJson(tasks['load-config'].outputs.result).project_name_sanitized}}"
                 - name: project-name
                   value: "{{inputs.parameters.project-name}}"
 
           # Step 1: Setup (always runs, CPU only)
-          # Depends on transform-config if downloads enabled, otherwise runs after load-config
           - name: setup
             template: metashape-cpu-step
-            depends: "load-config.Succeeded && (transform-config.Succeeded || transform-config.Skipped)"
+            depends: "load-config.Succeeded && transform-config.Succeeded"
             when: "{{=sprig.fromJson(tasks['load-config'].outputs.result).skip_metashape != true}}"
             arguments:
               parameters:
                 - name: project-name
                   value: "{{inputs.parameters.project-name}}"
                 - name: config-file
-                  # Use transformed config if downloads enabled, otherwise use original config
-                  value: "{{=sprig.fromJson(tasks['load-config'].outputs.result).imagery_download_enabled == 'true' ? tasks['transform-config'].outputs.parameters['transformed-config-path'] : sprig.fromJson(tasks['load-config'].outputs.result).config}}"
+                  value: "{{tasks.transform-config.outputs.parameters.transformed-config-path}}"
                 - name: step
                   value: "setup"
-                - name: iteration-id
-                  value: "{{=sprig.fromJson(tasks['load-config'].outputs.result).iteration_id}}"
+                - name: project-name-sanitized
+                  value: "{{=sprig.fromJson(tasks['load-config'].outputs.result).project_name_sanitized}}"
                 - name: cpu-request
                   value: "{{=sprig.fromJson(tasks['load-config'].outputs.result).setup_cpu_request}}"
                 - name: memory-request
@@ -255,11 +274,11 @@ spec:
                 - name: project-name
                   value: "{{inputs.parameters.project-name}}"
                 - name: config-file
-                  value: "{{=sprig.fromJson(tasks['load-config'].outputs.result).imagery_download_enabled == 'true' ? tasks['transform-config'].outputs.parameters['transformed-config-path'] : sprig.fromJson(tasks['load-config'].outputs.result).config}}"
+                  value: "{{tasks.transform-config.outputs.parameters.transformed-config-path}}"
                 - name: step
                   value: "match_photos"
-                - name: iteration-id
-                  value: "{{=sprig.fromJson(tasks['load-config'].outputs.result).iteration_id}}"
+                - name: project-name-sanitized
+                  value: "{{=sprig.fromJson(tasks['load-config'].outputs.result).project_name_sanitized}}"
                 - name: gpu-resource
                   value: "{{=sprig.fromJson(tasks['load-config'].outputs.result).match_photos_gpu_resource}}"
                 - name: gpu-count
@@ -278,11 +297,11 @@ spec:
                 - name: project-name
                   value: "{{inputs.parameters.project-name}}"
                 - name: config-file
-                  value: "{{=sprig.fromJson(tasks['load-config'].outputs.result).imagery_download_enabled == 'true' ? tasks['transform-config'].outputs.parameters['transformed-config-path'] : sprig.fromJson(tasks['load-config'].outputs.result).config}}"
+                  value: "{{tasks.transform-config.outputs.parameters.transformed-config-path}}"
                 - name: step
                   value: "match_photos"
-                - name: iteration-id
-                  value: "{{=sprig.fromJson(tasks['load-config'].outputs.result).iteration_id}}"
+                - name: project-name-sanitized
+                  value: "{{=sprig.fromJson(tasks['load-config'].outputs.result).project_name_sanitized}}"
                 - name: cpu-request
                   value: "{{=sprig.fromJson(tasks['load-config'].outputs.result).match_photos_cpu_request}}"
                 - name: memory-request
@@ -298,11 +317,11 @@ spec:
                 - name: project-name
                   value: "{{inputs.parameters.project-name}}"
                 - name: config-file
-                  value: "{{=sprig.fromJson(tasks['load-config'].outputs.result).imagery_download_enabled == 'true' ? tasks['transform-config'].outputs.parameters['transformed-config-path'] : sprig.fromJson(tasks['load-config'].outputs.result).config}}"
+                  value: "{{tasks.transform-config.outputs.parameters.transformed-config-path}}"
                 - name: step
                   value: "align_cameras"
-                - name: iteration-id
-                  value: "{{=sprig.fromJson(tasks['load-config'].outputs.result).iteration_id}}"
+                - name: project-name-sanitized
+                  value: "{{=sprig.fromJson(tasks['load-config'].outputs.result).project_name_sanitized}}"
                 - name: cpu-request
                   value: "{{=sprig.fromJson(tasks['load-config'].outputs.result).align_cameras_cpu_request}}"
                 - name: memory-request
@@ -318,11 +337,11 @@ spec:
                 - name: project-name
                   value: "{{inputs.parameters.project-name}}"
                 - name: config-file
-                  value: "{{=sprig.fromJson(tasks['load-config'].outputs.result).imagery_download_enabled == 'true' ? tasks['transform-config'].outputs.parameters['transformed-config-path'] : sprig.fromJson(tasks['load-config'].outputs.result).config}}"
+                  value: "{{tasks.transform-config.outputs.parameters.transformed-config-path}}"
                 - name: step
                   value: "build_depth_maps"
-                - name: iteration-id
-                  value: "{{=sprig.fromJson(tasks['load-config'].outputs.result).iteration_id}}"
+                - name: project-name-sanitized
+                  value: "{{=sprig.fromJson(tasks['load-config'].outputs.result).project_name_sanitized}}"
                 - name: gpu-resource
                   value: "{{=sprig.fromJson(tasks['load-config'].outputs.result).build_depth_maps_gpu_resource}}"
                 - name: gpu-count
@@ -342,11 +361,11 @@ spec:
                 - name: project-name
                   value: "{{inputs.parameters.project-name}}"
                 - name: config-file
-                  value: "{{=sprig.fromJson(tasks['load-config'].outputs.result).imagery_download_enabled == 'true' ? tasks['transform-config'].outputs.parameters['transformed-config-path'] : sprig.fromJson(tasks['load-config'].outputs.result).config}}"
+                  value: "{{tasks.transform-config.outputs.parameters.transformed-config-path}}"
                 - name: step
                   value: "build_point_cloud"
-                - name: iteration-id
-                  value: "{{=sprig.fromJson(tasks['load-config'].outputs.result).iteration_id}}"
+                - name: project-name-sanitized
+                  value: "{{=sprig.fromJson(tasks['load-config'].outputs.result).project_name_sanitized}}"
                 - name: cpu-request
                   value: "{{=sprig.fromJson(tasks['load-config'].outputs.result).build_point_cloud_cpu_request}}"
                 - name: memory-request
@@ -362,11 +381,11 @@ spec:
                 - name: project-name
                   value: "{{inputs.parameters.project-name}}"
                 - name: config-file
-                  value: "{{=sprig.fromJson(tasks['load-config'].outputs.result).imagery_download_enabled == 'true' ? tasks['transform-config'].outputs.parameters['transformed-config-path'] : sprig.fromJson(tasks['load-config'].outputs.result).config}}"
+                  value: "{{tasks.transform-config.outputs.parameters.transformed-config-path}}"
                 - name: step
                   value: "build_mesh"
-                - name: iteration-id
-                  value: "{{=sprig.fromJson(tasks['load-config'].outputs.result).iteration_id}}"
+                - name: project-name-sanitized
+                  value: "{{=sprig.fromJson(tasks['load-config'].outputs.result).project_name_sanitized}}"
                 - name: gpu-resource
                   value: "{{=sprig.fromJson(tasks['load-config'].outputs.result).build_mesh_gpu_resource}}"
                 - name: gpu-count
@@ -385,11 +404,11 @@ spec:
                 - name: project-name
                   value: "{{inputs.parameters.project-name}}"
                 - name: config-file
-                  value: "{{=sprig.fromJson(tasks['load-config'].outputs.result).imagery_download_enabled == 'true' ? tasks['transform-config'].outputs.parameters['transformed-config-path'] : sprig.fromJson(tasks['load-config'].outputs.result).config}}"
+                  value: "{{tasks.transform-config.outputs.parameters.transformed-config-path}}"
                 - name: step
                   value: "build_mesh"
-                - name: iteration-id
-                  value: "{{=sprig.fromJson(tasks['load-config'].outputs.result).iteration_id}}"
+                - name: project-name-sanitized
+                  value: "{{=sprig.fromJson(tasks['load-config'].outputs.result).project_name_sanitized}}"
                 - name: cpu-request
                   value: "{{=sprig.fromJson(tasks['load-config'].outputs.result).build_mesh_cpu_request}}"
                 - name: memory-request
@@ -405,11 +424,11 @@ spec:
                 - name: project-name
                   value: "{{inputs.parameters.project-name}}"
                 - name: config-file
-                  value: "{{=sprig.fromJson(tasks['load-config'].outputs.result).imagery_download_enabled == 'true' ? tasks['transform-config'].outputs.parameters['transformed-config-path'] : sprig.fromJson(tasks['load-config'].outputs.result).config}}"
+                  value: "{{tasks.transform-config.outputs.parameters.transformed-config-path}}"
                 - name: step
                   value: "build_dem_orthomosaic"
-                - name: iteration-id
-                  value: "{{=sprig.fromJson(tasks['load-config'].outputs.result).iteration_id}}"
+                - name: project-name-sanitized
+                  value: "{{=sprig.fromJson(tasks['load-config'].outputs.result).project_name_sanitized}}"
                 - name: cpu-request
                   value: "{{=sprig.fromJson(tasks['load-config'].outputs.result).build_dem_orthomosaic_cpu_request}}"
                 - name: memory-request
@@ -425,11 +444,11 @@ spec:
                 - name: project-name
                   value: "{{inputs.parameters.project-name}}"
                 - name: config-file
-                  value: "{{=sprig.fromJson(tasks['load-config'].outputs.result).imagery_download_enabled == 'true' ? tasks['transform-config'].outputs.parameters['transformed-config-path'] : sprig.fromJson(tasks['load-config'].outputs.result).config}}"
+                  value: "{{tasks.transform-config.outputs.parameters.transformed-config-path}}"
                 - name: step
                   value: "match_photos_secondary"
-                - name: iteration-id
-                  value: "{{=sprig.fromJson(tasks['load-config'].outputs.result).iteration_id}}"
+                - name: project-name-sanitized
+                  value: "{{=sprig.fromJson(tasks['load-config'].outputs.result).project_name_sanitized}}"
                 - name: gpu-resource
                   value: "{{=sprig.fromJson(tasks['load-config'].outputs.result).match_photos_secondary_gpu_resource}}"
                 - name: gpu-count
@@ -448,11 +467,11 @@ spec:
                 - name: project-name
                   value: "{{inputs.parameters.project-name}}"
                 - name: config-file
-                  value: "{{=sprig.fromJson(tasks['load-config'].outputs.result).imagery_download_enabled == 'true' ? tasks['transform-config'].outputs.parameters['transformed-config-path'] : sprig.fromJson(tasks['load-config'].outputs.result).config}}"
+                  value: "{{tasks.transform-config.outputs.parameters.transformed-config-path}}"
                 - name: step
                   value: "match_photos_secondary"
-                - name: iteration-id
-                  value: "{{=sprig.fromJson(tasks['load-config'].outputs.result).iteration_id}}"
+                - name: project-name-sanitized
+                  value: "{{=sprig.fromJson(tasks['load-config'].outputs.result).project_name_sanitized}}"
                 - name: cpu-request
                   value: "{{=sprig.fromJson(tasks['load-config'].outputs.result).match_photos_secondary_cpu_request}}"
                 - name: memory-request
@@ -468,11 +487,11 @@ spec:
                 - name: project-name
                   value: "{{inputs.parameters.project-name}}"
                 - name: config-file
-                  value: "{{=sprig.fromJson(tasks['load-config'].outputs.result).imagery_download_enabled == 'true' ? tasks['transform-config'].outputs.parameters['transformed-config-path'] : sprig.fromJson(tasks['load-config'].outputs.result).config}}"
+                  value: "{{tasks.transform-config.outputs.parameters.transformed-config-path}}"
                 - name: step
                   value: "align_cameras_secondary"
-                - name: iteration-id
-                  value: "{{=sprig.fromJson(tasks['load-config'].outputs.result).iteration_id}}"
+                - name: project-name-sanitized
+                  value: "{{=sprig.fromJson(tasks['load-config'].outputs.result).project_name_sanitized}}"
                 - name: cpu-request
                   value: "{{=sprig.fromJson(tasks['load-config'].outputs.result).align_cameras_secondary_cpu_request}}"
                 - name: memory-request
@@ -488,11 +507,11 @@ spec:
                 - name: project-name
                   value: "{{inputs.parameters.project-name}}"
                 - name: config-file
-                  value: "{{=sprig.fromJson(tasks['load-config'].outputs.result).imagery_download_enabled == 'true' ? tasks['transform-config'].outputs.parameters['transformed-config-path'] : sprig.fromJson(tasks['load-config'].outputs.result).config}}"
+                  value: "{{tasks.transform-config.outputs.parameters.transformed-config-path}}"
                 - name: step
                   value: "finalize"
-                - name: iteration-id
-                  value: "{{=sprig.fromJson(tasks['load-config'].outputs.result).iteration_id}}"
+                - name: project-name-sanitized
+                  value: "{{=sprig.fromJson(tasks['load-config'].outputs.result).project_name_sanitized}}"
                 - name: cpu-request
                   value: "{{=sprig.fromJson(tasks['load-config'].outputs.result).finalize_cpu_request}}"
                 - name: memory-request
@@ -507,8 +526,8 @@ spec:
               parameters:
                 - name: project-name
                   value: "{{inputs.parameters.project-name}}"
-                - name: iteration-id
-                  value: "{{=sprig.fromJson(tasks['load-config'].outputs.result).iteration_id}}"
+                - name: project-name-sanitized
+                  value: "{{=sprig.fromJson(tasks['load-config'].outputs.result).project_name_sanitized}}"
                 - name: photogrammetry-config-subfolder
                   value: "{{inputs.parameters.photogrammetry-config-subfolder}}"
 
@@ -520,8 +539,8 @@ spec:
               parameters:
                 - name: project-name
                   value: "{{inputs.parameters.project-name}}"
-                - name: iteration-id
-                  value: "{{=sprig.fromJson(tasks['load-config'].outputs.result).iteration_id}}"
+                - name: project-name-sanitized
+                  value: "{{=sprig.fromJson(tasks['load-config'].outputs.result).project_name_sanitized}}"
                 - name: photogrammetry-config-subfolder
                   value: "{{inputs.parameters.photogrammetry-config-subfolder}}"
 
@@ -554,13 +573,13 @@ spec:
                   value: "{{workflow.parameters.COMPLETION_LOG_PATH}}"
 
           # Cleanup task (runs after postprocessing and logging completes)
-          - name: cleanup-iteration
+          - name: cleanup-project
             depends: "(postprocessing-task.Succeeded || postprocessing-task.Skipped) && (log-postprocess-complete.Succeeded || log-postprocess-complete.Skipped)"
-            template: cleanup-iteration-template
+            template: cleanup-project-template
             arguments:
               parameters:
-                - name: iteration-id
-                  value: "{{=sprig.fromJson(tasks['load-config'].outputs.result).iteration_id}}"
+                - name: project-name-sanitized
+                  value: "{{=sprig.fromJson(tasks['load-config'].outputs.result).project_name_sanitized}}"
 
     ## Here we define what each step does in 'process-project-workflow' step
 
@@ -571,7 +590,7 @@ spec:
           - name: project-name
           - name: config-file
           - name: step
-          - name: iteration-id
+          - name: project-name-sanitized
           - name: cpu-request
             default: "18"  # Default CPU cores for CPU steps
           - name: memory-request
@@ -592,7 +611,7 @@ spec:
           # For setup step, clean up any leftover products from a previous incomplete run
           # Only remove project/ and output/ directories, preserve downloaded-raw-imagery/ which was added prior to this
           if [ "{{inputs.parameters.step}}" = "setup" ]; then
-            PHOTOGRAMMETRY_DIR="{{workflow.parameters.TEMP_WORKING_DIR}}/{{workflow.name}}/{{inputs.parameters.iteration-id}}/photogrammetry"
+            PHOTOGRAMMETRY_DIR="{{workflow.parameters.TEMP_WORKING_DIR}}/{{workflow.name}}/{{inputs.parameters.project-name-sanitized}}/photogrammetry"
             for subdir in project output; do
               TARGET_DIR="$PHOTOGRAMMETRY_DIR/$subdir"
               if [ -d "$TARGET_DIR" ]; then
@@ -607,8 +626,8 @@ spec:
           # Run the Metashape step with license retry wrapper
           python3 /app/python/license_retry_wrapper.py \
             --config-file "{{inputs.parameters.config-file}}" \
-            --project-path "{{workflow.parameters.TEMP_WORKING_DIR}}/{{workflow.name}}/{{inputs.parameters.iteration-id}}/photogrammetry/project" \
-            --output-path "{{workflow.parameters.TEMP_WORKING_DIR}}/{{workflow.name}}/{{inputs.parameters.iteration-id}}/photogrammetry/output" \
+            --project-path "{{workflow.parameters.TEMP_WORKING_DIR}}/{{workflow.name}}/{{inputs.parameters.project-name-sanitized}}/photogrammetry/project" \
+            --output-path "{{workflow.parameters.TEMP_WORKING_DIR}}/{{workflow.name}}/{{inputs.parameters.project-name-sanitized}}/photogrammetry/output" \
             --project-name "{{inputs.parameters.project-name}}" \
             --step "{{inputs.parameters.step}}"
         env:
@@ -630,7 +649,7 @@ spec:
           - name: project-name
           - name: config-file
           - name: step
-          - name: iteration-id
+          - name: project-name-sanitized
           - name: gpu-resource
             default: "nvidia.com/gpu"  # Full GPU. MIG options: nvidia.com/mig-1g.5gb, mig-2g.10gb, mig-3g.20gb
           - name: gpu-count
@@ -654,8 +673,8 @@ spec:
           # Run the Metashape step with license retry wrapper
           python3 /app/python/license_retry_wrapper.py \
             --config-file "{{inputs.parameters.config-file}}" \
-            --project-path "{{workflow.parameters.TEMP_WORKING_DIR}}/{{workflow.name}}/{{inputs.parameters.iteration-id}}/photogrammetry/project" \
-            --output-path "{{workflow.parameters.TEMP_WORKING_DIR}}/{{workflow.name}}/{{inputs.parameters.iteration-id}}/photogrammetry/output" \
+            --project-path "{{workflow.parameters.TEMP_WORKING_DIR}}/{{workflow.name}}/{{inputs.parameters.project-name-sanitized}}/photogrammetry/project" \
+            --output-path "{{workflow.parameters.TEMP_WORKING_DIR}}/{{workflow.name}}/{{inputs.parameters.project-name-sanitized}}/photogrammetry/output" \
             --project-name "{{inputs.parameters.project-name}}" \
             --step "{{inputs.parameters.step}}"
         env:
@@ -675,7 +694,7 @@ spec:
       inputs:
         parameters:
           - name: imagery-zip-downloads
-          - name: iteration-id
+          - name: project-name-sanitized
       # Ensure CPU pods only schedule on CPU nodes (labeled by NFD based on nodegroup name)
       nodeSelector:
         feature.node.kubernetes.io/workload-type: cpu
@@ -689,7 +708,7 @@ spec:
           - name: IMAGERY_ZIP_URLS
             value: "{{inputs.parameters.imagery-zip-downloads}}"
           - name: DOWNLOAD_DIR
-            value: "{{workflow.parameters.TEMP_WORKING_DIR}}/{{workflow.name}}/{{inputs.parameters.iteration-id}}/photogrammetry/downloaded-raw-imagery"
+            value: "{{workflow.parameters.TEMP_WORKING_DIR}}/{{workflow.name}}/{{inputs.parameters.project-name-sanitized}}/photogrammetry/downloaded-raw-imagery"
           - name: S3_PROVIDER
             valueFrom:
               secretKeyRef:
@@ -721,7 +740,7 @@ spec:
       inputs:
         parameters:
           - name: config-file
-          - name: iteration-id
+          - name: project-name-sanitized
           - name: project-name
       # Ensure CPU pods only schedule on CPU nodes (labeled by NFD based on nodegroup name)
       nodeSelector:
@@ -736,9 +755,9 @@ spec:
           - name: CONFIG_FILE
             value: "{{inputs.parameters.config-file}}"
           - name: OUTPUT_CONFIG_FILE
-            value: "{{workflow.parameters.TEMP_WORKING_DIR}}/{{workflow.name}}/{{inputs.parameters.iteration-id}}/photogrammetry/config-transformed.yml"
+            value: "{{workflow.parameters.TEMP_WORKING_DIR}}/{{workflow.name}}/{{inputs.parameters.project-name-sanitized}}/photogrammetry/config-transformed.yml"
           - name: DOWNLOADED_IMAGERY_PATH
-            value: "{{workflow.parameters.TEMP_WORKING_DIR}}/{{workflow.name}}/{{inputs.parameters.iteration-id}}/photogrammetry/downloaded-raw-imagery"
+            value: "{{workflow.parameters.TEMP_WORKING_DIR}}/{{workflow.name}}/{{inputs.parameters.project-name-sanitized}}/photogrammetry/downloaded-raw-imagery"
         resources:
           requests:
             cpu: "1"
@@ -746,14 +765,14 @@ spec:
       outputs:
         parameters:
           - name: transformed-config-path
-            value: "{{workflow.parameters.TEMP_WORKING_DIR}}/{{workflow.name}}/{{inputs.parameters.iteration-id}}/photogrammetry/config-transformed.yml"
+            value: "{{workflow.parameters.TEMP_WORKING_DIR}}/{{workflow.name}}/{{inputs.parameters.project-name-sanitized}}/photogrammetry/config-transformed.yml"
 
     # --------- RCLONE UPLOAD (Docker image) ---------
     - name: rclone-upload-template
       inputs:
         parameters:
           - name: project-name
-          - name: iteration-id
+          - name: project-name-sanitized
           - name: photogrammetry-config-subfolder
       # Ensure CPU pods only schedule on CPU nodes (labeled by NFD based on nodegroup name)
       nodeSelector:
@@ -767,8 +786,8 @@ spec:
         args:
           - |
             set -euo pipefail
-            SRC="{{workflow.parameters.TEMP_WORKING_DIR}}/{{workflow.name}}/{{inputs.parameters.iteration-id}}/photogrammetry/output/"
-            SRC_parent="{{workflow.parameters.TEMP_WORKING_DIR}}/{{workflow.name}}/{{inputs.parameters.iteration-id}}/photogrammetry"
+            SRC="{{workflow.parameters.TEMP_WORKING_DIR}}/{{workflow.name}}/{{inputs.parameters.project-name-sanitized}}/photogrammetry/output/"
+            SRC_parent="{{workflow.parameters.TEMP_WORKING_DIR}}/{{workflow.name}}/{{inputs.parameters.project-name-sanitized}}/photogrammetry"
 
             # Build S3 destination path with optional photogrammetry config subfolder
             if [ -n "{{inputs.parameters.photogrammetry-config-subfolder}}" ]; then
@@ -843,7 +862,7 @@ spec:
       inputs:
         parameters:
           - name: project-name
-          - name: iteration-id
+          - name: project-name-sanitized
           - name: photogrammetry-config-subfolder
       # Ensure CPU pods only schedule on CPU nodes (labeled by NFD based on nodegroup name)
       nodeSelector:
@@ -893,7 +912,7 @@ spec:
           #- name: OUTPUT_MAX_DIM
             #value: "{{workflow.parameters.OUTPUT_MAX_DIM}}"
           - name: TEMP_WORKING_DIR_POSTPROCESSING
-            value: "{{workflow.parameters.TEMP_WORKING_DIR}}/{{workflow.name}}/{{inputs.parameters.iteration-id}}/postprocessing"
+            value: "{{workflow.parameters.TEMP_WORKING_DIR}}/{{workflow.name}}/{{inputs.parameters.project-name-sanitized}}/postprocessing"
         resources:
           requests:
             cpu: "12"
@@ -902,10 +921,10 @@ spec:
             memory: "56Gi"
 
     #--------- CLEANUP ITERATION DIRECTORY ---------
-    - name: cleanup-iteration-template
+    - name: cleanup-project-template
       inputs:
         parameters:
-          - name: iteration-id
+          - name: project-name-sanitized
       nodeSelector:
         feature.node.kubernetes.io/workload-type: cpu
       container:
@@ -916,9 +935,9 @@ spec:
         command: ["/bin/sh", "-c"]
         args:
           - |
-            ITERATION_DIR="{{workflow.parameters.TEMP_WORKING_DIR}}/{{workflow.name}}/{{inputs.parameters.iteration-id}}"
-            echo "[cleanup] Removing iteration directory: $ITERATION_DIR"
-            rm -rf "$ITERATION_DIR"
+            PROJECT_DIR="{{workflow.parameters.TEMP_WORKING_DIR}}/{{workflow.name}}/{{inputs.parameters.project-name-sanitized}}"
+            echo "[cleanup] Removing project directory: $PROJECT_DIR"
+            rm -rf "$PROJECT_DIR"
             echo "[cleanup] Done"
         resources:
           requests:

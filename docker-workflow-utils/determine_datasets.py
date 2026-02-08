@@ -201,13 +201,12 @@ def should_skip_project(
     return (False, False)
 
 
-def process_config_file(config_path: str, index: int) -> Dict[str, Any]:
+def process_config_file(config_path: str) -> Dict[str, Any]:
     """
     Process a single mission config file and extract mission parameters.
 
     Args:
         config_path: Absolute path to config file
-        index: Zero-based index of this config in the processing list (used for iteration_id)
 
     Returns:
         Dictionary of mission parameters with enabled flags
@@ -243,11 +242,6 @@ def process_config_file(config_path: str, index: int) -> Dict[str, Any]:
     # Create DNS-1123 compliant name for Kubernetes task names (Argo UI display only)
     # The original project_name is preserved for file paths and processing
     project_name_sanitized = sanitize_dns1123(project_name)
-
-    # Generate unique iteration ID: 3-digit zero-padded index + underscore + sanitized project name
-    # Example: "000_mission_001", "001_mission_001" (for duplicates), "002_other_project"
-    # This provides uniqueness even with duplicate project names and easy identification
-    iteration_id = f"{index:03d}_{project_name_sanitized}"
 
     # Extract argo config section for easy access
     argo_config = config.get("argo", {})
@@ -286,10 +280,10 @@ def process_config_file(config_path: str, index: int) -> Dict[str, Any]:
     # Apply translation logic from implementation plan
     mission = {
         "project_name": project_name,
+        # project_name_sanitized: DNS-1123 compliant version used for Kubernetes-safe
+        # task names and per-project directory isolation
         "project_name_sanitized": project_name_sanitized,
         "config": config_path,
-        # Iteration ID for unique per-project isolation (used in download paths, etc.)
-        "iteration_id": iteration_id,
         # S3 imagery download settings
         # imagery_zip_downloads is a list that Argo will serialize to JSON when needed
         "imagery_zip_downloads": imagery_downloads,
@@ -584,9 +578,22 @@ def main(
             else:
                 config_paths.append(os.path.join(config_list_dir, line))
 
-    for index, config_path in enumerate(config_paths):
+    seen_names = set()
+
+    for config_path in config_paths:
         try:
-            mission = process_config_file(config_path, index)
+            mission = process_config_file(config_path)
+
+            # Check for duplicate sanitized project names
+            sanitized = mission["project_name_sanitized"]
+            if sanitized in seen_names:
+                print(
+                    f"Warning: Dropping duplicate project '{mission['project_name']}' "
+                    f"(sanitized: '{sanitized}') from config '{config_path}'",
+                    file=sys.stderr,
+                )
+                continue
+            seen_names.add(sanitized)
 
             # Check if should skip based on completion status
             skip_entirely, skip_metashape = should_skip_project(
@@ -623,20 +630,21 @@ def main(
         # Ensure output directory exists
         os.makedirs(os.path.dirname(output_file_path), exist_ok=True)
 
-        # Write full configs to file
+        # Write full configs to file as dict keyed by project_name
+        configs_dict = {m["project_name"]: m for m in missions}
         with open(output_file_path, "w") as f:
-            json.dump(missions, f)
+            json.dump(configs_dict, f)
 
         print(
             f"Wrote {len(missions)} project configs to {output_file_path}",
             file=sys.stderr,
         )
 
-        # Output minimal references to stdout (just index and project_name)
+        # Output minimal references to stdout (just project_name)
         # These are small enough to pass via withParam without hitting size limits
         refs = [
-            {"index": i, "project_name": m["project_name"]}
-            for i, m in enumerate(missions)
+            {"project_name": m["project_name"]}
+            for m in missions
         ]
         json.dump(refs, sys.stdout)
     else:

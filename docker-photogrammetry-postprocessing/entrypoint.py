@@ -357,8 +357,8 @@ def upload_processed_products(mission_id):
 def cleanup_working_directory():
     """Remove the entire postprocessing working directory.
 
-    Since each iteration has its own isolated postprocessing folder under
-    {iteration_id}/postprocessing/, we can safely delete the entire directory.
+    Since each project has its own isolated postprocessing folder under
+    {project_name_sanitized}/postprocessing/, we can safely delete the entire directory.
     """
     working_dir = os.environ.get("TEMP_WORKING_DIR_POSTPROCESSING")
 
