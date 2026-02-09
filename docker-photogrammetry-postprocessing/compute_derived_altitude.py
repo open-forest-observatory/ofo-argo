@@ -151,10 +151,12 @@ def compute_height_above_ground(camera_file: str, dtm_file: str) -> gpd.GeoDataF
     Returns:
         gpd.GeoDataFrame:
             GeoDataFrame with camera locations as Point geometries in EPSG:4326.
-            * 'label' column contains the image path
-            * 'altitude' contains the image altitude above ground level in meters
-            * 'valid_elevation' contains whether there was a corresponding non-null DTM value
+            * 'label' the image path
+            * 'altitude' the image altitude above ground level in meters
+            * 'valid_dtm' was the camera above a valid DTM pixel
+            * 'camera_aligned' was the camera aligned by photogrammetry
             * 'ground_elevation' the height of the ground in meters
+            * 'image_id' the image filename
 
     """
     # Parse aligned cameras as geodataframe and record labels of unaligned ones
@@ -175,21 +177,26 @@ def compute_height_above_ground(camera_file: str, dtm_file: str) -> gpd.GeoDataF
         elevations = list(dtm.sample(sample_coords, masked=True))
 
     # Record which cameras had a corresponding non-null DTM value
-    cameras_gdf["valid_elevation"] = [not elev.mask[0] for elev in elevations]
+    cameras_gdf["valid_dtm"] = [not elev.mask[0] for elev in elevations]
     # Record sampled ground elevation
     cameras_gdf["ground_elevation"] = [elev.data[0] for elev in elevations]
-    # Set all ground elevations to nan if the corresponding elevation was not valid
-    cameras_gdf.loc[~cameras_gdf.valid_elevation, "ground_elevation"] = np.nan
+    # Set all ground elevations to nan if the corresponding dtm was not valid
+    cameras_gdf.loc[~cameras_gdf.valid_dtm, "ground_elevation"] = np.nan
 
     # Compute the difference between the ground elevation and the camera elevation.
     cameras_gdf["altitude"] = cameras_gdf.geometry.z - cameras_gdf["ground_elevation"]
 
-    # Create a geodataframe for unaligned cameras with default values for all fields
+    # Note that these cameras aligned properly
+    cameras_gdf["camera_aligned"] = True
+
+    # Create a geodataframe with the label and marking that the cameras are unaligned. All other
+    # fields are set to the default null value.
     n_unaligned_cameras = len(unaligned_cameras)
     unaligned_cameras_gdf = gpd.GeoDataFrame(
         {
             "label": unaligned_cameras,
-            "valid_elevation": [False] * n_unaligned_cameras,
+            "camera_aligned": [False] * n_unaligned_cameras,
+            "valid_dtm": [False] * n_unaligned_cameras,
             "ground_elevation": [np.nan] * n_unaligned_cameras,
             "altitude": [np.nan] * n_unaligned_cameras,
             "geometry": [None] * n_unaligned_cameras,
@@ -201,6 +208,9 @@ def compute_height_above_ground(camera_file: str, dtm_file: str) -> gpd.GeoDataF
     cameras_gdf = gpd.GeoDataFrame(
         pd.concat((cameras_gdf, unaligned_cameras_gdf)), crs=cameras_gdf.crs
     )
+    # Add an image_id field representing the filename (without path) to correspond with the OFO
+    # convention
+    cameras_gdf["image_id"] = cameras_gdf.label.str.split("/").str[-1]
     # Convert to lat lon
     cameras_gdf.to_crs(4326, inplace=True)
 
@@ -231,5 +241,6 @@ if __name__ == "__main__":
     heights_above_ground = compute_height_above_ground(
         camera_file=args.camera_file, dtm_file=args.dtm_file
     )
+    # Make the output directory and save
     args.output_file.parent.mkdir(parents=True, exist_ok=True)
     heights_above_ground.to_file(args.output_file)
