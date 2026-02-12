@@ -84,6 +84,8 @@ spec:
                    value: "{{workflow.parameters.OUTPUT_FOLDER}}/detected_trees.gpkg"
                  - name: mesh-crs
                    value: "{{workflow.parameters.MESH_CRS}}"
+                 - name: image-folder
+                   value: "{{workflow.parameters.IMAGE_FOLDER}}"
                  - name: render-savefolder
                    value: "{{workflow.parameters.OUTPUT_FOLDER}}/renders"
 
@@ -97,15 +99,21 @@ spec:
         volumeMounts:
           - name: data
             mountPath: /data
-        command: ["python"]
-        args:
-          - -m tree_detection_framework.entrypoints.generate_predictions \
-            --raster-folder-path {{inputs.parameters.chm-file}} \
-            --tree-detection-model geometric \
-            --predictions-save-path {{inputs.parameters.detected-trees-file}} \
-            --chip-size {{workflow.parameters.CHIP_SIZE}} \
-            --chip-stride {{workflow.parameters.CHIP_STRIDE}}
-
+        command: [
+                  "python",
+                  "-m",
+                  "tree_detection_framework.entrypoints.generate_predictions",
+                  "--raster-folder-path",
+                  "{{inputs.parameters.chm-file}}",
+                  "--tree-detection-model",
+                  "geometric",
+                  "--predictions-save-path",
+                  "{{inputs.parameters.detected-trees-file}}",
+                  "--chip-size",
+                  "{{workflow.parameters.CHIP_SIZE}}",
+                  "--chip-stride",
+                  "{{workflow.parameters.CHIP_STRIDE}}"
+                ]
     - name: render-instance-labels
       inputs:
         parameters:
@@ -114,18 +122,21 @@ spec:
           - name: dtm-file
           - name: trees-file
           - name: mesh-crs
+          - name: image-folder
           - name: render-savefolder
       container:
         image: ghcr.io/open-forest-observatory/geograypher:feature-dr-containerize
         volumeMounts:
           - name: data
             mountPath: /data
-        command: ["python"]
-        args:
-          - -m geograypher.entrypoints.render_labels \
-            --mesh-file {{inputs.parameters.mesh-file}} \
-            --mesh-CRS {{inputs.parameters.mesh-crs}} \
-            --cameras-file {{inputs.parameters.cameras-file}} \
-            --texture {{inputs.parameters.trees-file}} \
-            --DTM-file {{inputs.parameters.dtm-file}} \
-            --render-savefolder {{inputs.parameters.render-savefolder}}
+        command: ["python",
+            "-m", "geograypher.entrypoints.render_labels",
+            "--mesh-file", "{{inputs.parameters.mesh-file}}",
+            "--mesh-CRS", "{{inputs.parameters.mesh-crs}}",
+            "--cameras-file", "{{inputs.parameters.cameras-file}}",
+            "--texture", "{{inputs.parameters.trees-file}}",
+            "--DTM-file", "{{inputs.parameters.dtm-file}}",
+            "--image-folder", "{{inputs.parameters.image-folder}}",
+            "--render-savefolder", "{{inputs.parameters.render-savefolder}}",
+            "--texture-column-name", "unique_ID",
+            "--ground-height-threshold", "2.0"]
