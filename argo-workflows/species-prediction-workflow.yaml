@@ -42,6 +42,7 @@ spec:
       - name: MESH_FILE
       - name: DTM_FILE
       - name: IMAGE_FOLDER
+      - name: ORIGINAL_IMAGE_FOLDER
       - name: CHM_FILE
       - name: OUTPUT_FOLDER
       - name: MESH_CRS
@@ -86,6 +87,8 @@ spec:
                    value: "{{workflow.parameters.MESH_CRS}}"
                  - name: image-folder
                    value: "{{workflow.parameters.IMAGE_FOLDER}}"
+                 - name: original-image-folder
+                   value: "{{workflow.parameters.ORIGINAL_IMAGE_FOLDER}}"
                  - name: render-savefolder
                    value: "{{workflow.parameters.OUTPUT_FOLDER}}/renders"
 
@@ -123,6 +126,7 @@ spec:
           - name: trees-file
           - name: mesh-crs
           - name: image-folder
+          - name: original-image-folder
           - name: render-savefolder
       container:
         image: ghcr.io/open-forest-observatory/geograypher:feature-dr-containerize
@@ -139,4 +143,5 @@ spec:
             "--image-folder", "{{inputs.parameters.image-folder}}",
             "--render-savefolder", "{{inputs.parameters.render-savefolder}}",
             "--texture-column-name", "unique_ID",
-            "--ground-height-threshold", "2.0"]
+            "--ground-height-threshold", "2.0",
+            "--original-image-folder", "{{inputs.parameters.original-image-folder}}"]
