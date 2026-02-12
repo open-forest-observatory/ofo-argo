@@ -247,8 +247,10 @@ def parse_args():
 
 
 if __name__ == "__main__":
+    # Parse args
     args = parse_args()
 
+    # Run
     process_folder(
         args.images_folder,
         args.renders_folder,
