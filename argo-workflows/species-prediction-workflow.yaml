@@ -54,8 +54,12 @@ spec:
     # the 'process-datasets' step has a looping directive (withParam) which goes through each dataset name and processes it.
     - name: main
       steps:
-        - name: detect-trees
-          template: detect-trees
+        - - name: detect-trees
+            template: detect-trees
+            arguments:
+              parameters:
+                 - name: chm-file
+                   value: "{{workflow.parameters.CHM_FILE}}"
 
     - name: detect-trees
       inputs:
@@ -66,8 +70,4 @@ spec:
         volumeMounts:
           - name: data
             mountPath: /data
-        command: [
-         "python", "-m", "tree_detection_framework.entrypoints.generate_predictions.py",
-         "--raster-folder-path", {{chm-file}}, "--tree-detection-model", "geometric",
-         "--predictions-save-path", "{{OUTPUT_FOLDER}}/detected_trees.gpkg"]
-
+        command: ["python", "-m", "tree_detection_framework.entrypoints.generate_predictions.py", "--raster-folder-path", "{{inputs.parameters.chm-file}}", "--tree-detection-model", "geometric", "--predictions-save-path", "{{workflow.parameters.OUTPUT_FOLDER}}/detected_trees.gpkg"]
