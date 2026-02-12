@@ -68,6 +68,8 @@ spec:
               parameters:
                  - name: chm-file
                    value: "{{workflow.parameters.CHM_FILE}}"
+                 - name: detected-trees-file
+                   value: "{{workflow.parameters.OUTPUT_FOLDER}}/detected_trees.gpkg"
         - - name: render-instance-labels
             template: render-instance-labels
             arguments:
@@ -79,14 +81,17 @@ spec:
                  - name: dtm-file
                    value: "{{workflow.parameters.DTM_FILE}}"
                  - name: trees-file
-                   value: "{{workflow.parameters.OUTPUT_FOLDER}}/detected_trees.gpkg}}"
+                   value: "{{workflow.parameters.OUTPUT_FOLDER}}/detected_trees.gpkg"
                  - name: mesh-crs
                    value: "{{workflow.parameters.MESH_CRS}}"
+                 - name: render-savefolder
+                   value: "{{workflow.parameters.OUTPUT_FOLDER}}/renders"
 
     - name: detect-trees
       inputs:
         parameters:
           - name: chm-file
+          - name: detected-trees-file
       container:
         image: ghcr.io/open-forest-observatory/tree-detection-framework:feature-dr-containerize
         volumeMounts:
@@ -94,7 +99,12 @@ spec:
             mountPath: /data
         command: ["python"]
         args:
-          - -m tree_detection_framework.entrypoints.generate_predictions --raster-folder-path {{inputs.parameters.chm-file}} --tree-detection-model geometric --predictions-save-path {{workflow.parameters.OUTPUT_FOLDER}}/detected_trees.gpkg --chip-size {{workflow.parameters.CHIP_SIZE}} --chip-stride {{workflow.parameters.CHIP_STRIDE}}
+          - -m tree_detection_framework.entrypoints.generate_predictions \
+            --raster-folder-path {{inputs.parameters.chm-file}} \
+            --tree-detection-model geometric \
+            --predictions-save-path {{inputs.parameters.detected-trees-file}} \
+            --chip-size {{workflow.parameters.CHIP_SIZE}} \
+            --chip-stride {{workflow.parameters.CHIP_STRIDE}}
 
     - name: render-instance-labels
       inputs:
@@ -104,6 +114,7 @@ spec:
           - name: dtm-file
           - name: trees-file
           - name: mesh-crs
+          - name: render-savefolder
       container:
         image: ghcr.io/open-forest-observatory/geograypher:feature-dr-containerize
         volumeMounts:
@@ -117,4 +128,4 @@ spec:
             --cameras-file {{inputs.parameters.cameras-file}} \
             --texture {{inputs.parameters.trees-file}} \
             --DTM-file {{inputs.parameters.dtm-file}} \
-            --render-savefolder {{workflow.parameters.OUTPUT_FOLDER}}/renders
+            --render-savefolder {{inputs.parameters.render-savefolder}}
