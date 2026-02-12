@@ -1,0 +1,73 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Workflow
+metadata:
+  generateName: detect-trees-workflow-
+spec:
+  serviceAccountName: argo
+  entrypoint: main
+
+  # Set imagePullPolicy for all containers in the workflow
+  podSpecPatch: |
+    containers:
+      - name: main
+        imagePullPolicy: Always
+
+  # Affinity rules for workflow pods:
+  # 1. nodeAffinity: Schedule on non-GPU nodes by default (GPU tasks override with affinity: {})
+  # 2. podAffinity: Prefer nodes with other running workflow pods to minimize autoscaler evictions
+  affinity:
+    nodeAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        nodeSelectorTerms:
+          - matchExpressions:
+              - key: nvidia.com/gpu.present
+                operator: DoesNotExist
+    podAffinity:
+      preferredDuringSchedulingIgnoredDuringExecution:
+        - weight: 100
+          podAffinityTerm:
+            labelSelector:
+              matchExpressions:
+                - key: workflows.argoproj.io/completed
+                  operator: In
+                  values:
+                    - "false"
+            topologyKey: kubernetes.io/hostname
+
+  # A list of input parameters available to the workflow at runtime.
+  # These parameters can be referenced throughout the workflow templates using {{workflow.parameters.<name>}}
+  arguments:
+    parameters:
+      - name: CAMERAS_FILE
+      - name: MESH_FILE
+      - name: CHM_FILE
+      - name: OUTPUT_FOLDER
+
+  # Defining where to read raw drone imagery data and write out imagery products to `/ofo-share`
+  volumes:
+    - name: data
+      persistentVolumeClaim:
+        claimName: ceph-share-rw-pvc2
+
+  templates:
+    # the 'main' template defines the order of high-level steps to be completed in the workflow.
+    # the 'process-datasets' step has a looping directive (withParam) which goes through each dataset name and processes it.
+    - name: main
+      steps:
+        - name: detect-trees
+          template: detect-trees
+
+    - name: detect-trees
+      inputs:
+        parameters:
+          - name: chm-file
+      container:
+        image: ghcr.io/open-forest-observatory/tree-detection-framework:feature-dr-containerize
+        volumeMounts:
+          - name: data
+            mountPath: /data
+        command: [
+         "python", "-m", "tree_detection_framework.entrypoints.generate_predictions.py",
+         "--raster-folder-path", {{chm-file}}, "--tree-detection-model", "geometric",
+         "--predictions-save-path", "{{OUTPUT_FOLDER}}/detected_trees.gpkg"]
+
