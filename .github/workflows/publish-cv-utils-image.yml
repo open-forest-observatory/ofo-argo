@@ -6,6 +6,9 @@ on:
       # Do not run on pushes to main, because this is separately triggred on pushes to main by the
       # isort workflow, and we want to make sure it runs after isort, and not twice
       - main
+    # Only build if this folder changes
+    paths:
+      - 'docker-cv-utils/**'
   workflow_call:
 
 env:
