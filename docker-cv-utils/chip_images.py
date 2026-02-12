@@ -1,13 +1,11 @@
 import json
-import os
-import uuid
 from math import ceil, floor
 from multiprocessing import Pool
 from pathlib import Path
+from argparse import ArgumentParser
 
 import geopandas as gpd
 import numpy as np
-import pandas as pd
 import shapely
 from imageio import imread, imwrite
 from PIL import Image
@@ -16,6 +14,7 @@ from rasterio.features import shapes
 from scipy.ndimage import label
 from shapely.affinity import translate
 from tqdm import tqdm
+
 
 # Background masking configuration
 MASK_BACKGROUND = True  # Whether to mask out background trees
@@ -187,40 +186,73 @@ def chip_images(image_path, mask_path, output_folder, IDs_to_labels):
 
 
 def process_folder(
-    images_folder, renders_folder, output_dir, images_ext="JPG", renders_ext="tif"
+    images_folder,
+    renders_folder,
+    output_dir,
+    images_ext="JPG",
+    renders_ext="tif",
+    n_workers=1,
 ) -> tuple:
     """Create the per-tree chips for one dataset"""
     images_folder = Path(images_folder)
     renders_folder = Path(renders_folder)
 
-    images_files = list(images_folder.rglob(f"*{images_ext}"))
-    renders_files = list(renders_folder.rglob(f"*{renders_ext}"))
+    image_files = sorted(images_folder.rglob(f"*{images_ext}"))
+    render_files = sorted(renders_folder.rglob(f"*{renders_ext}"))
 
-    images_stems = [f.relative_to(images_folder).with_suffix("") for f in images_files]
+    images_stems = [f.relative_to(images_folder).with_suffix("") for f in image_files]
     renders_stems = [
-        f.relative_to(renders_folder).with_suffix("") for f in renders_files
+        f.relative_to(renders_folder).with_suffix("") for f in render_files
     ]
 
     missing_images = set(renders_stems) - set(images_stems)
     if len(missing_images) > 0:
         raise ValueError(
-            f"{len(missing_images)} renders do not have a corresponding images. The first 10 are {missing_images[:10]}"
+            f"{len(missing_images)} renders do not have a corresponding images. The first 10 are {list(missing_images)[:10]}"
         )
+    additional_images = set(images_stems) - set(renders_stems)
+    if len(additional_images) > 0:
+        raise ValueError(
+            f"{len(additional_images)} images do not have a corresponding renders. The first 10 are {list(additional_images)[:10]}"
+        )
+
     with open(Path(renders_folder, "IDs_to_labels.json"), "r") as file_h:
         IDs_to_labels = json.load(file_h)
         IDs_to_labels = {int(k): v for k, v in IDs_to_labels.items()}
 
-    for image_file, render_file, image_stem in zip(
-        images_files, renders_files, images_stems
-    ):
-        output_folder_for_image = Path(output_dir, image_stem)
-        chip_images(image_file, render_file, output_folder_for_image, IDs_to_labels)
+    output_folders = [Path(output_dir, image_stem) for image_stem in images_stems]
+
+    # Replicate IDs_to_labels the appropriate number of times
+    inputs = list(
+        zip(
+            image_files,
+            render_files,
+            output_folders,
+            [IDs_to_labels] * len(image_files),
+        )
+    )
+
+    with Pool(n_workers) as p:
+        p.starmap(chip_images, inputs)
 
 
-IMAGES_FOLDER = (
-    "/ofo-share/argo-data/argo-input/archive_20260202/datasets/0003_001438_001437"
-)
-RENDERS_FOLDER = "/ofo-share/argo-data/argo-output/david-species/renders"
-OUTPUT_FOLDER = "/ofo-share/repos/david/ofo-argo/scratch/chips"
+def parse_args():
+    parser = ArgumentParser()
+    parser.add_argument("images_folder")
+    parser.add_argument("renders_folder")
+    parser.add_argument("output_folder")
+    parser.add_argument("--n-workers", type=int, default=1)
 
-process_folder(IMAGES_FOLDER, RENDERS_FOLDER, OUTPUT_FOLDER)
+    args = parser.parse_args()
+    return args
+
+
+if __name__ == "__main__":
+    args = parse_args()
+
+    process_folder(
+        args.images_folder,
+        args.renders_folder,
+        args.output_folder,
+        n_workers=args.n_workers,
+    )
