@@ -129,7 +129,7 @@ spec:
           - name: original-image-folder
           - name: render-savefolder
       container:
-        image: ghcr.io/open-forest-observatory/geograypher:feature-dr-containerize
+        image: ghcr.io/open-forest-observatory/geograypher:main
         volumeMounts:
           - name: data
             mountPath: /data
