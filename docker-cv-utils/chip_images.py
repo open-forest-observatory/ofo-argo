@@ -13,7 +13,6 @@ from rasterio import features
 from rasterio.features import shapes
 from scipy.ndimage import label
 from shapely.affinity import translate
-from tqdm import tqdm
 
 
 # Background masking configuration
