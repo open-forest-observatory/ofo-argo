@@ -74,4 +74,6 @@ spec:
         volumeMounts:
           - name: data
             mountPath: /data
-        command: ["python", "-m", "tree_detection_framework.entrypoints.generate_predictions", "--raster-folder-path", "{{inputs.parameters.chm-file}}", "--tree-detection-model", "geometric", "--predictions-save-path", "{{workflow.parameters.OUTPUT_FOLDER}}/detected_trees.gpkg", "--chip-size", "{{workflow.parameters.CHIP_SIZE}}", "--chip-stride", "{{workflow.parameters.CHIP_STRIDE}}"]
+        command: ["python"]
+        args:
+          - -m tree_detection_framework.entrypoints.generate_predictions --raster-folder-path {{inputs.parameters.chm-file}} --tree-detection-model geometric --predictions-save-path {{workflow.parameters.OUTPUT_FOLDER}}/detected_trees.gpkg --chip-size {{workflow.parameters.CHIP_SIZE}} --chip-stride {{workflow.parameters.CHIP_STRIDE}}
