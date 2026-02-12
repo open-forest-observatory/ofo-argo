@@ -5,7 +5,10 @@ on:
     branches-ignore:
       # Do not run on pushes to main, because this is separately triggred on pushes to main by the
       # isort workflow, and we want to make sure it runs after isort, and not twice
-      - main 
+      - main
+    # Only build if this folder changes
+    paths:
+      - 'docker-workflow-utils/**'
   workflow_call:
 
 env:
@@ -17,7 +20,7 @@ jobs:
     if: github.repository == 'open-forest-observatory/ofo-argo'
     runs-on: ubuntu-latest
 
-    permissions: 
+    permissions:
       contents: read
       packages: write
       attestations: write
