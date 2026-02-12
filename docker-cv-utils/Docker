@@ -17,9 +17,6 @@ from scipy.ndimage import label
 from shapely.affinity import translate
 from tqdm import tqdm
 
-import _bootstrap
-from configs.path_config import path_config
-
 # Background masking configuration
 MASK_BACKGROUND = True  # Whether to mask out background trees
 MASK_BUFFER_PIXELS = 20  # Buffer zone around mask in pixels to retain
@@ -44,69 +41,6 @@ species_crosswalk_path = path_config.species_class_crosswalk_file
 
 # Specify datasets to process (set to None to process all datasets)
 DATASETS_TO_PROCESS = None
-
-
-def load_all_species_mappings(crosswalk_path):
-    """
-    Load species crosswalk and create mapping dictionaries for all levels.
-
-    Args:
-        crosswalk_path (str): Path to the crosswalk CSV file
-
-    Returns:
-        dict: Dictionary with keys 'l1', 'l2', 'l3', 'l4', each containing
-              a mapping from original species_code to that level's species code
-    """
-    # Load crosswalk
-    crosswalk_df = pd.read_csv(crosswalk_path)
-
-    all_mappings = {}
-
-    for level in ["l1", "l2", "l3", "l4"]:
-        primary_col = f"primary_species_{level}"
-        species_col = f"species_code_{level}"
-
-        # Create mapping dictionary: species_code -> target level species (only for primary_species_lX == True)
-        level_mapping = {}
-        for _, row in crosswalk_df.iterrows():
-            if row[
-                primary_col
-            ]:  # Only include species where primary_species_lX is True
-                level_mapping[row["species_code"]] = row[species_col]
-
-        all_mappings[level] = level_mapping
-        print(f"Loaded {level.upper()} mapping with {len(level_mapping)} valid species")
-        print(
-            f"Available {level.upper()} classes: {sorted(set(level_mapping.values()))}"
-        )
-
-    return all_mappings
-
-
-def map_species_all_levels(original_species, all_mappings):
-    """
-    Map original species to all available levels.
-
-    Args:
-        original_species (str): Original species code
-        all_mappings (dict): Dictionary containing mappings for all levels
-
-    Returns:
-        dict: Dictionary with keys 'l1', 'l2', 'l3', 'l4' containing mapped species
-              (or None if no mapping available for that level)
-    """
-    if original_species is None:
-        return {level: None for level in ["l1", "l2", "l3", "l4"]}
-
-    mapped_species = {}
-    for level in ["l1", "l2", "l3", "l4"]:
-        if original_species in all_mappings[level]:
-            # all_mappings[level] maps original species code to the code for this level
-            mapped_species[level] = all_mappings[level][original_species]
-        else:
-            mapped_species[level] = None
-
-    return mapped_species
 
 
 def filter_contours_by_area(binary_mask, area_threshold=0.5):
@@ -140,7 +74,132 @@ def filter_contours_by_area(binary_mask, area_threshold=0.5):
     return filtered_mask
 
 
-def chip_images(dset_name: str) -> tuple:
+def chip_images(image_path, mask_path, output_folder):
+    img = Image.open(image_path)  # load image
+    img_array = (
+        np.array(img) if MASK_BACKGROUND else None
+    )  # Convert to numpy array for masking
+
+    mask_ids = imread(mask_path)  # load tif tree id mask
+    mask_ids = np.squeeze(mask_ids)  # (H, W, 1) -> (H, W)
+
+    if mask_ids.dtype == np.uint32:
+        # Indicates a mallformed image in the current experiments
+        # mapping_stats["missing_img_cts"] += 1
+        return
+
+    individual_shapes = list(shapes(mask_ids, mask=mask_ids != 0))
+
+    # No polygons, skip
+    if len(individual_shapes) == 0:
+        return
+
+    # Extract the potentially-multiple polygons from each shape along with the original value,
+    # now encoded as a zero-padded string
+    polys = [
+        (shapely.Polygon(poly), int(shape[1]))
+        for shape in individual_shapes
+        for poly in shape[0]["coordinates"]
+    ]
+    # Split into geometries and IDs and build a geodataframe
+    geometry, ids = list(zip(*polys))
+    # Create a GDF using an arbitrary CRS
+    shapes_gdf = gpd.GeoDataFrame({"geometry": geometry, "IDs": ids}, crs=3310)
+
+    # Store the area as an attribute for future use
+    shapes_gdf["polygon_area"] = shapes_gdf.area
+    # Find the max area per ID
+    max_area_per_class = shapes_gdf[["polygon_area", "IDs"]].groupby("IDs").max()
+
+    # Merge the area and max area by IDs
+    shapes_gdf = shapes_gdf.join(max_area_per_class, on="IDs", rsuffix="_max")
+
+    # Compute for each polygon what fraction of the max area for that ID it is
+    shapes_gdf["frac_of_max"] = (
+        shapes_gdf["polygon_area"] / shapes_gdf["polygon_area_max"]
+    )
+    # Remove the polygons which are less than the threshold fraction of the max for that ID
+    shapes_gdf = shapes_gdf[shapes_gdf["frac_of_max"] > 0.5]
+    # Remove the columns we no longer need
+    shapes_gdf.drop(
+        ["frac_of_max", "polygon_area", "polygon_area_max"], axis=1, inplace=True
+    )
+
+    # Merge by ID, forming multipolygons as needed
+    shapes_gdf = shapes_gdf.dissolve("IDs", as_index=False)
+
+    # Compute the axis-aligned height and width of each ID
+    width = shapes_gdf.bounds.maxx - shapes_gdf.bounds.minx
+    height = shapes_gdf.bounds.maxy - shapes_gdf.bounds.miny
+
+    # Remove IDs that are too small
+    valid_dims = (height > IMAGE_RES_CONSTRAINT) & (width > IMAGE_RES_CONSTRAINT)
+    shapes_gdf = shapes_gdf[valid_dims]
+
+    # Remove any zero area polygons
+    shapes_gdf = shapes_gdf[shapes_gdf.area > 0]
+
+    # Make the output folder
+    Path(output_folder).mkdir(exist_ok=True, parents=True)
+    # iterate over ids
+    for _, row in shapes_gdf.iterrows():
+        tree_unique_id = str(int(row.IDs)).zfill(
+            5
+        )  # convert tree uid to 0 padded str to match plot_attributes format
+
+        # Create the mask
+        minx, miny, maxx, maxy = row.geometry.bounds
+        width = maxx - minx
+        height = maxy - miny
+
+        pad_width = width * BBOX_PADDING_RATIO
+        pad_height = height * BBOX_PADDING_RATIO
+
+        # padded floating coords
+        left = minx - pad_width
+        top = miny - pad_height
+        right = maxx + pad_width
+        bottom = maxy + pad_height
+
+        # image shape (rows=height, cols=width)
+        img_h, img_w = img_array.shape[:2]
+
+        # integer pixel coordinates, clamped to image bounds
+        crop_minx = max(0, int(floor(left)))
+        crop_miny = max(0, int(floor(top)))
+        crop_maxx = min(img_w, int(ceil(right)))
+        crop_maxy = min(img_h, int(ceil(bottom)))
+
+        # extract crop
+        crop = img_array[crop_miny:crop_maxy, crop_minx:crop_maxx].copy()
+
+        # Apply background masking if enabled
+        if MASK_BACKGROUND:
+            # shift geometry into crop-local coordinates (use integer crop offsets)
+            shifted_geometry = translate(row.geometry, xoff=-crop_minx, yoff=-crop_miny)
+
+            # Expand the mask
+            buffered_geometry = shifted_geometry.buffer(MASK_BUFFER_PIXELS)
+
+            # rasterize the shifted geometry to a mask (0 inside geometry, 1 outside)
+            mask = features.rasterize(
+                [(buffered_geometry, 0)],
+                out_shape=(crop.shape[0], crop.shape[1]),
+                fill=1,
+                dtype="uint8",
+            ).astype(bool)
+
+            bg = np.array(BACKGROUND_VALUE, dtype=crop.dtype)
+            crop[mask] = bg
+
+        # Create the output path
+        output_path = Path(output_folder, f"{tree_unique_id}.png")
+
+        # save cropped img
+        imwrite(output_path, crop)
+
+
+def process_folder(images_folder, renders_folder, output_dir) -> tuple:
     """Create the per-tree chips for one dataset
 
     Args:
