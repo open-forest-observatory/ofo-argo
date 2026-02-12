@@ -40,8 +40,12 @@ spec:
     parameters:
       - name: CAMERAS_FILE
       - name: MESH_FILE
+      - name: DTM_FILE
+      - name: IMAGE_FOLDER
       - name: CHM_FILE
       - name: OUTPUT_FOLDER
+      - name: MESH_CRS
+        value: 26910
       - name: CHIP_SIZE
         value: 4000
       - name: CHIP_STRIDE
@@ -64,6 +68,20 @@ spec:
               parameters:
                  - name: chm-file
                    value: "{{workflow.parameters.CHM_FILE}}"
+        - - name: render-instance-labels
+            template: render-instance-labels
+            arguments:
+              parameters:
+                 - name: mesh-file
+                   value: "{{workflow.parameters.MESH_FILE}}"
+                 - name: cameras-file
+                   value: "{{workflow.parameters.CAMERAS_FILE}}"
+                 - name: dtm-file
+                   value: "{{workflow.parameters.DTM_FILE}}"
+                 - name: trees-file
+                   value: "{{workflow.parameters.OUTPUT_FOLDER}}/detected_trees.gpkg}}"
+                 - name: mesh-crs
+                   value: "{{workflow.parameters.MESH_CRS}}"
 
     - name: detect-trees
       inputs:
@@ -77,3 +95,26 @@ spec:
         command: ["python"]
         args:
           - -m tree_detection_framework.entrypoints.generate_predictions --raster-folder-path {{inputs.parameters.chm-file}} --tree-detection-model geometric --predictions-save-path {{workflow.parameters.OUTPUT_FOLDER}}/detected_trees.gpkg --chip-size {{workflow.parameters.CHIP_SIZE}} --chip-stride {{workflow.parameters.CHIP_STRIDE}}
+
+    - name: render-instance-labels
+      inputs:
+        parameters:
+          - name: mesh-file
+          - name: cameras-file
+          - name: dtm-file
+          - name: trees-file
+          - name: mesh-crs
+      container:
+        image: ghcr.io/open-forest-observatory/geograypher:feature-dr-containerize
+        volumeMounts:
+          - name: data
+            mountPath: /data
+        command: ["python"]
+        args:
+          - -m geograypher.entrypoints.render_labels \
+            --mesh-file {{inputs.parameters.mesh-file}} \
+            --mesh-CRS {{inputs.parameters.mesh-crs}} \
+            --cameras-file {{inputs.parameters.cameras-file}} \
+            --texture {{inputs.parameters.trees-file}} \
+            --DTM-file {{inputs.parameters.dtm-file}} \
+            --render-savefolder {{workflow.parameters.OUTPUT_FOLDER}}/renders
