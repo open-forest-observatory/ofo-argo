@@ -63,7 +63,7 @@ def filter_contours_by_area(binary_mask, area_threshold=0.5):
     return filtered_mask
 
 
-def chip_images(image_path, mask_path, output_folder):
+def chip_images(image_path, mask_path, output_folder, IDs_to_labels):
     img = Image.open(image_path)  # load image
     img_array = (
         np.array(img) if MASK_BACKGROUND else None
@@ -74,10 +74,10 @@ def chip_images(image_path, mask_path, output_folder):
 
     if mask_ids.dtype == np.uint32:
         # Indicates a mallformed image in the current experiments
-        # mapping_stats["missing_img_cts"] += 1
         return
 
-    individual_shapes = list(shapes(mask_ids, mask=mask_ids != 0))
+    # TODO remove the 255 filter once it's reset to 0 being the background
+    individual_shapes = list(shapes(mask_ids, mask=mask_ids != 255))
 
     # No polygons, skip
     if len(individual_shapes) == 0:
@@ -127,15 +127,13 @@ def chip_images(image_path, mask_path, output_folder):
 
     # Remove any zero area polygons
     shapes_gdf = shapes_gdf[shapes_gdf.area > 0]
+    shapes_gdf.IDs.replace(IDs_to_labels, inplace=True)
 
     # Make the output folder
     Path(output_folder).mkdir(exist_ok=True, parents=True)
     # iterate over ids
     for _, row in shapes_gdf.iterrows():
-        tree_unique_id = str(int(row.IDs)).zfill(
-            5
-        )  # convert tree uid to 0 padded str to match plot_attributes format
-
+        tree_unique_id = row.IDs
         # Create the mask
         minx, miny, maxx, maxy = row.geometry.bounds
         width = maxx - minx
@@ -191,15 +189,7 @@ def chip_images(image_path, mask_path, output_folder):
 def process_folder(
     images_folder, renders_folder, output_dir, images_ext="JPG", renders_ext="tif"
 ) -> tuple:
-    """Create the per-tree chips for one dataset
-
-    Args:
-        dset_name (str): The dataset name in the <plot_id>_<hn>_<lo> format
-
-    Returns:
-        bool: Whether the run completed successfully without skipping
-        dict: Performance counters, specifying how many images were processed and how many were skipped
-    """
+    """Create the per-tree chips for one dataset"""
     images_folder = Path(images_folder)
     renders_folder = Path(renders_folder)
 
@@ -216,11 +206,15 @@ def process_folder(
         raise ValueError(
             f"{len(missing_images)} renders do not have a corresponding images. The first 10 are {missing_images[:10]}"
         )
+    with open(Path(renders_folder, "IDs_to_labels.json"), "r") as file_h:
+        IDs_to_labels = json.load(file_h)
+        IDs_to_labels = {int(k): v for k, v in IDs_to_labels.items()}
+
     for image_file, render_file, image_stem in zip(
         images_files, renders_files, images_stems
     ):
         output_folder_for_image = Path(output_dir, image_stem)
-        chip_images(image_file, render_file, output_folder_for_image)
+        chip_images(image_file, render_file, output_folder_for_image, IDs_to_labels)
 
 
 IMAGES_FOLDER = (
