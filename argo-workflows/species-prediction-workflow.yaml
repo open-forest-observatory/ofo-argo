@@ -51,6 +51,8 @@ spec:
         value: 4000
       - name: CHIP_STRIDE
         value: 3600
+      - name: N_WORKERS
+        value: 4
 
   # Defining where to read raw drone imagery data and write out imagery products to `/ofo-share`
   volumes:
@@ -96,7 +98,7 @@ spec:
             arguments:
               parameters:
                  - name: images-folder
-                   value: "{{workflow.parameters.IMAGES_FOLDER}}"
+                   value: "{{workflow.parameters.IMAGE_FOLDER}}"
                  - name: renders-folder
                    value: "{{workflow.parameters.OUTPUT_FOLDER}}/renders"
                  - name: output-folder
@@ -169,4 +171,5 @@ spec:
                   "{{inputs.parameters.images-folder}}",
                   "{{inputs.parameters.renders-folder}}",
                   "{{inputs.parameters.output-folder}}",
+                  "--n-workers", "{{workflow.parameters.N_WORKERS}}"
                   ]
