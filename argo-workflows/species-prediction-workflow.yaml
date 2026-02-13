@@ -45,6 +45,8 @@ spec:
       - name: ORIGINAL_IMAGE_FOLDER
       - name: CHM_FILE
       - name: OUTPUT_FOLDER
+      - name: MODEL_PATH
+      - name: CONFIG_PATH
       - name: MESH_CRS
         value: 26910
       - name: CHIP_SIZE
@@ -103,6 +105,18 @@ spec:
                    value: "{{workflow.parameters.OUTPUT_FOLDER}}/renders"
                  - name: output-folder
                    value: "{{workflow.parameters.OUTPUT_FOLDER}}/chips"
+        - - name: classify-chips
+            template: classify-chips
+            arguments:
+              parameters:
+                 - name: chips-folder
+                   value: "{{workflow.parameters.OUTPUT_FOLDER}}/chips"
+                 - name: model-path
+                   value: "{{workflow.parameters.MODEL_PATH}}"
+                 - name: config-path
+                   value: "{{workflow.parameters.CONFIG_PATH}}"
+                 - name: output-path
+                   value: "{{workflow.parameters.OUTPUT_FOLDER}}/classified-chips.json"
     - name: detect-trees
       inputs:
         parameters:
@@ -173,3 +187,54 @@ spec:
                   "{{inputs.parameters.output-folder}}",
                   "--n-workers", "{{workflow.parameters.N_WORKERS}}"
                   ]
+
+    - name: classify-chips
+      inputs:
+        parameters:
+          - name: chips-folder
+          - name: model-path
+          - name: config-path
+          - name: output-path
+      resources:
+        requests:
+          nvidia.com/gpu: 1
+        limits:
+          nvidia.com/gpu: 1
+      script:
+        image: waikatodatamining/mmpretrain:1.2.0_cuda11.1
+        volumeMounts:
+          - name: data
+            mountPath: /data
+        command: ["python"]
+        source: |
+          import json
+          from pathlib import Path
+
+          from mmpretrain.apis import ImageClassificationInferencer
+
+          input_folder = Path("{{workflow.parameter.chips-folder}}"")
+          config_path = "{{workflow.parameter.config-path}}"
+          model_path = "{{workflow.parameter.model-path}}"
+          output_path = Path("{{workflow.parameter.output-folder}}")
+
+          # Listing input files
+          input_files = sorted(Path(input_folder).rglob(".png"))
+          print(f"Running on {len(input_files)} files")
+
+          # Setting up the model
+          inferencer = ImageClassificationInferencer(model=config_path, pretrained=model_path, device="cuda")
+
+          # Run inference. This is the slow step.
+          results = inferencer(input_files)
+
+          # Extract predicted classes
+          pred_labels = [int(r["pred_label"]) for r in results]
+
+          # Build a dict from filename to predicted class
+          results_per_file = {str(k): v for k, v in zip(input_files, pred_labels)}
+
+          # Write out results
+          output_path.parent.mkdir(exist_ok=True, parents=True)
+          with open(output_path, "w") as file_h:
+              json.dump(results_per_file, file_h)
+
