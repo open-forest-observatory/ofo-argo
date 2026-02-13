@@ -91,7 +91,16 @@ spec:
                    value: "{{workflow.parameters.ORIGINAL_IMAGE_FOLDER}}"
                  - name: render-savefolder
                    value: "{{workflow.parameters.OUTPUT_FOLDER}}/renders"
-
+        - - name: chip-images
+            template: chip-images
+            arguments:
+              parameters:
+                 - name: images-folder
+                   value: "{{workflow.parameters.IMAGES_FOLDER}}"
+                 - name: renders-folder
+                   value: "{{workflow.parameters.OUTPUT_FOLDER}}/renders"
+                 - name: output-folder
+                   value: "{{workflow.parameters.OUTPUT_FOLDER}}/chips"
     - name: detect-trees
       inputs:
         parameters:
@@ -145,3 +154,19 @@ spec:
             "--texture-column-name", "unique_ID",
             "--ground-height-threshold", "2.0",
             "--original-image-folder", "{{inputs.parameters.original-image-folder}}"]
+    - name: chip-images
+      inputs:
+        parameters:
+          - name: images-folder
+          - name: renders-folder
+          - name: output-folder
+      container:
+        image: ghcr.io/open-forest-observatory/cv-utils:feature-dr-species-inference-pipeline
+        volumeMounts:
+          - name: data
+            mountPath: /data
+        command: ["python", "/app/chip_images.py",
+                  "{{inputs.parameters.images-folder}}",
+                  "{{inputs.parameters.renders-folder}}",
+                  "{{inputs.parameters.output-folder}}",
+                  ]
