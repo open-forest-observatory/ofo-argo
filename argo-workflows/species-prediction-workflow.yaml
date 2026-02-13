@@ -195,16 +195,16 @@ spec:
           - name: model-path
           - name: config-path
           - name: output-path
-      resources:
-        requests:
-          nvidia.com/gpu: 1
-        limits:
-          nvidia.com/gpu: 1
       script:
         image: waikatodatamining/mmpretrain:1.2.0_cuda11.1
         volumeMounts:
           - name: data
             mountPath: /data
+        resources:
+          requests:
+            nvidia.com/gpu: 1
+          limits:
+            nvidia.com/gpu: 1
         command: ["python"]
         source: |
           import json
@@ -212,10 +212,10 @@ spec:
 
           from mmpretrain.apis import ImageClassificationInferencer
 
-          input_folder = Path("{{workflow.parameter.chips-folder}}"")
-          config_path = "{{workflow.parameter.config-path}}"
-          model_path = "{{workflow.parameter.model-path}}"
-          output_path = Path("{{workflow.parameter.output-folder}}")
+          input_folder = Path("{{inputs.parameters.chips-folder}}"")
+          config_path = "{{inputs.parameters.config-path}}"
+          model_path = "{{inputs.parameters.model-path}}"
+          output_path = Path("{{inputs.parameters.output-path}}")
 
           # Listing input files
           input_files = sorted(Path(input_folder).rglob(".png"))
@@ -237,4 +237,3 @@ spec:
           output_path.parent.mkdir(exist_ok=True, parents=True)
           with open(output_path, "w") as file_h:
               json.dump(results_per_file, file_h)
-
