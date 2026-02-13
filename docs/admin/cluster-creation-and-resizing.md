@@ -279,10 +279,13 @@ helm repo update nvidia
 # Check current GPU Operator version
 helm list -n gpu-operator
 
-# Enable mixed MIG strategy (use the same version as currently installed)
+# Get current version and enable mixed MIG strategy
+CURRENT_VERSION=$(helm list -n gpu-operator -o json | jq -r '.[0].chart' | sed 's/gpu-operator-//')
+echo "Using GPU Operator version: $CURRENT_VERSION"
+
 helm upgrade nvidia-gpu-operator nvidia/gpu-operator \
   -n gpu-operator \
-  --version <CURRENT_VERSION> \
+  --version $CURRENT_VERSION \
   --reuse-values \
   --set mig.strategy=mixed
 ```
