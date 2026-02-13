@@ -1,4 +1,7 @@
 FROM python:3.12-slim
+# Install system dependencies
+RUN apt-get update && apt-get install -y libexpat1 \
+    && rm -rf /var/lib/apt/lists/*
 
 # Suppress error about pip installing as root
 ENV PIP_ROOT_USER_ACTION=ignore
