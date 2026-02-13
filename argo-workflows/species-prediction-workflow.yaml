@@ -45,8 +45,10 @@ spec:
       - name: ORIGINAL_IMAGE_FOLDER
       - name: CHM_FILE
       - name: OUTPUT_FOLDER
-      - name: MODEL_PATH
-      - name: CONFIG_PATH
+      - name: SPECIES_MODEL_PATH
+      - name: SPECIES_CONFIG_PATH
+      - name: LD_MODEL_PATH
+      - name: LD_CONFIG_PATH
       - name: MESH_CRS
         value: 26910
       - name: CHIP_SIZE
@@ -99,24 +101,26 @@ spec:
             template: chip-images
             arguments:
               parameters:
-                 - name: images-folder
-                   value: "{{workflow.parameters.IMAGE_FOLDER}}"
-                 - name: renders-folder
-                   value: "{{workflow.parameters.OUTPUT_FOLDER}}/renders"
-                 - name: output-folder
+                 - name: chips-folder
                    value: "{{workflow.parameters.OUTPUT_FOLDER}}/chips"
-        - - name: classify-chips
+                 - name: model-path
+                   value: "{{workflow.parameters.SPECIES_MODEL_PATH}}"
+                 - name: config-path
+                   value: "{{workflow.parameters.SPECIES_CONFIG_PATH}}"
+                 - name: output-path
+                   value: "{{workflow.parameters.OUTPUT_FOLDER}}/classified-chips-species.json"
+        - - name: classify-chips-live-dead
             template: classify-chips
             arguments:
               parameters:
                  - name: chips-folder
                    value: "{{workflow.parameters.OUTPUT_FOLDER}}/chips"
                  - name: model-path
-                   value: "{{workflow.parameters.MODEL_PATH}}"
+                   value: "{{workflow.parameters.LD_MODEL_PATH}}"
                  - name: config-path
-                   value: "{{workflow.parameters.CONFIG_PATH}}"
+                   value: "{{workflow.parameters.LD_CONFIG_PATH}}"
                  - name: output-path
-                   value: "{{workflow.parameters.OUTPUT_FOLDER}}/classified-chips.json"
+                   value: "{{workflow.parameters.OUTPUT_FOLDER}}/classified-chips-LD.json"
     - name: detect-trees
       inputs:
         parameters:
