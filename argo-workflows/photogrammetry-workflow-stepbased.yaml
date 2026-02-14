@@ -55,6 +55,13 @@ spec:
         value: "300"
       - name: LICENSE_MAX_RETRIES
         value: "0"
+      # Heartbeat logger and progress callback configuration
+      - name: LOG_HEARTBEAT_INTERVAL
+        value: "60"  # Seconds between heartbeat status lines
+      - name: LOG_BUFFER_SIZE
+        value: "100"  # Number of lines to keep in error context buffer
+      - name: PROGRESS_INTERVAL_PCT
+        value: "1"  # Print progress every N percent (e.g., 1 = print at 1%, 2%, 3%...)
       # Completion tracking and skip behavior
       # Path to completion log file (empty = disable skip/logging)
       - name: COMPLETION_LOG_PATH
@@ -640,6 +647,12 @@ spec:
             value: "{{workflow.parameters.LICENSE_RETRY_INTERVAL}}"
           - name: LICENSE_MAX_RETRIES
             value: "{{workflow.parameters.LICENSE_MAX_RETRIES}}"
+          - name: LOG_HEARTBEAT_INTERVAL
+            value: "{{workflow.parameters.LOG_HEARTBEAT_INTERVAL}}"
+          - name: LOG_BUFFER_SIZE
+            value: "{{workflow.parameters.LOG_BUFFER_SIZE}}"
+          - name: PROGRESS_INTERVAL_PCT
+            value: "{{workflow.parameters.PROGRESS_INTERVAL_PCT}}"
 
     # GPU step template for Metashape processing
     # Supports dynamic GPU resource selection (full GPU or MIG partitions) and count
@@ -687,6 +700,12 @@ spec:
             value: "{{workflow.parameters.LICENSE_RETRY_INTERVAL}}"
           - name: LICENSE_MAX_RETRIES
             value: "{{workflow.parameters.LICENSE_MAX_RETRIES}}"
+          - name: LOG_HEARTBEAT_INTERVAL
+            value: "{{workflow.parameters.LOG_HEARTBEAT_INTERVAL}}"
+          - name: LOG_BUFFER_SIZE
+            value: "{{workflow.parameters.LOG_BUFFER_SIZE}}"
+          - name: PROGRESS_INTERVAL_PCT
+            value: "{{workflow.parameters.PROGRESS_INTERVAL_PCT}}"
 
     # --------- S3 IMAGERY DOWNLOAD ---------
     # Downloads and extracts zip files containing imagery from S3

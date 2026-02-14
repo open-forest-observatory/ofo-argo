@@ -29,6 +29,7 @@ The **step-based workflow** (`photogrammetry-workflow-stepbased.yaml`) provides 
 - 💻 **CPU steps** (align_cameras, build_point_cloud, build_dem_orthomosaic, etc.) run on cheaper CPU nodes
 - ⚡ **Disabled steps** are completely skipped (no pod creation, no resource allocation)
 - 📊 **Fine-grained monitoring** - Track progress of each step in the Argo UI
+- 📉 **Smart log management** - Heartbeat logger reduces console output while preserving full logs on disk and dumping error context on failure
 - 🔧 **Flexible GPU usage** - Configure whether GPU-capable steps use GPU or CPU nodes
 
 **Documentation:**
