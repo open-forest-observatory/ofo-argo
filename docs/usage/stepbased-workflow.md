@@ -574,7 +574,7 @@ Database parameters (not currently functional):
 | `LICENSE_MAX_RETRIES` | Maximum license retry attempts. `0` = no retries (fail immediately, default), `-1` = unlimited retries, `>0` = that many retries. See [License Retry Behavior](#license-retry-behavior) |
 | `LOG_HEARTBEAT_INTERVAL` | Seconds between heartbeat status lines during Metashape processing (default: `60`). Set to `0` to disable filtering and print all Metashape output (original behavior). See [Heartbeat Logger and Progress Monitoring](#heartbeat-logger-and-progress-monitoring) |
 | `LOG_BUFFER_SIZE` | Number of recent output lines kept in memory for error context (default: `100`). On failure, these lines are dumped to console for immediate debugging. See [Heartbeat Logger and Progress Monitoring](#heartbeat-logger-and-progress-monitoring) |
-| `PROGRESS_INTERVAL_PCT` | Percentage interval for progress reporting during Metashape API calls (default: `10`). Prints structured `[progress]` lines at each threshold (e.g., 10%, 20%, 30%). See [Heartbeat Logger and Progress Monitoring](#heartbeat-logger-and-progress-monitoring) |
+| `PROGRESS_INTERVAL_PCT` | Percentage interval for progress reporting during Metashape API calls (default: `1`). Prints structured `[progress]` lines at each threshold (e.g., 1%, 2%, 3%). See [Heartbeat Logger and Progress Monitoring](#heartbeat-logger-and-progress-monitoring) |
 | `COMPLETION_LOG_PATH` | Path to completion log file for tracking finished projects (default: `""`). When set, the workflow logs completed projects and can skip already-completed work. See [Completion Tracking and Skip-If-Complete](#completion-tracking-and-skip-if-complete) |
 | `SKIP_IF_COMPLETE` | Skip projects based on completion status (default: `"none"`). Options: `none` (never skip), `metashape` (skip if metashape or postprocess complete), `postprocess` (skip only if postprocess complete), `both` (granular: skip metashape if done, run postprocessing). See [Completion Tracking and Skip-If-Complete](#completion-tracking-and-skip-if-complete) |
 | `DB_*` | Database parameters for logging Argo status (not currently functional; credentials in [OFO credentials document](https://docs.google.com/document/d/155AP0P3jkVa-yT53a-QLp7vBAfjRa78gdST1Dfb4fls/edit?tab=t.0)) |
@@ -720,7 +720,7 @@ All three parameters have sensible defaults and require no configuration for nor
 |-----------|---------|-------------|
 | `LOG_HEARTBEAT_INTERVAL` | `60` | Seconds between heartbeat lines. `0` = full output mode |
 | `LOG_BUFFER_SIZE` | `100` | Lines kept in memory for error context dump |
-| `PROGRESS_INTERVAL_PCT` | `10` | Progress reporting interval (%) |
+| `PROGRESS_INTERVAL_PCT` | `1` | Progress reporting interval (%) |
 
 To use full output mode (e.g., for debugging or initial validation):
 

@@ -61,7 +61,7 @@ spec:
       - name: LOG_BUFFER_SIZE
         value: "100"  # Number of lines to keep in error context buffer
       - name: PROGRESS_INTERVAL_PCT
-        value: "10"  # Print progress every N percent (e.g., 10 = print at 10%, 20%, 30%...)
+        value: "1"  # Print progress every N percent (e.g., 1 = print at 1%, 2%, 3%...)
       # Completion tracking and skip behavior
       # Path to completion log file (empty = disable skip/logging)
       - name: COMPLETION_LOG_PATH
