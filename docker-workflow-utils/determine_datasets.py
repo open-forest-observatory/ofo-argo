@@ -12,19 +12,20 @@ Usage:
 Arguments:
     config_list_path: Path to text file listing config files
     output_file_path: Optional path to write full configs JSON (for artifact-based workflow).
-                      If provided, stdout will contain only minimal references.
-                      If not provided, stdout will contain full configs (legacy behavior).
+                      If omitted, no full configs file is written.
 
 Options:
-    --completion-log PATH     Path to completion log file (JSON Lines format)
-                              Use separate log files per config (e.g., completion-log-default.jsonl)
-    --skip-if-complete MODE   Skip projects based on completion status:
-                              none (default), metashape, postprocess, both
-    --workflow-name NAME      Argo workflow name for logging
+    --completion-log PATH       Path to completion log file (JSON Lines format)
+                                Use separate log files per config (e.g., completion-log-default.jsonl)
+    --phase PHASE               Which phase this workflow runs (metashape or postprocess).
+                                Used with --skip-if-complete and --require-phase.
+    --skip-if-complete BOOL     Skip projects that already completed the phase specified by --phase
+                                (true or false, default: false). Requires --phase.
+    --require-phase PHASE       Only include projects that have completed the given phase
 
 Output:
-    - If output_file_path provided: Writes full configs to file, outputs minimal refs to stdout
-    - If output_file_path not provided: Outputs full configs to stdout (legacy)
+    - Always outputs minimal refs to stdout: [{"project_name": "..."}]
+    - If output_file_path provided: also writes full configs to that file
 """
 
 import argparse
@@ -33,9 +34,13 @@ import os
 import re
 import sys
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Set
 
 import yaml
+
+# Regex for valid project names: must start and end with alphanumeric,
+# internal characters can be alphanumeric, dots, hyphens, or underscores
+VALID_PROJECT_NAME_RE = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9._-]*[a-zA-Z0-9]$|^[a-zA-Z0-9]$")
 
 
 def get_nested(d: Dict[str, Any], keys: List[str], default: Any = None) -> Any:
@@ -75,59 +80,45 @@ def str_to_bool(val: Any) -> bool:
     return bool(val)
 
 
-def sanitize_dns1123(name: str) -> str:
+def validate_project_name(name: str) -> None:
     """
-    Sanitize a name to be DNS-1123 compliant for Kubernetes.
+    Validate that a project name is safe for shell and filesystem use.
 
-    DNS-1123 requirements:
-    - Lowercase alphanumeric characters, hyphens, and dots only
-    - Must start and end with an alphanumeric character (a-z, 0-9)
-    - Must not start or end with a hyphen or dot
-    - Max length of 253 characters
+    Must start and end with alphanumeric characters, and contain only
+    alphanumeric characters, dots, hyphens, and underscores.
 
     Args:
-        name: Original name to sanitize
+        name: Project name to validate
 
-    Returns:
-        DNS-1123 compliant name
+    Raises:
+        ValueError: If name contains invalid characters
     """
-    # Convert to lowercase
-    sanitized = name.lower()
-
-    # Replace invalid characters (anything not alphanumeric, hyphen, or dot) with hyphen
-    sanitized = re.sub(r"[^a-z0-9.-]", "-", sanitized)
-
-    # Collapse multiple consecutive hyphens into one
-    sanitized = re.sub(r"-+", "-", sanitized)
-
-    # Remove leading/trailing hyphens or dots
-    sanitized = sanitized.strip("-.")
-
-    # Truncate to max 253 characters
-    sanitized = sanitized[:253]
-
-    # Ensure we didn't create a trailing hyphen/dot after truncation
-    sanitized = sanitized.rstrip("-.")
-
-    return sanitized
+    if not VALID_PROJECT_NAME_RE.match(name):
+        raise ValueError(
+            f"Invalid project name '{name}'. "
+            f"Project names must start and end with alphanumeric characters "
+            f"and contain only alphanumeric characters, dots, hyphens, and underscores. "
+            f"Pattern: {VALID_PROJECT_NAME_RE.pattern}"
+        )
 
 
-def load_completion_log(log_path: str) -> Dict[str, str]:
+def load_completion_log(log_path: str) -> Dict[str, Set[str]]:
     """
     Load completion log and return lookup table.
+
+    Supports both the current 'phase' field and the legacy 'completion_level' field
+    for backward compatibility with existing logs.
 
     Args:
         log_path: Path to JSON Lines completion log
 
     Returns:
-        Dict mapping project_name -> completion_level
-        If duplicate entries exist, keeps the highest level (postprocess > metashape)
+        Dict mapping project_name -> set of completed phases
+        (e.g., {"project-A": {"metashape", "postprocess"}})
     """
-    completions: Dict[str, str] = {}
+    completions: Dict[str, Set[str]] = {}
     if not os.path.exists(log_path):
         return completions
-
-    level_priority = {"metashape": 1, "postprocess": 2}
 
     with open(log_path, "r") as f:
         for line_num, line in enumerate(f, 1):
@@ -137,12 +128,14 @@ def load_completion_log(log_path: str) -> Dict[str, str]:
             try:
                 entry = json.loads(line)
                 project_name = entry["project_name"]
-                level = entry["completion_level"]
-                # Keep highest completion level
-                if project_name not in completions or level_priority.get(
-                    level, 0
-                ) > level_priority.get(completions[project_name], 0):
-                    completions[project_name] = level
+                # Support both 'phase' (current) and 'completion_level' (legacy)
+                phase = entry.get("phase") or entry.get("completion_level")
+                if phase is None:
+                    raise KeyError("Missing 'phase' or 'completion_level' field")
+                # Add phase to set of completed phases
+                if project_name not in completions:
+                    completions[project_name] = set()
+                completions[project_name].add(phase)
             except (json.JSONDecodeError, KeyError) as e:
                 print(
                     f"Warning: Skipping malformed line {line_num} in completion log: {e}",
@@ -154,51 +147,45 @@ def load_completion_log(log_path: str) -> Dict[str, str]:
 
 def should_skip_project(
     project_name: str,
-    completions: Dict[str, str],
-    skip_mode: str,
-) -> Tuple[bool, bool]:
+    completions: Dict[str, Set[str]],
+    phase: str,
+) -> bool:
     """
     Determine if project should be skipped based on completion status.
 
     Args:
         project_name: Project identifier
         completions: Completion lookup from load_completion_log()
-        skip_mode: One of "none", "metashape", "postprocess", "both"
+        phase: The phase to check for completion (e.g., "metashape", "postprocess")
 
     Returns:
-        Tuple of (skip_entirely, skip_metashape_only)
-        - skip_entirely: Don't include project in output at all
-        - skip_metashape_only: Include project but set skip_metashape=True (for "both" mode)
+        True if the project should be skipped entirely
     """
-    if skip_mode == "none":
-        return (False, False)
+    completed_phases = completions.get(project_name, set())
+    return phase in completed_phases
 
-    completion_level = completions.get(project_name)
 
-    if completion_level is None:
-        # Not in log, don't skip
-        return (False, False)
+def should_include_project(
+    project_name: str,
+    completions: Dict[str, Set[str]],
+    require_phase: Optional[str],
+) -> bool:
+    """
+    Determine if project meets the required phase gate.
 
-    if skip_mode == "metashape":
-        # Skip if metashape OR postprocess complete
-        return (True, False)
+    Args:
+        project_name: Project identifier
+        completions: Completion lookup from load_completion_log()
+        require_phase: Required phase (e.g., "metashape"). None means no requirement.
 
-    if skip_mode == "postprocess":
-        # Skip only if postprocess complete
-        if completion_level == "postprocess":
-            return (True, False)
-        return (False, False)
+    Returns:
+        True if the project should be included
+    """
+    if require_phase is None:
+        return True
 
-    if skip_mode == "both":
-        # Skip entirely if postprocess complete
-        # Skip metashape only if metashape complete (but postprocess not)
-        if completion_level == "postprocess":
-            return (True, False)
-        if completion_level == "metashape":
-            return (False, True)  # Partial skip
-        return (False, False)
-
-    return (False, False)
+    completed_phases = completions.get(project_name, set())
+    return require_phase in completed_phases
 
 
 def process_config_file(config_path: str) -> Dict[str, Any]:
@@ -239,9 +226,8 @@ def process_config_file(config_path: str) -> Dict[str, Any]:
         base_with_ext = os.path.basename(config_path)
         project_name = os.path.splitext(base_with_ext)[0]
 
-    # Create DNS-1123 compliant name for Kubernetes task names (Argo UI display only)
-    # The original project_name is preserved for file paths and processing
-    project_name_sanitized = sanitize_dns1123(project_name)
+    # Validate project name is safe for shell/filesystem use
+    validate_project_name(project_name)
 
     # Extract argo config section for easy access
     argo_config = config.get("argo", {})
@@ -280,9 +266,6 @@ def process_config_file(config_path: str) -> Dict[str, Any]:
     # Apply translation logic from implementation plan
     mission = {
         "project_name": project_name,
-        # project_name_sanitized: DNS-1123 compliant version used for Kubernetes-safe
-        # task names and per-project directory isolation
-        "project_name_sanitized": project_name_sanitized,
         "config": config_path,
         # S3 imagery download settings
         # imagery_zip_downloads is a list that Argo will serialize to JSON when needed
@@ -528,8 +511,9 @@ def main(
     config_list_path: str,
     output_file_path: Optional[str] = None,
     completion_log: Optional[str] = None,
-    skip_if_complete: str = "none",
-    workflow_name: str = "",
+    phase: Optional[str] = None,
+    skip_if_complete: bool = False,
+    require_phase: Optional[str] = None,
 ) -> None:
     """
     Main entry point for preprocessing script.
@@ -540,17 +524,22 @@ def main(
             or an absolute path (starting with /). Lines starting with # are comments.
             Inline comments (# after filename) are also supported.
         output_file_path: Optional path to write full configs JSON. If provided,
-            stdout will contain only minimal references (to avoid Argo parameter size limits).
+            full configs are written to this file. Stdout always contains minimal refs.
         completion_log: Optional path to completion log file (JSON Lines format).
             Should be config-specific (e.g., completion-log-default.jsonl).
-        skip_if_complete: Skip mode - "none", "metashape", "postprocess", or "both".
-        workflow_name: Argo workflow name for logging (unused in filtering, passed for reference).
+        phase: Which phase this workflow runs ("metashape" or "postprocess").
+            Required when --skip-if-complete is used.
+        skip_if_complete: If True, skip projects that already completed the given phase.
+        require_phase: Only include projects that have completed this phase.
     """
-    # Load completion log if provided
-    completions: Dict[str, str] = {}
-    if completion_log and skip_if_complete != "none":
+    if skip_if_complete and not phase:
+        raise ValueError("--phase is required when --skip-if-complete is used")
+
+    # Load completion log if needed for skip or require-phase logic
+    completions: Dict[str, Set[str]] = {}
+    if completion_log and (skip_if_complete or require_phase is not None):
         completions = load_completion_log(completion_log)
-        print(f"Loaded {len(completions)} entries from completion log", file=sys.stderr)
+        print(f"Loaded {len(completions)} project completion records from log", file=sys.stderr)
 
     # Create completion log file if it doesn't exist (for later appending by workflow)
     if completion_log and not os.path.exists(completion_log):
@@ -560,6 +549,7 @@ def main(
 
     missions: List[Dict[str, Any]] = []
     skipped_count = 0
+    excluded_count = 0
 
     # Get directory containing the config list for resolving relative filenames
     config_list_dir = os.path.dirname(config_list_path)
@@ -584,34 +574,36 @@ def main(
         try:
             mission = process_config_file(config_path)
 
-            # Check for duplicate sanitized project names
-            sanitized = mission["project_name_sanitized"]
-            if sanitized in seen_names:
+            # Check for duplicate project names
+            name = mission["project_name"]
+            if name in seen_names:
                 print(
-                    f"Warning: Dropping duplicate project '{mission['project_name']}' "
-                    f"(sanitized: '{sanitized}') from config '{config_path}'",
+                    f"Warning: Dropping duplicate project '{name}' "
+                    f"from config '{config_path}'",
                     file=sys.stderr,
                 )
                 continue
-            seen_names.add(sanitized)
+            seen_names.add(name)
 
-            # Check if should skip based on completion status
-            skip_entirely, skip_metashape = should_skip_project(
-                mission["project_name"], completions, skip_if_complete
-            )
-
-            if skip_entirely:
-                level = completions.get(mission["project_name"], "unknown")
+            # Check if should skip based on completion status (phase guaranteed non-None by earlier validation)
+            if skip_if_complete and phase and should_skip_project(name, completions, phase):
+                phases = completions.get(name, set())
+                phases_str = ", ".join(sorted(phases)) if phases else "unknown"
                 print(
-                    f"Skipping {mission['project_name']}: "
-                    f"already complete at level '{level}'",
+                    f"Skipping {name}: already complete (phases: {phases_str})",
                     file=sys.stderr,
                 )
                 skipped_count += 1
                 continue
 
-            # Add skip_metashape flag for "both" mode partial skipping
-            mission["skip_metashape"] = skip_metashape
+            # Check require-phase gate
+            if not should_include_project(name, completions, require_phase):
+                print(
+                    f"Excluding {name}: required phase '{require_phase}' not met",
+                    file=sys.stderr,
+                )
+                excluded_count += 1
+                continue
 
             missions.append(mission)
         except Exception as e:
@@ -619,18 +611,17 @@ def main(
             raise
 
     print(
-        f"Processing {len(missions)} projects, skipped {skipped_count} as already complete",
+        f"Processing {len(missions)} projects, "
+        f"skipped {skipped_count} as already complete, "
+        f"excluded {excluded_count} for unmet phase requirement",
         file=sys.stderr,
     )
 
     if output_file_path:
-        # Artifact-based mode: write full configs to file, output minimal refs to stdout
+        # Write full configs to file as dict keyed by project_name
         # This avoids Argo's parameter size limit (default 256KB) for large batch runs
-
-        # Ensure output directory exists
         os.makedirs(os.path.dirname(output_file_path), exist_ok=True)
 
-        # Write full configs to file as dict keyed by project_name
         configs_dict = {m["project_name"]: m for m in missions}
         with open(output_file_path, "w") as f:
             json.dump(configs_dict, f)
@@ -640,13 +631,9 @@ def main(
             file=sys.stderr,
         )
 
-        # Output minimal references to stdout (just project_name)
-        # These are small enough to pass via withParam without hitting size limits
-        refs = [{"project_name": m["project_name"]} for m in missions]
-        json.dump(refs, sys.stdout)
-    else:
-        # Legacy mode: output full configs to stdout
-        json.dump(missions, sys.stdout)
+    # Always output minimal references to stdout (just project_name)
+    refs = [{"project_name": m["project_name"]} for m in missions]
+    json.dump(refs, sys.stdout)
 
 
 if __name__ == "__main__":
@@ -655,16 +642,19 @@ if __name__ == "__main__":
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-    # Basic usage (legacy mode)
-    python determine_datasets.py /data/config_list.txt
-
-    # Artifact mode (avoids Argo parameter size limits)
-    python determine_datasets.py /data/config_list.txt /data/output/configs.json
-
-    # With completion tracking (use config-specific log file)
+    # Metashape workflow (skip already-completed metashape projects)
     python determine_datasets.py /data/config_list.txt /data/output/configs.json \\
         --completion-log /data/completion-log-default.jsonl \\
-        --skip-if-complete postprocess
+        --phase metashape --skip-if-complete true
+
+    # Postprocessing workflow (require metashape done, skip already-postprocessed)
+    python determine_datasets.py /data/config_list.txt \\
+        --completion-log /data/completion-log-default.jsonl \\
+        --phase postprocess --skip-if-complete true \\
+        --require-phase metashape
+
+    # No skip, no output file
+    python determine_datasets.py /data/config_list.txt
         """,
     )
     parser.add_argument(
@@ -678,23 +668,29 @@ Examples:
         nargs="?",
         default=None,
         help="Optional output file for configs JSON. If provided, full configs are "
-        "written to this file and only minimal refs are output to stdout (artifact mode).",
+        "written to this file. Stdout always contains minimal refs.",
     )
     parser.add_argument(
         "--completion-log",
         help="Path to completion log file (JSON Lines format)",
     )
     parser.add_argument(
-        "--skip-if-complete",
-        choices=["none", "metashape", "postprocess", "both"],
-        default="none",
-        help="Skip projects based on completion status: "
-        "none (default), metashape, postprocess, both",
+        "--phase",
+        choices=["metashape", "postprocess"],
+        default=None,
+        help="Which phase this workflow runs. Required when --skip-if-complete is used.",
     )
     parser.add_argument(
-        "--workflow-name",
-        default="",
-        help="Argo workflow name for logging",
+        "--skip-if-complete",
+        choices=["true", "false"],
+        default="false",
+        help="Skip projects that already completed the phase specified by --phase",
+    )
+    parser.add_argument(
+        "--require-phase",
+        choices=["metashape", "postprocess"],
+        default=None,
+        help="Only include projects that have completed the given phase",
     )
 
     args = parser.parse_args()
@@ -703,6 +699,7 @@ Examples:
         config_list_path=args.config_list_path,
         output_file_path=args.output_file_path,
         completion_log=args.completion_log,
-        skip_if_complete=args.skip_if_complete,
-        workflow_name=args.workflow_name,
+        phase=args.phase,
+        skip_if_complete=args.skip_if_complete == "true",
+        require_phase=args.require_phase,
     )

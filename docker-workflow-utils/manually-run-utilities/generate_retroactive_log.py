@@ -161,7 +161,7 @@ def generate_log_entries(
 
         entry = {
             "project_name": project_name,
-            "completion_level": level,
+            "phase": level,
             "timestamp": timestamp.isoformat(),
             "workflow_name": "retroactive-bootstrap",
         }
@@ -196,7 +196,7 @@ Examples:
     python generate_retroactive_log.py \\
         --internal-bucket ofo-internal \\
         --internal-prefix photogrammetry/default-run \\
-        --level metashape \\
+        --phase metashape \\
         --output completion-log-default.jsonl
 
 Note on multiple configs:
@@ -230,10 +230,10 @@ Note on multiple configs:
         help="S3 prefix for postprocessed products (optional)",
     )
     parser.add_argument(
-        "--level",
+        "--phase",
         choices=["metashape", "postprocess", "both"],
         default="both",
-        help="Which completion levels to detect",
+        help="Which completion phases to detect",
     )
     parser.add_argument(
         "--output", "-o", required=True, help="Output file path for completion log"
@@ -252,11 +252,11 @@ Note on multiple configs:
     args = parser.parse_args()
 
     # Validate args
-    if args.level in ["postprocess", "both"] and (
+    if args.phase in ["postprocess", "both"] and (
         not args.public_bucket or not args.public_prefix
     ):
         parser.error(
-            "--public-bucket and --public-prefix required when checking postprocess level"
+            "--public-bucket and --public-prefix required when checking postprocess phase"
         )
 
     # Create S3 client
@@ -266,12 +266,12 @@ Note on multiple configs:
     metashape_projects: Dict[str, datetime] = {}
     postprocess_projects: Dict[str, datetime] = {}
 
-    if args.level in ["metashape", "both"]:
+    if args.phase in ["metashape", "both"]:
         metashape_projects = detect_completed_projects(
             client, args.internal_bucket, args.internal_prefix, "metashape"
         )
 
-    if args.level in ["postprocess", "both"]:
+    if args.phase in ["postprocess", "both"]:
         postprocess_projects = detect_completed_projects(
             client, args.public_bucket, args.public_prefix, "postprocess"
         )
@@ -280,12 +280,12 @@ Note on multiple configs:
     entries = generate_log_entries(metashape_projects, postprocess_projects)
 
     print(f"\nGenerated {len(entries)} log entries:", file=sys.stderr)
-    metashape_only = sum(1 for e in entries if e["completion_level"] == "metashape")
+    metashape_only = sum(1 for e in entries if e["phase"] == "metashape")
     postprocess_count = sum(
-        1 for e in entries if e["completion_level"] == "postprocess"
+        1 for e in entries if e["phase"] == "postprocess"
     )
-    print(f"  - metashape level: {metashape_only}", file=sys.stderr)
-    print(f"  - postprocess level: {postprocess_count}", file=sys.stderr)
+    print(f"  - metashape phase: {metashape_only}", file=sys.stderr)
+    print(f"  - postprocess phase: {postprocess_count}", file=sys.stderr)
 
     if args.dry_run:
         print("\n[DRY RUN] Would write:", file=sys.stderr)

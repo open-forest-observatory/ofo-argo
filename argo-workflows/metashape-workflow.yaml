@@ -1,0 +1,882 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Workflow
+metadata:
+  generateName: automate-metashape-workflow-
+spec:
+  serviceAccountName: argo
+  entrypoint: main
+
+  # Set imagePullPolicy for all containers in the workflow
+  podSpecPatch: |
+    containers:
+      - name: main
+        imagePullPolicy: Always
+
+  # Pod scheduling:
+  # - CPU nodes are labeled (workload-type=cpu) via NodeFeatureRule based on nodegroup name
+  # - CPU pods: Use nodeSelector to target CPU nodes explicitly
+  # - GPU pods: GPU resource requests ensure scheduling only on nodes with GPU resources
+  # - podAffinity (prefer nodes with running pods) inherited from workflow-controller-configmap
+
+  # A list of input parameters available to the workflow at runtime.
+  # These parameters can be referenced throughout the workflow templates using {{workflow.parameters.<name>}}
+  arguments:
+    parameters:
+      - name: CONFIG_LIST
+        value: "/data/argo-input/config-lists/config_list.txt"
+      - name: TEMP_WORKING_DIR
+        value: "/data/argo-output/temp-dir"
+      - name: S3_PHOTOGRAMMETRY_DIR
+        value: "default-run"
+      - name: PHOTOGRAMMETRY_CONFIG_ID
+        value: "NONE"
+      # S3 bucket for internal/intermediate outputs (raw Metashape products like orthomosaics, point clouds, DEMs)
+      - name: S3_BUCKET_INTERNAL
+        value: ""
+      # - name: OUTPUT_MAX_DIM
+      #   value: "800"
+      # Docker image tag for workflow utility containers (argo-workflow-utils)
+      - name: WORKFLOW_UTILS_IMAGE_TAG
+        value: "latest"
+      # Docker image tag for automate-metashape container
+      - name: AUTOMATE_METASHAPE_IMAGE_TAG
+        value: "latest"
+      # License retry settings for Metashape license acquisition
+      - name: LICENSE_RETRY_INTERVAL
+        value: "300"
+      - name: LICENSE_MAX_RETRIES
+        value: "0"
+      # Heartbeat logger and progress callback configuration
+      - name: LOG_HEARTBEAT_INTERVAL
+        value: "60"  # Seconds between heartbeat status lines
+      - name: LOG_BUFFER_SIZE
+        value: "100"  # Number of lines to keep in error context buffer
+      - name: PROGRESS_INTERVAL_PCT
+        value: "1"  # Print progress every N percent (e.g., 1 = print at 1%, 2%, 3%...)
+      # Completion tracking and skip behavior
+      # Path to completion log file (empty = disable skip/logging)
+      - name: COMPLETION_LOG_PATH
+        value: ""
+      # Skip projects that already have a completed metashape phase in the completion log
+      - name: SKIP_IF_COMPLETE
+        value: "false"
+
+  # Defining where to read raw drone imagery data and write out imagery products to `/ofo-share`
+  volumes:
+    - name: data
+      persistentVolumeClaim:
+        claimName: ceph-share-rw-pvc2
+
+  templates:
+    # the 'main' template defines the order of high-level steps to be completed in the workflow.
+    # the 'process-projects' step has a looping directive (withParam) which goes through each project and processes it.
+    - name: main
+      # Max concurrent projects to process in parallel. Edit this value directly to change.
+      # (Argo doesn't support parameter substitution for integer fields like parallelism)
+      parallelism: 18
+      steps:
+        - - name: compute-photogrammetry-config-subfolder
+            template: compute-photogrammetry-config-subfolder
+          - name: determine-projects
+            template: determine-projects
+        # withParam now receives only minimal references (project_name) to avoid
+        # Argo's parameter size limit. Each project loads its full config from the shared file.
+        - - name: process-projects
+            template: process-project-workflow
+            arguments:
+              parameters:
+                # Minimal reference - full config loaded from file at runtime
+                - name: project-name
+                  value: "{{item.project_name}}"
+                # Path to shared configs file
+                - name: configs-file
+                  value: "{{steps.determine-projects.outputs.parameters.configs-file}}"
+                - name: photogrammetry-config-subfolder
+                  value: "{{steps.compute-photogrammetry-config-subfolder.outputs.result}}"
+            withParam: "{{steps.determine-projects.outputs.result}}"
+
+    ## Here we define what the main steps actually do
+
+    # Compute the photogrammetry config subfolder name based on PHOTOGRAMMETRY_CONFIG_ID
+    # If PHOTOGRAMMETRY_CONFIG_ID is non-empty and not "NONE", returns "photogrammetry_<ID>", otherwise returns empty string
+    - name: compute-photogrammetry-config-subfolder
+      # Ensure CPU pods only schedule on CPU nodes (labeled by NFD based on nodegroup name)
+      nodeSelector:
+        feature.node.kubernetes.io/workload-type: cpu
+      script:
+        image: python:3.9
+        command: ["python3"]
+        source: |
+          import sys
+          config_id = "{{workflow.parameters.PHOTOGRAMMETRY_CONFIG_ID}}"
+          if config_id and config_id != "NONE":
+              print(f"photogrammetry_{config_id}", end='')
+          else:
+              print("", end='')
+
+    # Preprocess step: Read config files and generate mission parameters with enabled flags
+    # This reads each mission's config file, extracts the project name, and determines which
+    # processing steps are enabled. It also determines GPU vs CPU node scheduling for GPU-capable steps.
+    # Uses containerized preprocessing script from argo-workflow-utils.
+    #
+    # To avoid Argo's parameter size limit (default 256KB), this step writes full configs to a
+    # shared file and outputs only minimal references (project_name) to stdout.
+    # Each project loads its full config from the shared file at runtime.
+    - name: determine-projects
+      # Ensure CPU pods only schedule on CPU nodes (labeled by NFD based on nodegroup name)
+      nodeSelector:
+        feature.node.kubernetes.io/workload-type: cpu
+      container:
+        image: ghcr.io/open-forest-observatory/argo-workflow-utils:{{workflow.parameters.WORKFLOW_UTILS_IMAGE_TAG}}
+        volumeMounts:
+          - name: data
+            mountPath: /data
+        command: ["python3"]
+        args:
+          - "/app/determine_datasets.py"
+          - "{{workflow.parameters.CONFIG_LIST}}"
+          # Write full configs to shared file (artifact mode) to avoid withParam size limits
+          - "{{workflow.parameters.TEMP_WORKING_DIR}}/{{workflow.name}}/project-configs.json"
+          # Completion tracking arguments
+          - "--completion-log"
+          - "{{workflow.parameters.COMPLETION_LOG_PATH}}"
+          - "--phase"
+          - "metashape"
+          - "--skip-if-complete"
+          - "{{workflow.parameters.SKIP_IF_COMPLETE}}"
+      outputs:
+        parameters:
+          - name: configs-file
+            value: "{{workflow.parameters.TEMP_WORKING_DIR}}/{{workflow.name}}/project-configs.json"
+
+    # Load a single project's configuration from the shared configs file
+    # This avoids passing large JSON through Argo parameters (which has size limits)
+    - name: load-project-config
+      inputs:
+        parameters:
+          - name: configs-file
+          - name: project-name
+      nodeSelector:
+        feature.node.kubernetes.io/workload-type: cpu
+      script:
+        image: python:3.9-slim
+        volumeMounts:
+          - name: data
+            mountPath: /data
+        command: ["python3"]
+        source: |
+          import json
+          with open("{{inputs.parameters.configs-file}}", "r") as f:
+              configs = json.load(f)
+          project_config = configs["{{inputs.parameters.project-name}}"]
+          print(json.dumps(project_config))
+
+    # Multi-step photogrammetry workflow with conditional GPU/CPU execution
+    # Config is loaded from shared file at runtime to avoid Argo parameter size limits
+    #
+    # ===== CONFIG STRUCTURE AND USAGE =====
+    # The workflow uses TWO config representations for different purposes:
+    #
+    # 1. JSON CONFIG (from load-config task):
+    #    - Purpose: Argo workflow orchestration and scheduling
+    #    - Contains: enabled flags (match_photos_enabled, build_mesh_enabled), resource
+    #      requests (cpu_request, memory_request, gpu_resource), file paths (config,
+    #      project_name), download settings (imagery_zip_downloads), derived values
+    #    - Used by: Argo `when` conditions, dependency logic, resource allocation,
+    #      file path references
+    #    - Example fields: imagery_download_enabled, match_photos_use_gpu,
+    #      setup_cpu_request, build_mesh_gpu_resource
+    #
+    # 2. YAML CONFIG (Metashape processing config):
+    #    - Purpose: Metashape photogrammetry processing parameters
+    #    - Contains: quality settings (downscale, quality), filtering (filter_mode,
+    #      depth_maps.filter_mode), blending modes, accuracy settings, project metadata
+    #    - Used by: Processing containers running automate-metashape scripts
+    #    - Passed via: config-file parameter (path to YAML file on shared volume)
+    #    - Metashape containers read YAML directly for all processing parameters
+    #
+    # This separation keeps orchestration logic (Argo) independent from processing
+    # parameters (Metashape), making the workflow easier to maintain and extend.
+    - name: process-project-workflow
+      inputs:
+        parameters:
+          - name: project-name
+          - name: configs-file
+          - name: photogrammetry-config-subfolder
+      dag:
+        tasks:
+          # First task: Load full project config from shared file
+          # All subsequent tasks depend on this and use expressions to extract config values
+          - name: load-config
+            template: load-project-config
+            arguments:
+              parameters:
+                - name: configs-file
+                  value: "{{inputs.parameters.configs-file}}"
+                - name: project-name
+                  value: "{{inputs.parameters.project-name}}"
+
+          # Step 0a: Download imagery from S3 (conditional, runs after config loaded)
+          - name: download-imagery
+            depends: "load-config.Succeeded"
+            template: download-imagery
+            when: "{{=sprig.fromJson(tasks['load-config'].outputs.result).imagery_download_enabled == 'true'}}"
+            arguments:
+              parameters:
+                - name: imagery-zip-downloads
+                  value: "{{=toJson(sprig.fromJson(tasks['load-config'].outputs.result).imagery_zip_downloads)}}"
+                - name: project-name
+                  value: "{{inputs.parameters.project-name}}"
+
+          # Step 0b: Transform config to resolve __DOWNLOADED__ paths (always runs, idempotent)
+          # If no downloads occurred, the transform is a no-op (copies config unchanged)
+          - name: transform-config
+            template: transform-config
+            depends: "(download-imagery.Succeeded || download-imagery.Skipped) && load-config.Succeeded"
+            arguments:
+              parameters:
+                - name: config-file
+                  value: "{{=sprig.fromJson(tasks['load-config'].outputs.result).config}}"
+                - name: project-name
+                  value: "{{inputs.parameters.project-name}}"
+
+          # Step 1: Setup (always runs, CPU only)
+          - name: setup
+            template: metashape-cpu-step
+            depends: "load-config.Succeeded && transform-config.Succeeded"
+            arguments:
+              parameters:
+                - name: project-name
+                  value: "{{inputs.parameters.project-name}}"
+                - name: config-file
+                  value: "{{tasks.transform-config.outputs.parameters.transformed-config-path}}"
+                - name: step
+                  value: "setup"
+                - name: cpu-request
+                  value: "{{=sprig.fromJson(tasks['load-config'].outputs.result).setup_cpu_request}}"
+                - name: memory-request
+                  value: "{{=sprig.fromJson(tasks['load-config'].outputs.result).setup_memory_request}}"
+
+          # Step 2: Match Photos (conditional, GPU or CPU based on config)
+          - name: match-photos-gpu
+            depends: "setup.Succeeded || setup.Skipped"
+            when: "{{=sprig.fromJson(tasks['load-config'].outputs.result).match_photos_enabled == true && sprig.fromJson(tasks['load-config'].outputs.result).match_photos_use_gpu == true}}"
+            template: metashape-gpu-step
+            arguments:
+              parameters:
+                - name: project-name
+                  value: "{{inputs.parameters.project-name}}"
+                - name: config-file
+                  value: "{{tasks.transform-config.outputs.parameters.transformed-config-path}}"
+                - name: step
+                  value: "match_photos"
+                - name: gpu-resource
+                  value: "{{=sprig.fromJson(tasks['load-config'].outputs.result).match_photos_gpu_resource}}"
+                - name: gpu-count
+                  value: "{{=sprig.fromJson(tasks['load-config'].outputs.result).match_photos_gpu_count}}"
+                - name: cpu-request
+                  value: "{{=sprig.fromJson(tasks['load-config'].outputs.result).match_photos_cpu_request}}"
+                - name: memory-request
+                  value: "{{=sprig.fromJson(tasks['load-config'].outputs.result).match_photos_memory_request}}"
+
+          - name: match-photos-cpu
+            depends: "setup.Succeeded || setup.Skipped"
+            when: "{{=sprig.fromJson(tasks['load-config'].outputs.result).match_photos_enabled == true && sprig.fromJson(tasks['load-config'].outputs.result).match_photos_use_gpu == false}}"
+            template: metashape-cpu-step
+            arguments:
+              parameters:
+                - name: project-name
+                  value: "{{inputs.parameters.project-name}}"
+                - name: config-file
+                  value: "{{tasks.transform-config.outputs.parameters.transformed-config-path}}"
+                - name: step
+                  value: "match_photos"
+                - name: cpu-request
+                  value: "{{=sprig.fromJson(tasks['load-config'].outputs.result).match_photos_cpu_request}}"
+                - name: memory-request
+                  value: "{{=sprig.fromJson(tasks['load-config'].outputs.result).match_photos_memory_request}}"
+
+          # Step 3: Align Cameras (conditional, CPU only)
+          - name: align-cameras
+            depends: "match-photos-gpu.Succeeded || match-photos-gpu.Skipped || match-photos-cpu.Succeeded || match-photos-cpu.Skipped"
+            when: "{{=sprig.fromJson(tasks['load-config'].outputs.result).align_cameras_enabled == true}}"
+            template: metashape-cpu-step
+            arguments:
+              parameters:
+                - name: project-name
+                  value: "{{inputs.parameters.project-name}}"
+                - name: config-file
+                  value: "{{tasks.transform-config.outputs.parameters.transformed-config-path}}"
+                - name: step
+                  value: "align_cameras"
+                - name: cpu-request
+                  value: "{{=sprig.fromJson(tasks['load-config'].outputs.result).align_cameras_cpu_request}}"
+                - name: memory-request
+                  value: "{{=sprig.fromJson(tasks['load-config'].outputs.result).align_cameras_memory_request}}"
+
+          # Step 4: Build Depth Maps (conditional, GPU only)
+          - name: build-depth-maps
+            depends: "align-cameras.Succeeded || align-cameras.Skipped"
+            when: "{{=sprig.fromJson(tasks['load-config'].outputs.result).build_depth_maps_enabled == true}}"
+            template: metashape-gpu-step
+            arguments:
+              parameters:
+                - name: project-name
+                  value: "{{inputs.parameters.project-name}}"
+                - name: config-file
+                  value: "{{tasks.transform-config.outputs.parameters.transformed-config-path}}"
+                - name: step
+                  value: "build_depth_maps"
+                - name: gpu-resource
+                  value: "{{=sprig.fromJson(tasks['load-config'].outputs.result).build_depth_maps_gpu_resource}}"
+                - name: gpu-count
+                  value: "{{=sprig.fromJson(tasks['load-config'].outputs.result).build_depth_maps_gpu_count}}"
+                - name: cpu-request
+                  value: "{{=sprig.fromJson(tasks['load-config'].outputs.result).build_depth_maps_cpu_request}}"
+                - name: memory-request
+                  value: "{{=sprig.fromJson(tasks['load-config'].outputs.result).build_depth_maps_memory_request}}"
+
+          # Step 5: Build Point Cloud (conditional, CPU only)
+          - name: build-point-cloud
+            depends: "build-depth-maps.Succeeded || build-depth-maps.Skipped"
+            when: "{{=sprig.fromJson(tasks['load-config'].outputs.result).build_point_cloud_enabled == true}}"
+            template: metashape-cpu-step
+            arguments:
+              parameters:
+                - name: project-name
+                  value: "{{inputs.parameters.project-name}}"
+                - name: config-file
+                  value: "{{tasks.transform-config.outputs.parameters.transformed-config-path}}"
+                - name: step
+                  value: "build_point_cloud"
+                - name: cpu-request
+                  value: "{{=sprig.fromJson(tasks['load-config'].outputs.result).build_point_cloud_cpu_request}}"
+                - name: memory-request
+                  value: "{{=sprig.fromJson(tasks['load-config'].outputs.result).build_point_cloud_memory_request}}"
+
+          # Step 6: Build Mesh (conditional, GPU or CPU based on config)
+          - name: build-mesh-gpu
+            depends: "build-point-cloud.Succeeded || build-point-cloud.Skipped"
+            when: "{{=sprig.fromJson(tasks['load-config'].outputs.result).build_mesh_enabled == true && sprig.fromJson(tasks['load-config'].outputs.result).build_mesh_use_gpu == true}}"
+            template: metashape-gpu-step
+            arguments:
+              parameters:
+                - name: project-name
+                  value: "{{inputs.parameters.project-name}}"
+                - name: config-file
+                  value: "{{tasks.transform-config.outputs.parameters.transformed-config-path}}"
+                - name: step
+                  value: "build_mesh"
+                - name: gpu-resource
+                  value: "{{=sprig.fromJson(tasks['load-config'].outputs.result).build_mesh_gpu_resource}}"
+                - name: gpu-count
+                  value: "{{=sprig.fromJson(tasks['load-config'].outputs.result).build_mesh_gpu_count}}"
+                - name: cpu-request
+                  value: "{{=sprig.fromJson(tasks['load-config'].outputs.result).build_mesh_cpu_request}}"
+                - name: memory-request
+                  value: "{{=sprig.fromJson(tasks['load-config'].outputs.result).build_mesh_memory_request}}"
+
+          - name: build-mesh-cpu
+            depends: "build-point-cloud.Succeeded || build-point-cloud.Skipped"
+            when: "{{=sprig.fromJson(tasks['load-config'].outputs.result).build_mesh_enabled == true && sprig.fromJson(tasks['load-config'].outputs.result).build_mesh_use_gpu == false}}"
+            template: metashape-cpu-step
+            arguments:
+              parameters:
+                - name: project-name
+                  value: "{{inputs.parameters.project-name}}"
+                - name: config-file
+                  value: "{{tasks.transform-config.outputs.parameters.transformed-config-path}}"
+                - name: step
+                  value: "build_mesh"
+                - name: cpu-request
+                  value: "{{=sprig.fromJson(tasks['load-config'].outputs.result).build_mesh_cpu_request}}"
+                - name: memory-request
+                  value: "{{=sprig.fromJson(tasks['load-config'].outputs.result).build_mesh_memory_request}}"
+
+          # Step 7: Build DEM/Orthomosaic (conditional, CPU only)
+          - name: build-dem-orthomosaic
+            depends: "(build-point-cloud.Succeeded || build-point-cloud.Skipped) && (build-mesh-gpu.Succeeded || build-mesh-gpu.Skipped || build-mesh-cpu.Succeeded || build-mesh-cpu.Skipped)"
+            when: "{{=sprig.fromJson(tasks['load-config'].outputs.result).build_dem_orthomosaic_enabled == true}}"
+            template: metashape-cpu-step
+            arguments:
+              parameters:
+                - name: project-name
+                  value: "{{inputs.parameters.project-name}}"
+                - name: config-file
+                  value: "{{tasks.transform-config.outputs.parameters.transformed-config-path}}"
+                - name: step
+                  value: "build_dem_orthomosaic"
+                - name: cpu-request
+                  value: "{{=sprig.fromJson(tasks['load-config'].outputs.result).build_dem_orthomosaic_cpu_request}}"
+                - name: memory-request
+                  value: "{{=sprig.fromJson(tasks['load-config'].outputs.result).build_dem_orthomosaic_memory_request}}"
+
+          # Step 8: Match Photos Secondary (conditional, GPU or CPU based on config)
+          - name: match-photos-secondary-gpu
+            depends: "build-dem-orthomosaic.Succeeded || build-dem-orthomosaic.Skipped"
+            when: "{{=sprig.fromJson(tasks['load-config'].outputs.result).match_photos_secondary_enabled == true && sprig.fromJson(tasks['load-config'].outputs.result).match_photos_secondary_use_gpu == true}}"
+            template: metashape-gpu-step
+            arguments:
+              parameters:
+                - name: project-name
+                  value: "{{inputs.parameters.project-name}}"
+                - name: config-file
+                  value: "{{tasks.transform-config.outputs.parameters.transformed-config-path}}"
+                - name: step
+                  value: "match_photos_secondary"
+                - name: gpu-resource
+                  value: "{{=sprig.fromJson(tasks['load-config'].outputs.result).match_photos_secondary_gpu_resource}}"
+                - name: gpu-count
+                  value: "{{=sprig.fromJson(tasks['load-config'].outputs.result).match_photos_secondary_gpu_count}}"
+                - name: cpu-request
+                  value: "{{=sprig.fromJson(tasks['load-config'].outputs.result).match_photos_secondary_cpu_request}}"
+                - name: memory-request
+                  value: "{{=sprig.fromJson(tasks['load-config'].outputs.result).match_photos_secondary_memory_request}}"
+
+          - name: match-photos-secondary-cpu
+            depends: "build-dem-orthomosaic.Succeeded || build-dem-orthomosaic.Skipped"
+            when: "{{=sprig.fromJson(tasks['load-config'].outputs.result).match_photos_secondary_enabled == true && sprig.fromJson(tasks['load-config'].outputs.result).match_photos_secondary_use_gpu == false}}"
+            template: metashape-cpu-step
+            arguments:
+              parameters:
+                - name: project-name
+                  value: "{{inputs.parameters.project-name}}"
+                - name: config-file
+                  value: "{{tasks.transform-config.outputs.parameters.transformed-config-path}}"
+                - name: step
+                  value: "match_photos_secondary"
+                - name: cpu-request
+                  value: "{{=sprig.fromJson(tasks['load-config'].outputs.result).match_photos_secondary_cpu_request}}"
+                - name: memory-request
+                  value: "{{=sprig.fromJson(tasks['load-config'].outputs.result).match_photos_secondary_memory_request}}"
+
+          # Step 9: Align Cameras Secondary (conditional, CPU only)
+          - name: align-cameras-secondary
+            depends: "match-photos-secondary-gpu.Succeeded || match-photos-secondary-gpu.Skipped || match-photos-secondary-cpu.Succeeded || match-photos-secondary-cpu.Skipped"
+            when: "{{=sprig.fromJson(tasks['load-config'].outputs.result).align_cameras_secondary_enabled == true}}"
+            template: metashape-cpu-step
+            arguments:
+              parameters:
+                - name: project-name
+                  value: "{{inputs.parameters.project-name}}"
+                - name: config-file
+                  value: "{{tasks.transform-config.outputs.parameters.transformed-config-path}}"
+                - name: step
+                  value: "align_cameras_secondary"
+                - name: cpu-request
+                  value: "{{=sprig.fromJson(tasks['load-config'].outputs.result).align_cameras_secondary_cpu_request}}"
+                - name: memory-request
+                  value: "{{=sprig.fromJson(tasks['load-config'].outputs.result).align_cameras_secondary_memory_request}}"
+
+          # Step 10: Finalize (always runs, CPU only)
+          - name: finalize
+            depends: "(build-dem-orthomosaic.Succeeded || build-dem-orthomosaic.Skipped) && (align-cameras-secondary.Succeeded || align-cameras-secondary.Skipped)"
+            template: metashape-cpu-step
+            arguments:
+              parameters:
+                - name: project-name
+                  value: "{{inputs.parameters.project-name}}"
+                - name: config-file
+                  value: "{{tasks.transform-config.outputs.parameters.transformed-config-path}}"
+                - name: step
+                  value: "finalize"
+                - name: cpu-request
+                  value: "{{=sprig.fromJson(tasks['load-config'].outputs.result).finalize_cpu_request}}"
+                - name: memory-request
+                  value: "{{=sprig.fromJson(tasks['load-config'].outputs.result).finalize_memory_request}}"
+
+          # Upload task (runs after finalize completes)
+          - name: rclone-upload-task
+            depends: "finalize.Succeeded || finalize.Skipped"
+            template: rclone-upload-template
+            arguments:
+              parameters:
+                - name: project-name
+                  value: "{{inputs.parameters.project-name}}"
+                - name: photogrammetry-config-subfolder
+                  value: "{{inputs.parameters.photogrammetry-config-subfolder}}"
+
+          # Log metashape completion (after rclone upload succeeds)
+          - name: log-metashape-complete
+            depends: "rclone-upload-task.Succeeded"
+            when: "{{=workflow.parameters.COMPLETION_LOG_PATH != ''}}"
+            template: log-completion-template
+            arguments:
+              parameters:
+                - name: project-name
+                  value: "{{inputs.parameters.project-name}}"
+                - name: phase
+                  value: "metashape"
+                - name: completion-log-path
+                  value: "{{workflow.parameters.COMPLETION_LOG_PATH}}"
+
+          # Cleanup task (runs after metashape logging and upload complete)
+          - name: cleanup-project
+            depends: "(rclone-upload-task.Succeeded || rclone-upload-task.Skipped) && (log-metashape-complete.Succeeded || log-metashape-complete.Skipped)"
+            template: cleanup-project-template
+            arguments:
+              parameters:
+                - name: project-name
+                  value: "{{inputs.parameters.project-name}}"
+
+    ## Here we define what each step does in 'process-project-workflow' step
+
+    # CPU step template for Metashape processing
+    - name: metashape-cpu-step
+      inputs:
+        parameters:
+          - name: project-name
+          - name: config-file
+          - name: step
+          - name: cpu-request
+            default: "18"  # Default CPU cores for CPU steps
+          - name: memory-request
+            default: "100Gi"  # Default memory for CPU steps
+      # Ensure CPU pods only schedule on CPU nodes (labeled by NFD based on nodegroup name)
+      nodeSelector:
+        feature.node.kubernetes.io/workload-type: cpu
+      podSpecPatch: '{"containers":[{"name":"main","resources":{"requests":{"cpu":"{{inputs.parameters.cpu-request}}","memory":"{{inputs.parameters.memory-request}}"}}}]}'
+      script:
+        image: ghcr.io/open-forest-observatory/automate-metashape:{{workflow.parameters.AUTOMATE_METASHAPE_IMAGE_TAG}}
+        volumeMounts:
+          - name: data
+            mountPath: /data
+        command: ["/bin/sh"]
+        source: |
+          set -e
+
+          # For setup step, clean up any leftover products from a previous incomplete run
+          # Only remove project/ and output/ directories, preserve downloaded-raw-imagery/ which was added prior to this
+          if [ "{{inputs.parameters.step}}" = "setup" ]; then
+            PHOTOGRAMMETRY_DIR="{{workflow.parameters.TEMP_WORKING_DIR}}/{{workflow.name}}/{{inputs.parameters.project-name}}/photogrammetry"
+            for subdir in project output; do
+              TARGET_DIR="$PHOTOGRAMMETRY_DIR/$subdir"
+              if [ -d "$TARGET_DIR" ]; then
+                echo "[cleanup] Removing leftover data from previous run: $TARGET_DIR"
+                rm -rf "$TARGET_DIR"
+                echo "[cleanup] Successfully removed: $TARGET_DIR"
+              fi
+            done
+            echo "[cleanup] Cleanup complete (preserved downloaded-raw-imagery if present)"
+          fi
+
+          # Run the Metashape step with license retry wrapper
+          python3 /app/python/license_retry_wrapper.py \
+            --config-file "{{inputs.parameters.config-file}}" \
+            --project-path "{{workflow.parameters.TEMP_WORKING_DIR}}/{{workflow.name}}/{{inputs.parameters.project-name}}/photogrammetry/project" \
+            --output-path "{{workflow.parameters.TEMP_WORKING_DIR}}/{{workflow.name}}/{{inputs.parameters.project-name}}/photogrammetry/output" \
+            --project-name "{{inputs.parameters.project-name}}" \
+            --step "{{inputs.parameters.step}}"
+        env:
+          - name: AGISOFT_FLS
+            valueFrom:
+              secretKeyRef:
+                name: agisoft-license
+                key: license_server
+          - name: LICENSE_RETRY_INTERVAL
+            value: "{{workflow.parameters.LICENSE_RETRY_INTERVAL}}"
+          - name: LICENSE_MAX_RETRIES
+            value: "{{workflow.parameters.LICENSE_MAX_RETRIES}}"
+          - name: LOG_HEARTBEAT_INTERVAL
+            value: "{{workflow.parameters.LOG_HEARTBEAT_INTERVAL}}"
+          - name: LOG_BUFFER_SIZE
+            value: "{{workflow.parameters.LOG_BUFFER_SIZE}}"
+          - name: PROGRESS_INTERVAL_PCT
+            value: "{{workflow.parameters.PROGRESS_INTERVAL_PCT}}"
+
+    # GPU step template for Metashape processing
+    # Supports dynamic GPU resource selection (full GPU or MIG partitions) and count
+    - name: metashape-gpu-step
+      inputs:
+        parameters:
+          - name: project-name
+          - name: config-file
+          - name: step
+          - name: gpu-resource
+            default: "nvidia.com/gpu"  # Full GPU. MIG options: nvidia.com/mig-1g.5gb, mig-2g.10gb, mig-3g.20gb
+          - name: gpu-count
+            default: "1"  # Number of GPU resources to request (e.g., 2 for two MIG slices)
+          - name: cpu-request
+            default: "4"  # Default CPU cores for GPU steps
+          - name: memory-request
+            default: "16Gi"  # Default memory for GPU steps
+      # Dynamic GPU resource request via podSpecPatch (parameter substitution happens before YAML parse)
+      # GPU resource request ensures pod only schedules on nodes with GPU resources available
+      podSpecPatch: '{"containers":[{"name":"main","resources":{"requests":{"cpu":"{{inputs.parameters.cpu-request}}","memory":"{{inputs.parameters.memory-request}}","{{inputs.parameters.gpu-resource}}":"{{inputs.parameters.gpu-count}}"},"limits":{"{{inputs.parameters.gpu-resource}}":"{{inputs.parameters.gpu-count}}"}}}]}'
+      script:
+        image: ghcr.io/open-forest-observatory/automate-metashape:{{workflow.parameters.AUTOMATE_METASHAPE_IMAGE_TAG}}
+        volumeMounts:
+          - name: data
+            mountPath: /data
+        command: ["/bin/sh"]
+        source: |
+          set -e
+
+          # Run the Metashape step with license retry wrapper
+          python3 /app/python/license_retry_wrapper.py \
+            --config-file "{{inputs.parameters.config-file}}" \
+            --project-path "{{workflow.parameters.TEMP_WORKING_DIR}}/{{workflow.name}}/{{inputs.parameters.project-name}}/photogrammetry/project" \
+            --output-path "{{workflow.parameters.TEMP_WORKING_DIR}}/{{workflow.name}}/{{inputs.parameters.project-name}}/photogrammetry/output" \
+            --project-name "{{inputs.parameters.project-name}}" \
+            --step "{{inputs.parameters.step}}"
+        env:
+          - name: AGISOFT_FLS
+            valueFrom:
+              secretKeyRef:
+                name: agisoft-license
+                key: license_server
+          - name: LICENSE_RETRY_INTERVAL
+            value: "{{workflow.parameters.LICENSE_RETRY_INTERVAL}}"
+          - name: LICENSE_MAX_RETRIES
+            value: "{{workflow.parameters.LICENSE_MAX_RETRIES}}"
+          - name: LOG_HEARTBEAT_INTERVAL
+            value: "{{workflow.parameters.LOG_HEARTBEAT_INTERVAL}}"
+          - name: LOG_BUFFER_SIZE
+            value: "{{workflow.parameters.LOG_BUFFER_SIZE}}"
+          - name: PROGRESS_INTERVAL_PCT
+            value: "{{workflow.parameters.PROGRESS_INTERVAL_PCT}}"
+
+    # --------- S3 IMAGERY DOWNLOAD ---------
+    # Downloads and extracts zip files containing imagery from S3
+    - name: download-imagery
+      inputs:
+        parameters:
+          - name: imagery-zip-downloads
+          - name: project-name
+      # Ensure CPU pods only schedule on CPU nodes (labeled by NFD based on nodegroup name)
+      nodeSelector:
+        feature.node.kubernetes.io/workload-type: cpu
+      container:
+        image: ghcr.io/open-forest-observatory/argo-workflow-utils:{{workflow.parameters.WORKFLOW_UTILS_IMAGE_TAG}}
+        volumeMounts:
+          - name: data
+            mountPath: /data
+        command: ["python3", "/app/download_imagery.py"]
+        env:
+          - name: IMAGERY_ZIP_URLS
+            value: "{{inputs.parameters.imagery-zip-downloads}}"
+          - name: DOWNLOAD_DIR
+            value: "{{workflow.parameters.TEMP_WORKING_DIR}}/{{workflow.name}}/{{inputs.parameters.project-name}}/photogrammetry/downloaded-raw-imagery"
+          - name: S3_PROVIDER
+            valueFrom:
+              secretKeyRef:
+                name: s3-credentials
+                key: provider
+          - name: S3_ENDPOINT
+            valueFrom:
+              secretKeyRef:
+                name: s3-credentials
+                key: endpoint
+          - name: S3_ACCESS_KEY
+            valueFrom:
+              secretKeyRef:
+                name: s3-credentials
+                key: access_key
+          - name: S3_SECRET_KEY
+            valueFrom:
+              secretKeyRef:
+                name: s3-credentials
+                key: secret_key
+        resources:
+          requests:
+            cpu: "2"
+            memory: "2Gi"
+
+    # --------- TRANSFORM CONFIG ---------
+    # Replaces __DOWNLOADED__ prefix in config's photo_path with actual download path
+    - name: transform-config
+      inputs:
+        parameters:
+          - name: config-file
+          - name: project-name
+      # Ensure CPU pods only schedule on CPU nodes (labeled by NFD based on nodegroup name)
+      nodeSelector:
+        feature.node.kubernetes.io/workload-type: cpu
+      container:
+        image: ghcr.io/open-forest-observatory/argo-workflow-utils:{{workflow.parameters.WORKFLOW_UTILS_IMAGE_TAG}}
+        volumeMounts:
+          - name: data
+            mountPath: /data
+        command: ["python3", "/app/transform_config.py"]
+        env:
+          - name: CONFIG_FILE
+            value: "{{inputs.parameters.config-file}}"
+          - name: OUTPUT_CONFIG_FILE
+            value: "{{workflow.parameters.TEMP_WORKING_DIR}}/{{workflow.name}}/{{inputs.parameters.project-name}}/photogrammetry/config-transformed.yml"
+          - name: DOWNLOADED_IMAGERY_PATH
+            value: "{{workflow.parameters.TEMP_WORKING_DIR}}/{{workflow.name}}/{{inputs.parameters.project-name}}/photogrammetry/downloaded-raw-imagery"
+        resources:
+          requests:
+            cpu: "1"
+            memory: "256Mi"
+      outputs:
+        parameters:
+          - name: transformed-config-path
+            value: "{{workflow.parameters.TEMP_WORKING_DIR}}/{{workflow.name}}/{{inputs.parameters.project-name}}/photogrammetry/config-transformed.yml"
+
+    # --------- RCLONE UPLOAD (Docker image) ---------
+    - name: rclone-upload-template
+      inputs:
+        parameters:
+          - name: project-name
+          - name: photogrammetry-config-subfolder
+      # Ensure CPU pods only schedule on CPU nodes (labeled by NFD based on nodegroup name)
+      nodeSelector:
+        feature.node.kubernetes.io/workload-type: cpu
+      container:
+        image: rclone/rclone:latest
+        volumeMounts:
+          - name: data
+            mountPath: /data
+        command: ["/bin/sh", "-lc"]
+        args:
+          - |
+            set -euo pipefail
+            SRC="{{workflow.parameters.TEMP_WORKING_DIR}}/{{workflow.name}}/{{inputs.parameters.project-name}}/photogrammetry/output/"
+            SRC_parent="{{workflow.parameters.TEMP_WORKING_DIR}}/{{workflow.name}}/{{inputs.parameters.project-name}}/photogrammetry"
+
+            # Build S3 destination path with optional photogrammetry config subfolder
+            if [ -n "{{inputs.parameters.photogrammetry-config-subfolder}}" ]; then
+              DST="s3:{{workflow.parameters.S3_BUCKET_INTERNAL}}/{{workflow.parameters.S3_PHOTOGRAMMETRY_DIR}}/{{inputs.parameters.photogrammetry-config-subfolder}}"
+            else
+              DST="s3:{{workflow.parameters.S3_BUCKET_INTERNAL}}/{{workflow.parameters.S3_PHOTOGRAMMETRY_DIR}}"
+            fi
+
+            echo "[rclone] Uploading $SRC -> $DST"
+
+            # Note that the rclone S3 credentials are provided via environment variables set in the
+            # workflow spec below. This is an  alternative to using a rclone config file or passing
+            # command-line flags to rclone.
+            rclone copy "$SRC" "$DST" \
+              --transfers 8 --checkers 8 --retries 5 --retries-sleep=15s \
+              --s3-upload-cutoff 200Mi --s3-chunk-size 100Mi --s3-upload-concurrency 4 \
+              --stats 15s --stats-log-level NOTICE
+
+            # Check if upload was successful
+            if [ $? -eq 0 ]; then
+              echo "[rclone] Upload successful for {{inputs.parameters.project-name}}"
+
+              # Clean up local files after successful upload
+              echo "[cleanup] Removing local files after successful upload..."
+              if [ -d "$SRC_parent" ]; then
+                rm -rf "$SRC_parent"
+                echo "[cleanup] Successfully removed: $SRC_parent"
+              else
+                echo "[cleanup] Source directory not found: $SRC_parent"
+              fi
+            else
+              echo "[rclone] Upload failed for {{inputs.parameters.project-name}}"
+              echo "[cleanup] Keeping local files due to upload failure"
+              exit 1
+            fi
+
+            echo "[rclone] Upload and cleanup completed for {{inputs.parameters.project-name}}"
+
+        resources:
+          requests:
+            cpu: 500m
+            memory: "256Mi"
+          limits:
+            memory: "1Gi"
+        env:
+          # Env vars to tell rclone how to connect to S3
+          - name: RCLONE_CONFIG_S3_TYPE
+            value: "s3"
+          - name: RCLONE_CONFIG_S3_PROVIDER
+            valueFrom:
+              secretKeyRef:
+                name: s3-credentials
+                key: provider
+          - name: RCLONE_CONFIG_S3_ENDPOINT
+            valueFrom:
+              secretKeyRef:
+                name: s3-credentials
+                key: endpoint
+          - name: RCLONE_CONFIG_S3_ACCESS_KEY_ID
+            valueFrom:
+              secretKeyRef:
+                name: s3-credentials
+                key: access_key
+          - name: RCLONE_CONFIG_S3_SECRET_ACCESS_KEY
+            valueFrom:
+              secretKeyRef:
+                name: s3-credentials
+                key: secret_key
+
+    #--------- CLEANUP ITERATION DIRECTORY ---------
+    - name: cleanup-project-template
+      inputs:
+        parameters:
+          - name: project-name
+      nodeSelector:
+        feature.node.kubernetes.io/workload-type: cpu
+      container:
+        image: alpine:latest
+        volumeMounts:
+          - name: data
+            mountPath: /data
+        command: ["/bin/sh", "-c"]
+        args:
+          - |
+            PROJECT_DIR="{{workflow.parameters.TEMP_WORKING_DIR}}/{{workflow.name}}/{{inputs.parameters.project-name}}"
+            echo "[cleanup] Removing project directory: $PROJECT_DIR"
+            rm -rf "$PROJECT_DIR"
+            echo "[cleanup] Done"
+        resources:
+          requests:
+            cpu: "100m"
+            memory: "64Mi"
+
+    #--------- LOG COMPLETION ---------
+    # Appends completion entry to the shared completion log file
+    # Uses file locking to handle concurrent writes from parallel projects
+    - name: log-completion-template
+      inputs:
+        parameters:
+          - name: project-name
+          - name: phase  # "metashape" or "postprocess"
+          - name: completion-log-path
+      nodeSelector:
+        feature.node.kubernetes.io/workload-type: cpu
+      script:
+        image: python:3.9-slim
+        volumeMounts:
+          - name: data
+            mountPath: /data
+        command: ["python3"]
+        source: |
+          import json
+          import fcntl
+          import os
+          from datetime import datetime, timezone
+
+          log_path = "{{inputs.parameters.completion-log-path}}"
+
+          # Skip if no log path configured
+          if not log_path:
+              print("No completion log path configured, skipping")
+              exit(0)
+
+          entry = {
+              "project_name": "{{inputs.parameters.project-name}}",
+              "phase": "{{inputs.parameters.phase}}",
+              "timestamp": datetime.now(timezone.utc).isoformat(),
+              "workflow_name": "{{workflow.name}}"
+          }
+
+          line = json.dumps(entry) + "\n"
+
+          # Ensure directory exists
+          os.makedirs(os.path.dirname(log_path), exist_ok=True)
+
+          # Append with exclusive lock for concurrency safety
+          with open(log_path, "a") as f:
+              fcntl.flock(f.fileno(), fcntl.LOCK_EX)
+              f.write(line)
+              f.flush()
+
+          print(f"Logged completion: {entry['project_name']} at phase {entry['phase']}")
+        resources:
+          requests:
+            cpu: "100m"
+            memory: "64Mi"

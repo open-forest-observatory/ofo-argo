@@ -1,0 +1,274 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Workflow
+metadata:
+  generateName: postprocessing-workflow-
+spec:
+  serviceAccountName: argo
+  entrypoint: main
+
+  podSpecPatch: |
+    containers:
+      - name: main
+        imagePullPolicy: Always
+
+  arguments:
+    parameters:
+      - name: CONFIG_LIST
+        value: "/data/argo-input/config-lists/config_list.txt"
+      - name: TEMP_WORKING_DIR
+        value: "/data/argo-output/temp-dir"
+      - name: S3_PHOTOGRAMMETRY_DIR
+        value: "default-run"
+      - name: PHOTOGRAMMETRY_CONFIG_ID
+        value: "NONE"
+      - name: S3_BUCKET_INTERNAL
+        value: ""
+      - name: S3_BUCKET_PUBLIC
+        value: "ofo-public"
+      - name: S3_POSTPROCESSED_DIR
+        value: ""
+      - name: S3_BOUNDARY_DIR
+        value: ""
+      - name: WORKFLOW_UTILS_IMAGE_TAG
+        value: "latest"
+      - name: POSTPROCESSING_IMAGE_TAG
+        value: "latest"
+      - name: COMPLETION_LOG_PATH
+        value: ""
+      # Skip projects that already have a completed postprocess phase in the completion log
+      - name: SKIP_IF_COMPLETE
+        value: "false"
+
+  volumes:
+    - name: data
+      persistentVolumeClaim:
+        claimName: ceph-share-rw-pvc2
+
+  templates:
+    # Main template: determine projects, compute config subfolder, then loop
+    - name: main
+      parallelism: 18
+      steps:
+        - - name: compute-photogrammetry-config-subfolder
+            template: compute-photogrammetry-config-subfolder
+          - name: determine-projects
+            template: determine-projects
+        - - name: process-projects
+            template: process-project-workflow
+            arguments:
+              parameters:
+                - name: project-name
+                  value: "{{item.project_name}}"
+                - name: photogrammetry-config-subfolder
+                  value: "{{steps.compute-photogrammetry-config-subfolder.outputs.result}}"
+            withParam: "{{steps.determine-projects.outputs.result}}"
+
+    # Compute the photogrammetry config subfolder name
+    - name: compute-photogrammetry-config-subfolder
+      nodeSelector:
+        feature.node.kubernetes.io/workload-type: cpu
+      script:
+        image: python:3.9
+        command: ["python3"]
+        source: |
+          import sys
+          config_id = "{{workflow.parameters.PHOTOGRAMMETRY_CONFIG_ID}}"
+          if config_id and config_id != "NONE":
+              print(f"photogrammetry_{config_id}", end='')
+          else:
+              print("", end='')
+
+    # Determine which projects to process
+    # Always requires metashape phase complete, no output file (no project-configs.json)
+    - name: determine-projects
+      nodeSelector:
+        feature.node.kubernetes.io/workload-type: cpu
+      container:
+        image: ghcr.io/open-forest-observatory/argo-workflow-utils:{{workflow.parameters.WORKFLOW_UTILS_IMAGE_TAG}}
+        volumeMounts:
+          - name: data
+            mountPath: /data
+        command: ["python3"]
+        args:
+          - "/app/determine_datasets.py"
+          - "{{workflow.parameters.CONFIG_LIST}}"
+          # No output file arg - only minimal refs to stdout
+          - "--completion-log"
+          - "{{workflow.parameters.COMPLETION_LOG_PATH}}"
+          - "--phase"
+          - "postprocess"
+          - "--skip-if-complete"
+          - "{{workflow.parameters.SKIP_IF_COMPLETE}}"
+          # Require metashape phase complete to consider a project for post-processing
+          - "--require-phase"
+          - "metashape"
+
+    # Per-project DAG: postprocessing -> log completion -> cleanup
+    - name: process-project-workflow
+      inputs:
+        parameters:
+          - name: project-name
+          - name: photogrammetry-config-subfolder
+      dag:
+        tasks:
+          - name: postprocessing-task
+            template: postprocessing-template
+            arguments:
+              parameters:
+                - name: project-name
+                  value: "{{inputs.parameters.project-name}}"
+                - name: photogrammetry-config-subfolder
+                  value: "{{inputs.parameters.photogrammetry-config-subfolder}}"
+
+          - name: log-postprocess-complete
+            depends: "postprocessing-task.Succeeded"
+            when: "{{=workflow.parameters.COMPLETION_LOG_PATH != ''}}"
+            template: log-completion-template
+            arguments:
+              parameters:
+                - name: project-name
+                  value: "{{inputs.parameters.project-name}}"
+                - name: phase
+                  value: "postprocess"
+                - name: completion-log-path
+                  value: "{{workflow.parameters.COMPLETION_LOG_PATH}}"
+
+          - name: cleanup-project
+            depends: "(postprocessing-task.Succeeded || postprocessing-task.Skipped) && (log-postprocess-complete.Succeeded || log-postprocess-complete.Skipped)"
+            template: cleanup-project-template
+            arguments:
+              parameters:
+                - name: project-name
+                  value: "{{inputs.parameters.project-name}}"
+
+    # Post-processing template
+    - name: postprocessing-template
+      inputs:
+        parameters:
+          - name: project-name
+          - name: photogrammetry-config-subfolder
+      nodeSelector:
+        feature.node.kubernetes.io/workload-type: cpu
+      container:
+        image: ghcr.io/open-forest-observatory/photogrammetry-postprocessing:{{workflow.parameters.POSTPROCESSING_IMAGE_TAG}}
+        volumeMounts:
+          - name: data
+            mountPath: /data
+        env:
+          - name: S3_PROVIDER
+            valueFrom:
+              secretKeyRef:
+                name: s3-credentials
+                key: provider
+          - name: S3_ENDPOINT
+            valueFrom:
+              secretKeyRef:
+                name: s3-credentials
+                key: endpoint
+          - name: S3_ACCESS_KEY
+            valueFrom:
+              secretKeyRef:
+                name: s3-credentials
+                key: access_key
+          - name: S3_SECRET_KEY
+            valueFrom:
+              secretKeyRef:
+                name: s3-credentials
+                key: secret_key
+          - name: S3_BUCKET_INTERNAL
+            value: "{{workflow.parameters.S3_BUCKET_INTERNAL}}"
+          - name: S3_PHOTOGRAMMETRY_DIR
+            value: "{{workflow.parameters.S3_PHOTOGRAMMETRY_DIR}}"
+          - name: PHOTOGRAMMETRY_CONFIG_SUBFOLDER
+            value: "{{inputs.parameters.photogrammetry-config-subfolder}}"
+          - name: PROJECT_NAME
+            value: "{{inputs.parameters.project-name}}"
+          - name: S3_BUCKET_INPUT_BOUNDARY
+            value: "{{workflow.parameters.S3_BUCKET_PUBLIC}}"
+          - name: INPUT_BOUNDARY_DIR
+            value: "{{workflow.parameters.S3_BOUNDARY_DIR}}"
+          - name: S3_BUCKET_PUBLIC
+            value: "{{workflow.parameters.S3_BUCKET_PUBLIC}}"
+          - name: S3_POSTPROCESSED_DIR
+            value: "{{workflow.parameters.S3_POSTPROCESSED_DIR}}"
+          - name: TEMP_WORKING_DIR_POSTPROCESSING
+            value: "{{workflow.parameters.TEMP_WORKING_DIR}}/{{workflow.name}}/{{inputs.parameters.project-name}}/postprocessing"
+        resources:
+          requests:
+            cpu: "12"
+            memory: "48Gi"
+          limits:
+            memory: "56Gi"
+
+    # Log completion template
+    - name: log-completion-template
+      inputs:
+        parameters:
+          - name: project-name
+          - name: phase  # "postprocess"
+          - name: completion-log-path
+      nodeSelector:
+        feature.node.kubernetes.io/workload-type: cpu
+      script:
+        image: python:3.9-slim
+        volumeMounts:
+          - name: data
+            mountPath: /data
+        command: ["python3"]
+        source: |
+          import json
+          import fcntl
+          import os
+          from datetime import datetime, timezone
+
+          log_path = "{{inputs.parameters.completion-log-path}}"
+
+          if not log_path:
+              print("No completion log path configured, skipping")
+              exit(0)
+
+          entry = {
+              "project_name": "{{inputs.parameters.project-name}}",
+              "phase": "{{inputs.parameters.phase}}",
+              "timestamp": datetime.now(timezone.utc).isoformat(),
+              "workflow_name": "{{workflow.name}}"
+          }
+
+          line = json.dumps(entry) + "\n"
+
+          os.makedirs(os.path.dirname(log_path), exist_ok=True)
+
+          with open(log_path, "a") as f:
+              fcntl.flock(f.fileno(), fcntl.LOCK_EX)
+              f.write(line)
+              f.flush()
+
+          print(f"Logged completion: {entry['project_name']} at phase {entry['phase']}")
+        resources:
+          requests:
+            cpu: "100m"
+            memory: "64Mi"
+
+    # Cleanup project temp directory
+    - name: cleanup-project-template
+      inputs:
+        parameters:
+          - name: project-name
+      nodeSelector:
+        feature.node.kubernetes.io/workload-type: cpu
+      container:
+        image: alpine:latest
+        volumeMounts:
+          - name: data
+            mountPath: /data
+        command: ["/bin/sh", "-c"]
+        args:
+          - |
+            PROJECT_DIR="{{workflow.parameters.TEMP_WORKING_DIR}}/{{workflow.name}}/{{inputs.parameters.project-name}}"
+            echo "[cleanup] Removing project directory: $PROJECT_DIR"
+            rm -rf "$PROJECT_DIR"
+            echo "[cleanup] Done"
+        resources:
+          requests:
+            cpu: "100m"
+            memory: "64Mi"
