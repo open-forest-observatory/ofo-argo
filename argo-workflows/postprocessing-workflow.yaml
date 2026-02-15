@@ -35,9 +35,9 @@ spec:
         value: "latest"
       - name: COMPLETION_LOG_PATH
         value: ""
-      # Skip projects based on completion status: "none" or "postprocess"
+      # Skip projects that already have a completed postprocess phase in the completion log
       - name: SKIP_IF_COMPLETE
-        value: "none"
+        value: "false"
 
   volumes:
     - name: data
@@ -95,6 +95,8 @@ spec:
           # No output file arg - only minimal refs to stdout
           - "--completion-log"
           - "{{workflow.parameters.COMPLETION_LOG_PATH}}"
+          - "--phase"
+          - "postprocess"
           - "--skip-if-complete"
           - "{{workflow.parameters.SKIP_IF_COMPLETE}}"
           # Require metashape phase complete to consider a project for post-processing

@@ -17,8 +17,10 @@ Arguments:
 Options:
     --completion-log PATH       Path to completion log file (JSON Lines format)
                                 Use separate log files per config (e.g., completion-log-default.jsonl)
-    --skip-if-complete MODE     Skip projects based on completion status:
-                                none (default), metashape, postprocess
+    --phase PHASE               Which phase this workflow runs (metashape or postprocess).
+                                Used with --skip-if-complete and --require-phase.
+    --skip-if-complete BOOL     Skip projects that already completed the phase specified by --phase
+                                (true or false, default: false). Requires --phase.
     --require-phase PHASE       Only include projects that have completed the given phase
 
 Output:
@@ -146,7 +148,7 @@ def load_completion_log(log_path: str) -> Dict[str, Set[str]]:
 def should_skip_project(
     project_name: str,
     completions: Dict[str, Set[str]],
-    skip_mode: str,
+    phase: str,
 ) -> bool:
     """
     Determine if project should be skipped based on completion status.
@@ -154,16 +156,13 @@ def should_skip_project(
     Args:
         project_name: Project identifier
         completions: Completion lookup from load_completion_log()
-        skip_mode: One of "none", "metashape", "postprocess"
+        phase: The phase to check for completion (e.g., "metashape", "postprocess")
 
     Returns:
         True if the project should be skipped entirely
     """
-    if skip_mode == "none":
-        return False
-
     completed_phases = completions.get(project_name, set())
-    return skip_mode in completed_phases
+    return phase in completed_phases
 
 
 def should_include_project(
@@ -512,7 +511,8 @@ def main(
     config_list_path: str,
     output_file_path: Optional[str] = None,
     completion_log: Optional[str] = None,
-    skip_if_complete: str = "none",
+    phase: Optional[str] = None,
+    skip_if_complete: bool = False,
     require_phase: Optional[str] = None,
 ) -> None:
     """
@@ -527,12 +527,17 @@ def main(
             full configs are written to this file. Stdout always contains minimal refs.
         completion_log: Optional path to completion log file (JSON Lines format).
             Should be config-specific (e.g., completion-log-default.jsonl).
-        skip_if_complete: Skip mode - "none", "metashape", or "postprocess".
+        phase: Which phase this workflow runs ("metashape" or "postprocess").
+            Required when --skip-if-complete is used.
+        skip_if_complete: If True, skip projects that already completed the given phase.
         require_phase: Only include projects that have completed this phase.
     """
+    if skip_if_complete and not phase:
+        raise ValueError("--phase is required when --skip-if-complete is used")
+
     # Load completion log if needed for skip or require-phase logic
     completions: Dict[str, Set[str]] = {}
-    if completion_log and (skip_if_complete != "none" or require_phase is not None):
+    if completion_log and (skip_if_complete or require_phase is not None):
         completions = load_completion_log(completion_log)
         print(f"Loaded {len(completions)} project completion records from log", file=sys.stderr)
 
@@ -580,8 +585,8 @@ def main(
                 continue
             seen_names.add(name)
 
-            # Check if should skip based on completion status
-            if should_skip_project(name, completions, skip_if_complete):
+            # Check if should skip based on completion status (phase guaranteed non-None by earlier validation)
+            if skip_if_complete and phase and should_skip_project(name, completions, phase):
                 phases = completions.get(name, set())
                 phases_str = ", ".join(sorted(phases)) if phases else "unknown"
                 print(
@@ -637,16 +642,16 @@ if __name__ == "__main__":
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-    # Metashape workflow
+    # Metashape workflow (skip already-completed metashape projects)
     python determine_datasets.py /data/config_list.txt /data/output/configs.json \\
         --completion-log /data/completion-log-default.jsonl \\
-        --skip-if-complete metashape
+        --phase metashape --skip-if-complete true
 
-    # Postprocessing workflow (no output file, require metashape phase)
+    # Postprocessing workflow (require metashape done, skip already-postprocessed)
     python determine_datasets.py /data/config_list.txt \\
         --completion-log /data/completion-log-default.jsonl \\
-        --require-phase metashape \\
-        --skip-if-complete postprocess
+        --phase postprocess --skip-if-complete true \\
+        --require-phase metashape
 
     # No skip, no output file
     python determine_datasets.py /data/config_list.txt
@@ -670,11 +675,16 @@ Examples:
         help="Path to completion log file (JSON Lines format)",
     )
     parser.add_argument(
+        "--phase",
+        choices=["metashape", "postprocess"],
+        default=None,
+        help="Which phase this workflow runs. Required when --skip-if-complete is used.",
+    )
+    parser.add_argument(
         "--skip-if-complete",
-        choices=["none", "metashape", "postprocess"],
-        default="none",
-        help="Skip projects based on completion status: "
-        "none (default), metashape, postprocess",
+        choices=["true", "false"],
+        default="false",
+        help="Skip projects that already completed the phase specified by --phase",
     )
     parser.add_argument(
         "--require-phase",
@@ -689,6 +699,7 @@ Examples:
         config_list_path=args.config_list_path,
         output_file_path=args.output_file_path,
         completion_log=args.completion_log,
-        skip_if_complete=args.skip_if_complete,
+        phase=args.phase,
+        skip_if_complete=args.skip_if_complete == "true",
         require_phase=args.require_phase,
     )

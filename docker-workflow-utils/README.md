@@ -27,7 +27,8 @@ Preprocessing script for the step-based photogrammetry workflow. Reads mission c
 ```bash
 python3 /app/determine_datasets.py <config_list_path> [output_file] \
   [--completion-log LOG_PATH] \
-  [--skip-if-complete {none,metashape,postprocess}] \
+  [--phase {metashape,postprocess}] \
+  [--skip-if-complete {true,false}] \
   [--require-phase {metashape,postprocess}]
 ```
 
@@ -35,7 +36,8 @@ python3 /app/determine_datasets.py <config_list_path> [output_file] \
 - `config_list_path`: Path to text file listing config files (relative to `/data`)
 - `output_file`: Optional output file for full configs JSON. If omitted, no full configs are written.
 - `--completion-log`: Path to config-specific completion log file (e.g., `completion-log-default.jsonl`)
-- `--skip-if-complete`: Skip mode (default: `none`)
+- `--phase`: Which phase this workflow runs (`metashape` or `postprocess`). Required when `--skip-if-complete true`.
+- `--skip-if-complete`: Skip projects that already completed the given `--phase` (default: `false`)
 - `--require-phase`: Only include projects that have completed the given phase
 
 **Output:**
@@ -47,13 +49,13 @@ python3 /app/determine_datasets.py <config_list_path> [output_file] \
 # Metashape workflow: write full configs, skip completed
 python3 /app/determine_datasets.py /data/config_list.txt /data/output/configs.json \
   --completion-log /data/completion-log-default.jsonl \
-  --skip-if-complete metashape
+  --phase metashape --skip-if-complete true
 
 # Postprocessing workflow: no output file, require metashape phase
 python3 /app/determine_datasets.py /data/config_list.txt \
   --completion-log /data/completion-log-default.jsonl \
-  --require-phase metashape \
-  --skip-if-complete postprocess
+  --phase postprocess --skip-if-complete true \
+  --require-phase metashape
 
 # No skip, no output file
 python3 /app/determine_datasets.py /data/config_list.txt

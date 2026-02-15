@@ -57,9 +57,9 @@ spec:
       # Path to completion log file (empty = disable skip/logging)
       - name: COMPLETION_LOG_PATH
         value: ""
-      # Skip projects based on completion status: "none" or "metashape"
+      # Skip projects that already have a completed metashape phase in the completion log
       - name: SKIP_IF_COMPLETE
-        value: "none"
+        value: "false"
 
   # Defining where to read raw drone imagery data and write out imagery products to `/ofo-share`
   volumes:
@@ -140,6 +140,8 @@ spec:
           # Completion tracking arguments
           - "--completion-log"
           - "{{workflow.parameters.COMPLETION_LOG_PATH}}"
+          - "--phase"
+          - "metashape"
           - "--skip-if-complete"
           - "{{workflow.parameters.SKIP_IF_COMPLETE}}"
       outputs:

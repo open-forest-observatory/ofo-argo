@@ -588,7 +588,7 @@ argo submit -n argo postprocessing-workflow.yaml \
 | `LOG_BUFFER_SIZE` | Number of recent output lines kept in memory for error context (default: `100`). On failure, these lines are dumped to console for immediate debugging. See [Heartbeat Logger and Progress Monitoring](#heartbeat-logger-and-progress-monitoring) |
 | `PROGRESS_INTERVAL_PCT` | Percentage interval for progress reporting during Metashape API calls (default: `1`). Prints structured `[progress]` lines at each threshold (e.g., 1%, 2%, 3%). See [Heartbeat Logger and Progress Monitoring](#heartbeat-logger-and-progress-monitoring) |
 | `COMPLETION_LOG_PATH` | Path to completion log file for tracking finished projects (default: `""`). When set, the workflow logs completed projects and can skip already-completed work. See [Completion Tracking and Skip-If-Complete](#completion-tracking-and-skip-if-complete) |
-| `SKIP_IF_COMPLETE` | Skip projects based on completion status (default: `"none"`). Options: `none` (never skip), `metashape` (skip if metashape or postprocess complete). See [Completion Tracking and Skip-If-Complete](#completion-tracking-and-skip-if-complete) |
+| `SKIP_IF_COMPLETE` | Skip projects that already have a completed metashape phase in the completion log (default: `"false"`). See [Completion Tracking and Skip-If-Complete](#completion-tracking-and-skip-if-complete) |
 
 ### Postprocessing workflow parameters
 
@@ -605,7 +605,7 @@ argo submit -n argo postprocessing-workflow.yaml \
 | `WORKFLOW_UTILS_IMAGE_TAG` | Docker image tag for argo-workflow-utils container (default: `latest`) |
 | `POSTPROCESSING_IMAGE_TAG` | Docker image tag for the photogrammetry-postprocessing container (default: `latest`) |
 | `COMPLETION_LOG_PATH` | Path to completion log file. **Required** — the postprocessing workflow uses this to find projects with completed metashape phase |
-| `SKIP_IF_COMPLETE` | Skip projects based on completion status (default: `"none"`). Options: `none` (never skip), `postprocess` (skip if postprocess already complete) |
+| `SKIP_IF_COMPLETE` | Skip projects that already have a completed postprocess phase in the completion log (default: `"false"`) |
 
 **Secrets configuration:**
 
@@ -806,21 +806,15 @@ The completion log is a JSON Lines file (`.jsonl`) where each line represents a 
 
 ### Skip Modes
 
-Each workflow has its own valid `SKIP_IF_COMPLETE` values:
+`SKIP_IF_COMPLETE` is a boolean (`"true"` or `"false"`) that controls whether to skip projects whose phase is already recorded in the completion log. Each workflow automatically checks its own phase:
 
-**Metashape workflow:**
+- **Metashape workflow**: Skips projects with a completed `metashape` (or `postprocess`) phase
+- **Postprocessing workflow**: Skips projects with a completed `postprocess` phase
 
-| Mode | Behavior | Use Case |
-|------|----------|----------|
-| `none` (default) | Never skip any projects | Fresh processing run |
-| `metashape` | Skip project if metashape OR postprocess is complete | Resume after cancellation |
-
-**Postprocessing workflow:**
-
-| Mode | Behavior | Use Case |
-|------|----------|----------|
-| `none` (default) | Never skip (still requires metashape phase via `--require-phase`) | Run postprocessing on all metashape-complete projects |
-| `postprocess` | Skip if postprocess is already complete | Resume after cancellation |
+| Value | Behavior | Use Case |
+|-------|----------|----------|
+| `"false"` (default) | Never skip any projects | Fresh processing run |
+| `"true"` | Skip projects already completed for this workflow's phase | Resume after cancellation |
 
 ### Usage Examples
 
@@ -832,7 +826,7 @@ If the metashape workflow was cancelled or failed partway through, resubmit to s
 argo submit -n argo metashape-workflow.yaml \
   -p CONFIG_LIST=/data/argo-input/configs/batch1.txt \
   -p COMPLETION_LOG_PATH=/data/argo-input/config-lists/completion-log-default.jsonl \
-  -p SKIP_IF_COMPLETE=metashape \
+  -p SKIP_IF_COMPLETE=true \
   -p TEMP_WORKING_DIR=/data/argo-output/tmp/batch1 \
   # ... other parameters ...
 ```
@@ -861,7 +855,7 @@ To rerun postprocessing (e.g., changed clipping boundaries) while skipping alrea
 argo submit -n argo postprocessing-workflow.yaml \
   -p CONFIG_LIST=/data/argo-input/configs/batch1.txt \
   -p COMPLETION_LOG_PATH=/data/argo-input/config-lists/completion-log-default.jsonl \
-  -p SKIP_IF_COMPLETE=postprocess \
+  -p SKIP_IF_COMPLETE=true \
   -p TEMP_WORKING_DIR=/data/argo-output/tmp/batch1-reprocess \
   # ... other parameters ...
 ```
@@ -874,25 +868,10 @@ To reprocess everything regardless of completion log:
 argo submit -n argo metashape-workflow.yaml \
   -p CONFIG_LIST=/data/argo-input/configs/batch1.txt \
   -p COMPLETION_LOG_PATH=/data/argo-input/config-lists/completion-log-default.jsonl \
-  -p SKIP_IF_COMPLETE=none \
   # ... other parameters ...
 ```
 
-All projects will run, and completion will still be logged for future use.
-
-#### First-time processing with completion tracking
-
-Enable completion tracking from the start to make future reruns easier:
-
-```bash
-argo submit -n argo metashape-workflow.yaml \
-  -p CONFIG_LIST=/data/argo-input/configs/batch1.txt \
-  -p COMPLETION_LOG_PATH=/data/argo-input/config-lists/completion-log-default.jsonl \
-  -p SKIP_IF_COMPLETE=none \
-  # ... other parameters ...
-```
-
-The log will be created and populated as projects complete.
+All projects will run (since `SKIP_IF_COMPLETE` defaults to `"false"`), and completion will still be logged for future use.
 
 ### Bootstrapping from Existing Products
 
@@ -983,8 +962,8 @@ This reads the original config list, filters out completed projects, and outputs
    - **Debug**: Check the `determine-projects` step logs to see extracted project names
    - **Solution**: Ensure `project.project_name` in config matches the log entry
 
-3. **Wrong skip mode**: `SKIP_IF_COMPLETE` is set to `none` or a mode that doesn't match completion level
-   - **Solution**: Use `postprocess` for conservative skipping, or `both` for granular control
+3. **Skip not enabled**: `SKIP_IF_COMPLETE` is `"false"` (the default)
+   - **Solution**: Set `-p SKIP_IF_COMPLETE=true` to skip already-completed projects
 
 4. **Completion log path incorrect**: The log file isn't where the workflow expects
    - **Debug**: Check workflow logs for "completion log not found" messages
