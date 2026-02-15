@@ -645,7 +645,7 @@ Metashape produces extremely verbose stdout during processing. With many project
 
 The system has two layers:
 
-1. **Progress callbacks**: Metashape API calls report structured `[progress] step: X%` messages at configurable intervals (e.g., every 10%)
+1. **Progress callbacks**: Metashape API calls report progress at configurable intervals (controlled by `PROGRESS_INTERVAL_PCT`). In sparse mode, progress is folded into heartbeat lines rather than printed separately. In full output mode, structured `[progress] step: X%` lines print immediately.
 2. **Output monitor**: The license retry wrapper filters subprocess output, writing the full log to a file on the shared volume while only passing through important lines to the console
 
 ### Operating Modes
@@ -654,8 +654,9 @@ The behavior is controlled by `LOG_HEARTBEAT_INTERVAL`:
 
 **Sparse mode (default, `LOG_HEARTBEAT_INTERVAL > 0`):**
 
-- Console shows only `[progress]`, `[license-wrapper]`, and `[monitor]` lines, plus periodic heartbeats
-- Heartbeat includes timestamp, line count, elapsed time, and the most recent Metashape output line
+- Console shows only `[license-wrapper]` and `[monitor]` lines, plus periodic heartbeats
+- Heartbeat includes timestamp, output line count, elapsed time, latest progress percentage, and the most recent Metashape output line
+- Progress percentages are folded into heartbeat lines rather than printed separately
 - Full log file written to disk with every line (no timestamps added, zero overhead)
 - On failure, the last `LOG_BUFFER_SIZE` lines are dumped to console for immediate debugging
 
@@ -675,21 +676,16 @@ No nodelocked license found
 License server 149.165.171.237:5842: OK
 [license-wrapper] License check passed, proceeding with workflow...
 [monitor] Full log: /data/.../photogrammetry/metashape-build_depth_maps.log
-[progress] buildDepthMaps: 10%
-[heartbeat] 14:32:15 | lines: 247 | elapsed: 60s | last: Processing depth map for camera 145...
-[progress] buildDepthMaps: 20%
-[progress] buildDepthMaps: 30%
-[heartbeat] 14:33:15 | lines: 512 | elapsed: 120s | last: Building point cloud from depth maps... chunk 3/12
-[progress] buildDepthMaps: 40%
+[heartbeat] 14:32:15 | output lines: 247 | elapsed: 60s | buildDepthMaps: 20% | last: Processing depth map for camera 145...
+[heartbeat] 14:33:15 | output lines: 512 | elapsed: 120s | buildDepthMaps: 45% | last: Building point cloud from depth maps... chunk 3/12
 ...
-[progress] buildDepthMaps: 100%
-[monitor] SUCCESS | total lines: 5247 | elapsed: 3847s
-[monitor] Full log saved to: /data/.../photogrammetry/metashape-build_depth_maps.log
+[monitor] SUCCESS | total output lines: 5247 | elapsed: 3847s
+[monitor] Full metashape output log saved to: /data/.../photogrammetry/metashape-build_depth_maps.log
 ```
 
 **Error with buffer dump (sparse mode):**
 ```
-[progress] buildDepthMaps: 60%
+[heartbeat] 15:47:00 | output lines: 3100 | elapsed: 7200s | buildDepthMaps: 60% | last: Processing depth map for camera 3175...
 
 [monitor] === Last 100 lines before error ===
 2024-02-08 15:47:15 Processing depth map for camera 3180...
@@ -698,8 +694,8 @@ License server 149.165.171.237:5842: OK
 RuntimeError: Not enough memory
 [monitor] === End error context ===
 
-[monitor] FAILED (exit code 1) | total lines: 3247 | elapsed: 7215s
-[monitor] Full log saved to: /data/.../photogrammetry/metashape-build_depth_maps.log
+[monitor] FAILED (exit code 1) | total output lines: 3247 | elapsed: 7215s
+[monitor] Full metashape output log saved to: /data/.../photogrammetry/metashape-build_depth_maps.log
 ```
 
 ### Full Log Files
