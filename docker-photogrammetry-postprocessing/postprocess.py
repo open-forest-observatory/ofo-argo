@@ -641,8 +641,9 @@ def postprocess_photogrammetry_containerized(
                 == f"{mission_id}_dtm-ptcloud.tif"
             ]["full_path"].iloc[0]
         )
-        # Path to a file in the top level of the output folder
-        output_file = Path(postprocessed_path, "photogrammetry-derived-alt.gpkg")
+        output_file = Path(
+            postprocessed_path, "full", "photogrammetry-derived-alt.gpkg"
+        )
 
         # Compute height above ground
         height_above_ground = compute_height_above_ground(
