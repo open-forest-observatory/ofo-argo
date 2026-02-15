@@ -53,10 +53,7 @@ def main():
                     if args.phase == "metashape":
                         # Skip if any completion (metashape or postprocess)
                         completed.add(entry["project_name"])
-                    elif (
-                        args.phase == "postprocess"
-                        and phase == "postprocess"
-                    ):
+                    elif args.phase == "postprocess" and phase == "postprocess":
                         # Skip only if postprocess complete
                         completed.add(entry["project_name"])
                 except (json.JSONDecodeError, KeyError):

@@ -40,7 +40,9 @@ import yaml
 
 # Regex for valid project names: must start and end with alphanumeric,
 # internal characters can be alphanumeric, dots, hyphens, or underscores
-VALID_PROJECT_NAME_RE = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9._-]*[a-zA-Z0-9]$|^[a-zA-Z0-9]$")
+VALID_PROJECT_NAME_RE = re.compile(
+    r"^[a-zA-Z0-9][a-zA-Z0-9._-]*[a-zA-Z0-9]$|^[a-zA-Z0-9]$"
+)
 
 
 def get_nested(d: Dict[str, Any], keys: List[str], default: Any = None) -> Any:
@@ -539,7 +541,10 @@ def main(
     completions: Dict[str, Set[str]] = {}
     if completion_log and (skip_if_complete or require_phase is not None):
         completions = load_completion_log(completion_log)
-        print(f"Loaded {len(completions)} project completion records from log", file=sys.stderr)
+        print(
+            f"Loaded {len(completions)} project completion records from log",
+            file=sys.stderr,
+        )
 
     # Create completion log file if it doesn't exist (for later appending by workflow)
     if completion_log and not os.path.exists(completion_log):
@@ -586,7 +591,11 @@ def main(
             seen_names.add(name)
 
             # Check if should skip based on completion status (phase guaranteed non-None by earlier validation)
-            if skip_if_complete and phase and should_skip_project(name, completions, phase):
+            if (
+                skip_if_complete
+                and phase
+                and should_skip_project(name, completions, phase)
+            ):
                 phases = completions.get(name, set())
                 phases_str = ", ".join(sorted(phases)) if phases else "unknown"
                 print(

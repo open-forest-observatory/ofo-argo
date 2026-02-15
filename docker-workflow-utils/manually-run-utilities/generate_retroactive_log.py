@@ -281,9 +281,7 @@ Note on multiple configs:
 
     print(f"\nGenerated {len(entries)} log entries:", file=sys.stderr)
     metashape_only = sum(1 for e in entries if e["phase"] == "metashape")
-    postprocess_count = sum(
-        1 for e in entries if e["phase"] == "postprocess"
-    )
+    postprocess_count = sum(1 for e in entries if e["phase"] == "postprocess")
     print(f"  - metashape phase: {metashape_only}", file=sys.stderr)
     print(f"  - postprocess phase: {postprocess_count}", file=sys.stderr)
 
