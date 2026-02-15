@@ -543,6 +543,7 @@ argo submit -n argo metashape-workflow.yaml \
   -p S3_BUCKET_INTERNAL=ofo-internal \
   -p S3_PHOTOGRAMMETRY_DIR=photogrammetry-outputs_dytest02 \
   -p PHOTOGRAMMETRY_CONFIG_ID=03 \
+  -p COMPLETION_LOG_PATH=/data/argo-input/config-lists/completion-log-default.jsonl \
   -p WORKFLOW_UTILS_IMAGE_TAG=latest \
   -p AUTOMATE_METASHAPE_IMAGE_TAG=latest
 ```
