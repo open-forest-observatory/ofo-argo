@@ -572,6 +572,9 @@ Database parameters (not currently functional):
 | `AUTOMATE_METASHAPE_IMAGE_TAG` | Docker image tag for the automate-metashape container (default: `latest`). Use a specific branch name or tag to test development versions |
 | `LICENSE_RETRY_INTERVAL` | Seconds to wait between license acquisition retries (default: `300` = 5 minutes). See [License Retry Behavior](#license-retry-behavior) |
 | `LICENSE_MAX_RETRIES` | Maximum license retry attempts. `0` = no retries (fail immediately, default), `-1` = unlimited retries, `>0` = that many retries. See [License Retry Behavior](#license-retry-behavior) |
+| `LOG_HEARTBEAT_INTERVAL` | Seconds between heartbeat status lines during Metashape processing (default: `60`). Set to `0` to disable filtering and print all Metashape output (original behavior). See [Heartbeat Logger and Progress Monitoring](#heartbeat-logger-and-progress-monitoring) |
+| `LOG_BUFFER_SIZE` | Number of recent output lines kept in memory for error context (default: `100`). On failure, these lines are dumped to console for immediate debugging. See [Heartbeat Logger and Progress Monitoring](#heartbeat-logger-and-progress-monitoring) |
+| `PROGRESS_INTERVAL_PCT` | Percentage interval for progress reporting during Metashape API calls (default: `1`). Prints structured `[progress]` lines at each threshold (e.g., 1%, 2%, 3%). See [Heartbeat Logger and Progress Monitoring](#heartbeat-logger-and-progress-monitoring) |
 | `COMPLETION_LOG_PATH` | Path to completion log file for tracking finished projects (default: `""`). When set, the workflow logs completed projects and can skip already-completed work. See [Completion Tracking and Skip-If-Complete](#completion-tracking-and-skip-if-complete) |
 | `SKIP_IF_COMPLETE` | Skip projects based on completion status (default: `"none"`). Options: `none` (never skip), `metashape` (skip if metashape or postprocess complete), `postprocess` (skip only if postprocess complete), `both` (granular: skip metashape if done, run postprocessing). See [Completion Tracking and Skip-If-Complete](#completion-tracking-and-skip-if-complete) |
 | `DB_*` | Database parameters for logging Argo status (not currently functional; credentials in [OFO credentials document](https://docs.google.com/document/d/155AP0P3jkVa-yT53a-QLp7vBAfjRa78gdST1Dfb4fls/edit?tab=t.0)) |
@@ -633,6 +636,98 @@ License server 149.165.171.237:5842: OK
 !!! tip "When to enable retries"
     - **High contention (many parallel workflows)**: Set `LICENSE_MAX_RETRIES=-1` for unlimited retries, or a reasonable limit like `288` (24 hours at 5-minute intervals)
     - **Low contention**: Keep the default (`0`) - if a license isn't available, something is likely wrong
+
+## Heartbeat Logger and Progress Monitoring
+
+Metashape produces extremely verbose stdout during processing. With many projects running in parallel, this volume of logs taxes the Argo artifact store and k8s control plane. The heartbeat logger reduces console output to ~50-100 lines per multi-hour job while preserving full debugging context on errors.
+
+### How It Works
+
+The system has two layers:
+
+1. **Progress callbacks**: Metashape API calls report progress at configurable intervals (controlled by `PROGRESS_INTERVAL_PCT`). In sparse mode, progress is folded into heartbeat lines rather than printed separately. In full output mode, structured `[progress] step: X%` lines print immediately.
+2. **Output monitor**: The license retry wrapper filters subprocess output, writing the full log to a file on the shared volume while only passing through important lines to the console
+
+### Operating Modes
+
+The behavior is controlled by `LOG_HEARTBEAT_INTERVAL`:
+
+**Sparse mode (default, `LOG_HEARTBEAT_INTERVAL > 0`):**
+
+- Console shows only `[license-wrapper]` and `[monitor]` lines, plus periodic heartbeats
+- Heartbeat includes timestamp, output line count, elapsed time, latest progress percentage, and the most recent Metashape output line
+- Progress percentages are folded into heartbeat lines rather than printed separately
+- Full log file written to disk with every line (no timestamps added, zero overhead)
+- On failure, the last `LOG_BUFFER_SIZE` lines are dumped to console for immediate debugging
+
+**Full output mode (`LOG_HEARTBEAT_INTERVAL=0`):**
+
+- Every line printed to console (original behavior)
+- `[progress]` milestones still appear at configured intervals
+- Full log file still written to disk
+- Error buffer still dumped on failure
+
+### Console Output Examples
+
+**Normal operation (sparse mode):**
+```
+[license-wrapper] Starting Metashape workflow (attempt 1)...
+No nodelocked license found
+License server 149.165.171.237:5842: OK
+[license-wrapper] License check passed, proceeding with workflow...
+[monitor] Full log: /data/.../photogrammetry/metashape-build_depth_maps.log
+[heartbeat] 14:32:15 | output lines: 247 | elapsed: 60s | buildDepthMaps: 20% | last: Processing depth map for camera 145...
+[heartbeat] 14:33:15 | output lines: 512 | elapsed: 120s | buildDepthMaps: 45% | last: Building point cloud from depth maps... chunk 3/12
+...
+[monitor] SUCCESS | total output lines: 5247 | elapsed: 3847s
+[monitor] Full metashape output log saved to: /data/.../photogrammetry/metashape-build_depth_maps.log
+```
+
+**Error with buffer dump (sparse mode):**
+```
+[heartbeat] 15:47:00 | output lines: 3100 | elapsed: 7200s | buildDepthMaps: 60% | last: Processing depth map for camera 3175...
+
+[monitor] === Last 100 lines before error ===
+2024-02-08 15:47:15 Processing depth map for camera 3180...
+...
+2024-02-08 15:47:45 Error: Insufficient memory for depth map computation
+RuntimeError: Not enough memory
+[monitor] === End error context ===
+
+[monitor] FAILED (exit code 1) | total output lines: 3247 | elapsed: 7215s
+[monitor] Full metashape output log saved to: /data/.../photogrammetry/metashape-build_depth_maps.log
+```
+
+### Full Log Files
+
+Complete Metashape output is saved to the shared volume at:
+
+```
+{TEMP_WORKING_DIR}/{workflow-name}/{project-name}/photogrammetry/metashape-<step>.log
+```
+
+These files contain every line of output as-is (no timestamps added) and are available for download from the Argo UI artifacts or via direct filesystem access. They are automatically cleaned up by the existing cleanup step after workflow completion.
+
+### Configuration
+
+All three parameters have sensible defaults and require no configuration for normal use:
+
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `LOG_HEARTBEAT_INTERVAL` | `60` | Seconds between heartbeat lines. `0` = full output mode |
+| `LOG_BUFFER_SIZE` | `100` | Lines kept in memory for error context dump |
+| `PROGRESS_INTERVAL_PCT` | `1` | Progress reporting interval (%) |
+
+To use full output mode (e.g., for debugging or initial validation):
+
+```bash
+argo submit -n argo photogrammetry-workflow-stepbased.yaml \
+  -p LOG_HEARTBEAT_INTERVAL=0 \
+  # ... other parameters ...
+```
+
+!!! tip "Migration path"
+    Start with `LOG_HEARTBEAT_INTERVAL=0` (full output mode) to validate that progress callbacks and log files work correctly. Then switch to the default sparse mode (`60`) once you're comfortable with the reduced console output. You can always set it back to `0` without any code changes.
 
 ## Completion Tracking and Skip-If-Complete
 
