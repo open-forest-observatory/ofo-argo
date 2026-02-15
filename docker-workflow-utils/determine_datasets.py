@@ -32,7 +32,7 @@ import os
 import re
 import sys
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Set
 
 import yaml
 
@@ -100,7 +100,7 @@ def validate_project_name(name: str) -> None:
         )
 
 
-def load_completion_log(log_path: str) -> Dict[str, str]:
+def load_completion_log(log_path: str) -> Dict[str, Set[str]]:
     """
     Load completion log and return lookup table.
 
@@ -111,14 +111,12 @@ def load_completion_log(log_path: str) -> Dict[str, str]:
         log_path: Path to JSON Lines completion log
 
     Returns:
-        Dict mapping project_name -> phase (e.g., "metashape" or "postprocess")
-        If duplicate entries exist, keeps the highest phase (postprocess > metashape)
+        Dict mapping project_name -> set of completed phases
+        (e.g., {"project-A": {"metashape", "postprocess"}})
     """
-    completions: Dict[str, str] = {}
+    completions: Dict[str, Set[str]] = {}
     if not os.path.exists(log_path):
         return completions
-
-    phase_priority = {"metashape": 1, "postprocess": 2}
 
     with open(log_path, "r") as f:
         for line_num, line in enumerate(f, 1):
@@ -132,11 +130,10 @@ def load_completion_log(log_path: str) -> Dict[str, str]:
                 phase = entry.get("phase") or entry.get("completion_level")
                 if phase is None:
                     raise KeyError("Missing 'phase' or 'completion_level' field")
-                # Keep highest phase
-                if project_name not in completions or phase_priority.get(
-                    phase, 0
-                ) > phase_priority.get(completions[project_name], 0):
-                    completions[project_name] = phase
+                # Add phase to set of completed phases
+                if project_name not in completions:
+                    completions[project_name] = set()
+                completions[project_name].add(phase)
             except (json.JSONDecodeError, KeyError) as e:
                 print(
                     f"Warning: Skipping malformed line {line_num} in completion log: {e}",
@@ -148,7 +145,7 @@ def load_completion_log(log_path: str) -> Dict[str, str]:
 
 def should_skip_project(
     project_name: str,
-    completions: Dict[str, str],
+    completions: Dict[str, Set[str]],
     skip_mode: str,
 ) -> bool:
     """
@@ -165,25 +162,13 @@ def should_skip_project(
     if skip_mode == "none":
         return False
 
-    phase = completions.get(project_name)
-
-    if phase is None:
-        return False
-
-    if skip_mode == "metashape":
-        # Skip if metashape OR postprocess complete (metashape implies done)
-        return True
-
-    if skip_mode == "postprocess":
-        # Skip only if postprocess complete
-        return phase == "postprocess"
-
-    return False
+    completed_phases = completions.get(project_name, set())
+    return skip_mode in completed_phases
 
 
 def should_include_project(
     project_name: str,
-    completions: Dict[str, str],
+    completions: Dict[str, Set[str]],
     require_phase: Optional[str],
 ) -> bool:
     """
@@ -200,15 +185,8 @@ def should_include_project(
     if require_phase is None:
         return True
 
-    phase = completions.get(project_name)
-
-    if phase is None:
-        return False
-
-    phase_priority = {"metashape": 1, "postprocess": 2}
-
-    # Include if project has completed the required phase or higher
-    return phase_priority.get(phase, 0) >= phase_priority.get(require_phase, 0)
+    completed_phases = completions.get(project_name, set())
+    return require_phase in completed_phases
 
 
 def process_config_file(config_path: str) -> Dict[str, Any]:
@@ -553,10 +531,10 @@ def main(
         require_phase: Only include projects that have completed this phase.
     """
     # Load completion log if needed for skip or require-phase logic
-    completions: Dict[str, str] = {}
+    completions: Dict[str, Set[str]] = {}
     if completion_log and (skip_if_complete != "none" or require_phase is not None):
         completions = load_completion_log(completion_log)
-        print(f"Loaded {len(completions)} entries from completion log", file=sys.stderr)
+        print(f"Loaded {len(completions)} project completion records from log", file=sys.stderr)
 
     # Create completion log file if it doesn't exist (for later appending by workflow)
     if completion_log and not os.path.exists(completion_log):
@@ -604,9 +582,10 @@ def main(
 
             # Check if should skip based on completion status
             if should_skip_project(name, completions, skip_if_complete):
-                phase = completions.get(name, "unknown")
+                phases = completions.get(name, set())
+                phases_str = ", ".join(sorted(phases)) if phases else "unknown"
                 print(
-                    f"Skipping {name}: already complete at phase '{phase}'",
+                    f"Skipping {name}: already complete (phases: {phases_str})",
                     file=sys.stderr,
                 )
                 skipped_count += 1
