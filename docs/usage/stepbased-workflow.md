@@ -8,7 +8,14 @@ weight: 21
 !!! success "Recommended Workflow"
     This is the **recommended workflow** for photogrammetry processing. It provides optimized resource allocation, cost savings, and better monitoring compared to the [original monolithic workflow](photogrammetry-workflow.md).
 
-This guide describes how to run the OFO **step-based photogrammetry workflow**, which splits Metashape processing into 10 individual steps with optimized CPU/GPU node allocation. The workflow uses [automate-metashape](https://github.com/open-forest-observatory/automate-metashape) and performs post-processing steps.
+This guide describes how to run the OFO **step-based photogrammetry workflows**, which split Metashape processing and postprocessing into two independent workflows with optimized CPU/GPU node allocation. The workflows use [automate-metashape](https://github.com/open-forest-observatory/automate-metashape) for photogrammetry and a separate postprocessing container for derived products.
+
+The two workflows are:
+
+- **`metashape-workflow.yaml`** — Runs the 10 Metashape processing steps plus S3 upload
+- **`postprocessing-workflow.yaml`** — Runs postprocessing (CHMs, COGs, thumbnails) on completed Metashape outputs
+
+This separation allows you to run postprocessing independently (e.g., rerun with different settings) without redoing expensive Metashape processing.
 
 ## Key Benefits
 
@@ -36,9 +43,9 @@ export KUBECONFIG=~/.ofocluster/ofocluster.kubeconfig
 
 ## Workflow overview
 
-The step-based workflow executes **10 separate Metashape processing steps** as individual containerized tasks, followed by upload, post-processing, and cleanup. Each mission processes sequentially through these steps:
+### Metashape Workflow (`metashape-workflow.yaml`)
 
-### Metashape Processing Steps
+Executes **10 separate Metashape processing steps** as individual containerized tasks, followed by S3 upload:
 
 1. **setup** (CPU) - Initialize project, add photos, calibrate reflectance
 2. **match_photos** (GPU/CPU configurable) - Generate tie points for camera alignment
@@ -50,36 +57,33 @@ The step-based workflow executes **10 separate Metashape processing steps** as i
 8. **match_photos_secondary** (GPU/CPU configurable, optional) - Match secondary photos if provided
 9. **align_cameras_secondary** (CPU, optional) - Align secondary cameras if provided
 10. **finalize** (CPU) - Cleanup, generate reports
-
-### Post-Processing Steps
-
 11. **rclone-upload-task** - Upload Metashape outputs to S3
-12. **postprocessing-task** - Generate CHMs, clip to boundaries, create COGs and thumbnails, upload to S3
-13. **cleanup-iteration** - Remove temporary iteration directories after successful postprocessing
+12. **cleanup-project** - Remove temporary project directory
+
+### Postprocessing Workflow (`postprocessing-workflow.yaml`)
+
+Runs independently on projects that have completed Metashape processing:
+
+1. **postprocessing-task** - Generate CHMs, clip to boundaries, create COGs and thumbnails, upload to S3
+2. **cleanup-project** - Remove temporary project directory
 
 !!! info "Sequential Execution"
     Steps execute **sequentially within each mission** to prevent conflicts with shared Metashape project files. However, **multiple missions process in parallel**, each with its own step sequence.
-    
-    **Automatic Cleanup:** After postprocessing completes successfully, the workflow automatically removes the temporary iteration directory (`{TEMP_WORKING_DIR}/{workflow-name}/{iteration-id}/`) to free disk space, keeping only the final products uploaded to S3.
+
+    **Automatic Cleanup:** After each workflow completes successfully for a project, it automatically removes the temporary project directory (`{TEMP_WORKING_DIR}/{workflow-name}/{project-name}/`) to free disk space.
 
 !!! tip "Conditional Execution"
     Steps disabled in your config file are **completely skipped** - no container is created and no resources are allocated. This is more efficient than the original workflow where disabled operations still ran inside a single long-running container.
 
-### Iteration ID
+### Project Name Requirements
 
-Each mission in the workflow is assigned a unique **iteration ID** for isolation and tracking. The iteration ID is automatically generated as `{index}_{project-name}` where:
+Project names must be safe for shell and filesystem use:
 
-- `{index}` is a zero-padded 3-digit number (000, 001, 002, etc.) representing the mission's position in the config list
-- `{project-name}` is the sanitized project name from the config file (DNS-compliant: lowercase, alphanumeric with hyphens)
+- Must start and end with alphanumeric characters
+- Can contain alphanumeric characters, dots, hyphens, and underscores
+- Pattern: `^[a-zA-Z0-9][a-zA-Z0-9._-]*[a-zA-Z0-9]$`
 
-**Example:** If processing "Mission_001" as the first mission, the iteration ID would be `000_mission-001`.
-
-The iteration ID is used to:
-
-- Create isolated working directories: `{TEMP_WORKING_DIR}/{workflow-name}/{iteration-id}/`
-- Prevent collisions between parallel mission processing
-- Enable unique identification even when multiple missions have the same project name
-- Organize downloaded imagery and intermediate files
+The project name is used directly for working directories: `{TEMP_WORKING_DIR}/{workflow-name}/{project-name}/`
 
 ## Setup
 
@@ -493,7 +497,7 @@ the same time. In addition, we have a limited number of Metashape licenses. So w
 the number of parallel DAGs (metashape projects) it will attempt to run.
 
 The workflow controls this via the `parallelism` field in the `main` template (line 66 in
-`photogrammetry-workflow-stepbased.yaml`). **To change the max parallel projects, edit this value
+`metashape-workflow.yaml` or `postprocessing-workflow.yaml`). **To change the max parallel projects, edit this value
 directly in the workflow file before submitting.** The default is set to `10`.
 
 !!! note "Why not a command-line parameter?"
@@ -525,13 +529,31 @@ are not affected.
     from the YAML file.
 
 
-## Submit the workflow
+## Submit the workflows
 
-Once your cluster authentication is set up and your inputs are prepared, run:
+Once your cluster authentication is set up and your inputs are prepared, submit the workflows.
+
+### Metashape workflow
 
 ```bash
-argo submit -n argo photogrammetry-workflow-stepbased.yaml \
-  --name "my-run-$(date +%Y%m%d)" \
+argo submit -n argo metashape-workflow.yaml \
+  --name "metashape-$(date +%Y%m%d)" \
+  -p CONFIG_LIST=/data/argo-input/configs/config-list.txt \
+  -p TEMP_WORKING_DIR=/data/argo-output/tmp/derek-0202 \
+  -p S3_BUCKET_INTERNAL=ofo-internal \
+  -p S3_PHOTOGRAMMETRY_DIR=photogrammetry-outputs_dytest02 \
+  -p PHOTOGRAMMETRY_CONFIG_ID=03 \
+  -p WORKFLOW_UTILS_IMAGE_TAG=latest \
+  -p AUTOMATE_METASHAPE_IMAGE_TAG=latest
+```
+
+### Postprocessing workflow
+
+Run after Metashape completes (or on projects with existing Metashape outputs in S3):
+
+```bash
+argo submit -n argo postprocessing-workflow.yaml \
+  --name "postprocess-$(date +%Y%m%d)" \
   -p CONFIG_LIST=/data/argo-input/configs/config-list.txt \
   -p TEMP_WORKING_DIR=/data/argo-output/tmp/derek-0202 \
   -p S3_BUCKET_INTERNAL=ofo-internal \
@@ -540,35 +562,24 @@ argo submit -n argo photogrammetry-workflow-stepbased.yaml \
   -p S3_BUCKET_PUBLIC=ofo-public \
   -p S3_POSTPROCESSED_DIR=drone_dytest02 \
   -p S3_BOUNDARY_DIR=drone_dytest02 \
-  -p OFO_ARGO_IMAGES_TAG=latest \
-  -p AUTOMATE_METASHAPE_IMAGE_TAG=latest
+  -p COMPLETION_LOG_PATH=/data/argo-input/config-lists/completion-log-default.jsonl \
+  -p WORKFLOW_UTILS_IMAGE_TAG=latest \
+  -p POSTPROCESSING_IMAGE_TAG=latest
 ```
 
-!!! note "Workflow File"
-    Note the different workflow file: `photogrammetry-workflow-stepbased.yaml` instead of `photogrammetry-workflow.yaml`
+!!! note "Postprocessing requires completion log"
+    The postprocessing workflow uses `--require-phase metashape` internally, so it will only process projects that have a metashape completion entry in the log. Make sure `COMPLETION_LOG_PATH` is set when submitting the metashape workflow so completions are recorded.
 
-Database parameters (not currently functional):
-```bash
--p DB_PASSWORD=<password> \
--p DB_HOST=<vm_ip_address> \
--p DB_NAME=<db_name> \
--p DB_USER=<user_name>
-```
-
-
-### Workflow parameters
+### Metashape workflow parameters
 
 | Parameter | Description |
 |-----------|-------------|
 | `CONFIG_LIST` | **Absolute path** to text file listing metashape config files. Each line should be a config filename (resolved relative to the config list's directory) or an absolute path. Lines starting with `#` are comments. Example: `/data/argo-input/configs/config-list.txt` |
-| `TEMP_WORKING_DIR` | **Absolute path** for temporary workflow files (both photogrammetry and postprocessing). Workflow creates `{workflow-name}/{iteration-id}/` subdirectories automatically for each mission. Iteration directories are automatically deleted after successful postprocessing to free disk space. Example: `/data/argo-output/temp-runs/gillan_june27` |
-| `PHOTOGRAMMETRY_CONFIG_ID` | Two-digit configuration ID (e.g., `01`, `02`) used to organize outputs into `photogrammetry_NN` subdirectories in S3 for both raw and postprocessed products. If not specified or set to `NONE`, both raw and postprocessed products are stored without the `photogrammetry_NN` subfolder. |
+| `TEMP_WORKING_DIR` | **Absolute path** for temporary workflow files. Workflow creates `{workflow-name}/{project-name}/` subdirectories automatically for each mission. Project directories are automatically deleted after successful upload to free disk space. Example: `/data/argo-output/temp-runs/gillan_june27` |
+| `PHOTOGRAMMETRY_CONFIG_ID` | Two-digit configuration ID (e.g., `01`, `02`) used to organize outputs into `photogrammetry_NN` subdirectories in S3. If not specified or set to `NONE`, products are stored without the `photogrammetry_NN` subfolder. |
 | `S3_BUCKET_INTERNAL` | S3 bucket for internal/intermediate outputs where raw Metashape products (orthomosaics, point clouds, DEMs) are uploaded (typically `ofo-internal`). |
-| `S3_PHOTOGRAMMETRY_DIR` | S3 directory name for raw Metashape outputs. When `PHOTOGRAMMETRY_CONFIG_ID` is set, products upload to `{S3_BUCKET_INTERNAL}/{S3_PHOTOGRAMMETRY_DIR}/photogrammetry_{PHOTOGRAMMETRY_CONFIG_ID}/`. When `PHOTOGRAMMETRY_CONFIG_ID` is not set, products go to `{bucket}/{S3_PHOTOGRAMMETRY_DIR}/`. Example: `photogrammetry-outputs` |
-| `S3_BUCKET_PUBLIC` | S3 bucket for public/final outputs (postprocessed, clipped products ready for distribution) and where boundary files are stored (typically `ofo-public`). |
-| `S3_POSTPROCESSED_DIR` | S3 directory name for postprocessed outputs. When `PHOTOGRAMMETRY_CONFIG_ID` is set, products are organized as `{S3_POSTPROCESSED_DIR}/{mission_name}/photogrammetry_{PHOTOGRAMMETRY_CONFIG_ID}/`. When not set, products go to `{S3_POSTPROCESSED_DIR}/{mission_name}/`. Example: `drone/missions_03` |
-| `S3_BOUNDARY_DIR` | Parent directory in `S3_BUCKET_PUBLIC` where mission boundary polygons reside (used to clip imagery). The structure beneath this directory is assumed to be: `<S3_BOUNDARY_DIR>/<mission_name>/metadata-mission/<mission_name>_mission-metadata.gpkg`. Example: `drone/missions_03` |
-| `OFO_ARGO_IMAGES_TAG` | Docker image tag for OFO Argo containers (postprocessing and argo-workflow-utils) (default: `latest`). Use a specific branch name or tag to test development versions (e.g., `dy-manila`) |
+| `S3_PHOTOGRAMMETRY_DIR` | S3 directory name for raw Metashape outputs. When `PHOTOGRAMMETRY_CONFIG_ID` is set, products upload to `{S3_BUCKET_INTERNAL}/{S3_PHOTOGRAMMETRY_DIR}/photogrammetry_{PHOTOGRAMMETRY_CONFIG_ID}/`. Example: `photogrammetry-outputs` |
+| `WORKFLOW_UTILS_IMAGE_TAG` | Docker image tag for the argo-workflow-utils container (default: `latest`). Use a specific branch name or tag to test development versions |
 | `AUTOMATE_METASHAPE_IMAGE_TAG` | Docker image tag for the automate-metashape container (default: `latest`). Use a specific branch name or tag to test development versions |
 | `LICENSE_RETRY_INTERVAL` | Seconds to wait between license acquisition retries (default: `300` = 5 minutes). See [License Retry Behavior](#license-retry-behavior) |
 | `LICENSE_MAX_RETRIES` | Maximum license retry attempts. `0` = no retries (fail immediately, default), `-1` = unlimited retries, `>0` = that many retries. See [License Retry Behavior](#license-retry-behavior) |
@@ -576,8 +587,24 @@ Database parameters (not currently functional):
 | `LOG_BUFFER_SIZE` | Number of recent output lines kept in memory for error context (default: `100`). On failure, these lines are dumped to console for immediate debugging. See [Heartbeat Logger and Progress Monitoring](#heartbeat-logger-and-progress-monitoring) |
 | `PROGRESS_INTERVAL_PCT` | Percentage interval for progress reporting during Metashape API calls (default: `1`). Prints structured `[progress]` lines at each threshold (e.g., 1%, 2%, 3%). See [Heartbeat Logger and Progress Monitoring](#heartbeat-logger-and-progress-monitoring) |
 | `COMPLETION_LOG_PATH` | Path to completion log file for tracking finished projects (default: `""`). When set, the workflow logs completed projects and can skip already-completed work. See [Completion Tracking and Skip-If-Complete](#completion-tracking-and-skip-if-complete) |
-| `SKIP_IF_COMPLETE` | Skip projects based on completion status (default: `"none"`). Options: `none` (never skip), `metashape` (skip if metashape or postprocess complete), `postprocess` (skip only if postprocess complete), `both` (granular: skip metashape if done, run postprocessing). See [Completion Tracking and Skip-If-Complete](#completion-tracking-and-skip-if-complete) |
-| `DB_*` | Database parameters for logging Argo status (not currently functional; credentials in [OFO credentials document](https://docs.google.com/document/d/155AP0P3jkVa-yT53a-QLp7vBAfjRa78gdST1Dfb4fls/edit?tab=t.0)) |
+| `SKIP_IF_COMPLETE` | Skip projects based on completion status (default: `"none"`). Options: `none` (never skip), `metashape` (skip if metashape or postprocess complete). See [Completion Tracking and Skip-If-Complete](#completion-tracking-and-skip-if-complete) |
+
+### Postprocessing workflow parameters
+
+| Parameter | Description |
+|-----------|-------------|
+| `CONFIG_LIST` | Same as metashape workflow — the same config list can be used for both |
+| `TEMP_WORKING_DIR` | **Absolute path** for temporary postprocessing files |
+| `PHOTOGRAMMETRY_CONFIG_ID` | Same config ID used for metashape — determines where to find raw products in S3 |
+| `S3_BUCKET_INTERNAL` | S3 bucket where raw Metashape products are stored (read by postprocessing) |
+| `S3_PHOTOGRAMMETRY_DIR` | S3 directory where raw Metashape outputs are stored |
+| `S3_BUCKET_PUBLIC` | S3 bucket for public/final outputs (postprocessed products) and boundary files (typically `ofo-public`) |
+| `S3_POSTPROCESSED_DIR` | S3 directory name for postprocessed outputs. Example: `drone/missions_03` |
+| `S3_BOUNDARY_DIR` | Parent directory in `S3_BUCKET_PUBLIC` where mission boundary polygons reside. Example: `drone/missions_03` |
+| `WORKFLOW_UTILS_IMAGE_TAG` | Docker image tag for argo-workflow-utils container (default: `latest`) |
+| `POSTPROCESSING_IMAGE_TAG` | Docker image tag for the photogrammetry-postprocessing container (default: `latest`) |
+| `COMPLETION_LOG_PATH` | Path to completion log file. **Required** — the postprocessing workflow uses this to find projects with completed metashape phase |
+| `SKIP_IF_COMPLETE` | Skip projects based on completion status (default: `"none"`). Options: `none` (never skip), `postprocess` (skip if postprocess already complete) |
 
 **Secrets configuration:**
 
@@ -721,7 +748,7 @@ All three parameters have sensible defaults and require no configuration for nor
 To use full output mode (e.g., for debugging or initial validation):
 
 ```bash
-argo submit -n argo photogrammetry-workflow-stepbased.yaml \
+argo submit -n argo metashape-workflow.yaml \
   -p LOG_HEARTBEAT_INTERVAL=0 \
   # ... other parameters ...
 ```
@@ -740,20 +767,20 @@ The workflow includes a completion tracking system that logs finished projects a
 
 ### How It Works
 
-When `COMPLETION_LOG_PATH` is set, the workflow:
+When `COMPLETION_LOG_PATH` is set:
 
-1. **Reads the completion log** at workflow start to determine which projects are already complete
-2. **Filters projects** based on `SKIP_IF_COMPLETE` setting before creating processing tasks
-3. **Logs completion** after successful Metashape processing and after successful postprocessing
-4. **Enables granular skipping** (with `SKIP_IF_COMPLETE=both`): Skip only Metashape if it's done, still run postprocessing
+- **Metashape workflow**: Reads the log to skip already-completed projects (based on `SKIP_IF_COMPLETE`), and logs `metashape` phase on completion
+- **Postprocessing workflow**: Reads the log to find projects with completed `metashape` phase (via `--require-phase`), skips already-postprocessed projects, and logs `postprocess` phase on completion
+
+Both workflows share the same completion log file, enabling the postprocessing workflow to automatically gate on metashape completion.
 
 ### Completion Log Format
 
-The completion log is a JSON Lines file (`.jsonl`) where each line represents a completed project stage:
+The completion log is a JSON Lines file (`.jsonl`) where each line represents a completed project phase:
 
 ```jsonl
-{"project_name":"mission_001","completion_level":"postprocess","timestamp":"2024-01-15T10:30:00Z","workflow_name":"automate-metashape-workflow-abc123"}
-{"project_name":"mission_002","completion_level":"metashape","timestamp":"2024-01-15T11:45:00Z","workflow_name":"automate-metashape-workflow-def456"}
+{"project_name":"mission_001","phase":"postprocess","timestamp":"2024-01-15T10:30:00Z","workflow_name":"postprocessing-workflow-abc123"}
+{"project_name":"mission_002","phase":"metashape","timestamp":"2024-01-15T11:45:00Z","workflow_name":"metashape-workflow-def456"}
 ```
 
 **Fields:**
@@ -761,89 +788,103 @@ The completion log is a JSON Lines file (`.jsonl`) where each line represents a 
 | Field | Description |
 |-------|-------------|
 | `project_name` | Project identifier from config file |
-| `completion_level` | Either `"metashape"` (Metashape processing complete) or `"postprocess"` (postprocessing complete) |
-| `timestamp` | ISO 8601 UTC timestamp when the stage completed |
+| `phase` | Either `"metashape"` (Metashape processing complete) or `"postprocess"` (postprocessing complete) |
+| `timestamp` | ISO 8601 UTC timestamp when the phase completed |
 | `workflow_name` | Argo workflow name for traceability |
+
+!!! note "Backward compatibility"
+    Existing log entries using the legacy `completion_level` field are still supported. The reader checks for `phase` first, falling back to `completion_level`.
 
 **Key behavior:**
 
 - **Use separate log files for different configs** (e.g., `completion-log-default.jsonl`, `completion-log-highres.jsonl`)
 - Each project can have at most two entries in a log file: one for `metashape` and one for `postprocess`
-- If multiple entries exist for the same project, the highest completion level is used (`postprocess` > `metashape`)
+- If multiple entries exist for the same project, the highest phase is used (`postprocess` > `metashape`)
 - The log file is created automatically if it doesn't exist
 - Concurrent writes from parallel projects are handled safely with file locking
 
 ### Skip Modes
 
-The `SKIP_IF_COMPLETE` parameter controls which projects are skipped:
+Each workflow has its own valid `SKIP_IF_COMPLETE` values:
+
+**Metashape workflow:**
 
 | Mode | Behavior | Use Case |
 |------|----------|----------|
 | `none` (default) | Never skip any projects | Fresh processing run |
-| `metashape` | Skip entire project if metashape OR postprocess is complete | Resume after cancellation, avoiding all completed work |
-| `postprocess` | Skip entire project only if postprocess is complete | Conservative: only skip fully finished projects |
-| `both` | **Granular skipping**: Skip entire project if postprocess complete; skip only Metashape steps if metashape complete (still run postprocessing) | Re-run postprocessing with different settings |
+| `metashape` | Skip project if metashape OR postprocess is complete | Resume after cancellation |
 
-**Granular skipping with `both` mode:**
+**Postprocessing workflow:**
 
-When a project has `metashape` completion but not `postprocess` completion:
-
-- All 10 Metashape processing steps are skipped
-- Postprocessing still runs, using the previously uploaded Metashape outputs from S3
-- Useful for tweaking postprocessing parameters without rerunning expensive Metashape steps
+| Mode | Behavior | Use Case |
+|------|----------|----------|
+| `none` (default) | Never skip (still requires metashape phase via `--require-phase`) | Run postprocessing on all metashape-complete projects |
+| `postprocess` | Skip if postprocess is already complete | Resume after cancellation |
 
 ### Usage Examples
 
-#### Resume a cancelled workflow
+#### Resume a cancelled metashape workflow
 
-If a workflow was cancelled or failed partway through, resubmit with the same completion log to skip already-finished projects:
+If the metashape workflow was cancelled or failed partway through, resubmit to skip already-finished projects:
 
 ```bash
-argo submit -n argo photogrammetry-workflow-stepbased.yaml \
+argo submit -n argo metashape-workflow.yaml \
   -p CONFIG_LIST=/data/argo-input/configs/batch1.txt \
   -p COMPLETION_LOG_PATH=/data/argo-input/config-lists/completion-log-default.jsonl \
-  -p SKIP_IF_COMPLETE=postprocess \
+  -p SKIP_IF_COMPLETE=metashape \
   -p TEMP_WORKING_DIR=/data/argo-output/tmp/batch1 \
   # ... other parameters ...
 ```
 
-Only projects that haven't completed postprocessing will run.
+Only projects that haven't completed metashape will run.
 
-#### Re-run postprocessing only
+#### Run postprocessing on completed metashape projects
 
-If you want to adjust postprocessing parameters (e.g., clipping boundaries, COG settings) without redoing Metashape processing:
+After metashape completes (or on projects with existing Metashape outputs):
 
 ```bash
-argo submit -n argo photogrammetry-workflow-stepbased.yaml \
+argo submit -n argo postprocessing-workflow.yaml \
   -p CONFIG_LIST=/data/argo-input/configs/batch1.txt \
   -p COMPLETION_LOG_PATH=/data/argo-input/config-lists/completion-log-default.jsonl \
-  -p SKIP_IF_COMPLETE=both \
+  -p TEMP_WORKING_DIR=/data/argo-output/tmp/batch1-postprocess \
+  # ... other parameters ...
+```
+
+Only projects with completed metashape phase will be included.
+
+#### Re-run postprocessing with different settings
+
+To rerun postprocessing (e.g., changed clipping boundaries) while skipping already-postprocessed projects:
+
+```bash
+argo submit -n argo postprocessing-workflow.yaml \
+  -p CONFIG_LIST=/data/argo-input/configs/batch1.txt \
+  -p COMPLETION_LOG_PATH=/data/argo-input/config-lists/completion-log-default.jsonl \
+  -p SKIP_IF_COMPLETE=postprocess \
   -p TEMP_WORKING_DIR=/data/argo-output/tmp/batch1-reprocess \
   # ... other parameters ...
 ```
 
-Projects with completed Metashape will skip all Metashape steps but run postprocessing.
-
 #### Force complete reprocessing
 
-To reprocess everything regardless of completion log (useful for testing or when products need to be regenerated):
+To reprocess everything regardless of completion log:
 
 ```bash
-argo submit -n argo photogrammetry-workflow-stepbased.yaml \
+argo submit -n argo metashape-workflow.yaml \
   -p CONFIG_LIST=/data/argo-input/configs/batch1.txt \
   -p COMPLETION_LOG_PATH=/data/argo-input/config-lists/completion-log-default.jsonl \
   -p SKIP_IF_COMPLETE=none \
   # ... other parameters ...
 ```
 
-All projects will run, but completion will still be logged for future use.
+All projects will run, and completion will still be logged for future use.
 
 #### First-time processing with completion tracking
 
 Enable completion tracking from the start to make future reruns easier:
 
 ```bash
-argo submit -n argo photogrammetry-workflow-stepbased.yaml \
+argo submit -n argo metashape-workflow.yaml \
   -p CONFIG_LIST=/data/argo-input/configs/batch1.txt \
   -p COMPLETION_LOG_PATH=/data/argo-input/config-lists/completion-log-default.jsonl \
   -p SKIP_IF_COMPLETE=none \
@@ -892,7 +933,7 @@ python docker-workflow-utils/manually-run-utilities/generate_retroactive_log.py 
 | `--internal-prefix` | S3 prefix for Metashape products, including any config-specific subdirectories (e.g., `photogrammetry/default-run` for default config, or `photogrammetry/default-run/photogrammetry_highres` for highres config) |
 | `--public-bucket` | S3 bucket for public/postprocessed products |
 | `--public-prefix` | S3 prefix for postprocessed products |
-| `--level` | Which completion levels to detect: `metashape`, `postprocess`, or `both` (default: `both`) |
+| `--phase` | Which completion phases to detect: `metashape`, `postprocess`, or `both` (default: `both`) |
 | `--output` | Output file path for completion log. **Use config-specific names** (e.g., `completion-log-default.jsonl`, `completion-log-highres.jsonl`) |
 | `--append` | Append to existing log instead of overwriting |
 | `--dry-run` | Preview what would be written without actually writing |
@@ -922,7 +963,7 @@ If you need to create a new config list containing only uncompleted projects (us
 python docker-workflow-utils/manually-run-utilities/generate_remaining_configs.py \
   /data/argo-input/configs/batch1.txt \
   /data/argo-input/config-lists/completion-log-default.jsonl \
-  --level postprocess \
+  --phase postprocess \
   -o /data/argo-input/configs/batch1-remaining.txt
 ```
 

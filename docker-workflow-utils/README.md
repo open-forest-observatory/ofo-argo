@@ -17,68 +17,73 @@ Preprocessing script for the step-based photogrammetry workflow. Reads mission c
 **Purpose:**
 - Parse mission config files from config list
 - Extract project names and configuration paths
-- Generate unique iteration IDs for mission isolation
+- Validate project names are shell/filesystem-safe
 - Determine which processing steps are enabled
 - Determine GPU vs CPU node scheduling for GPU-capable steps
 - Filter out already-completed projects based on completion log (skip-if-complete feature)
+- Gate on required phases (e.g., only include projects with completed metashape phase)
 
 **Usage:**
 ```bash
 python3 /app/determine_datasets.py <config_list_path> [output_file] \
   [--completion-log LOG_PATH] \
-  [--skip-if-complete {none,metashape,postprocess,both}] \
-  [--workflow-name WORKFLOW_NAME]
+  [--skip-if-complete {none,metashape,postprocess}] \
+  [--require-phase {metashape,postprocess}]
 ```
 
 **Arguments:**
 - `config_list_path`: Path to text file listing config files (relative to `/data`)
-- `output_file`: Optional output file for configs (default: stdout)
+- `output_file`: Optional output file for full configs JSON. If omitted, no full configs are written.
 - `--completion-log`: Path to config-specific completion log file (e.g., `completion-log-default.jsonl`)
 - `--skip-if-complete`: Skip mode (default: `none`)
-- `--workflow-name`: Workflow name for logging
+- `--require-phase`: Only include projects that have completed the given phase
 
 **Output:**
-- JSON array of mission parameters to stdout or file
+- Always outputs minimal refs to stdout: `[{"project_name": "..."}]`
+- If `output_file` provided: also writes full configs JSON to that file
 
 **Example:**
 ```bash
-# Inside container
-python3 /app/determine_datasets.py argo-input/config-lists/missions.txt
+# Metashape workflow: write full configs, skip completed
+python3 /app/determine_datasets.py /data/config_list.txt /data/output/configs.json \
+  --completion-log /data/completion-log-default.jsonl \
+  --skip-if-complete metashape
 
-# In Argo workflow
-container:
-  image: ghcr.io/open-forest-observatory/argo-workflow-utils:latest
-  volumeMounts:
-    - name: data
-      mountPath: /data
-  command: ["python3"]
-  args: ["/app/determine_datasets.py", "{{workflow.parameters.CONFIG_LIST}}"]
+# Postprocessing workflow: no output file, require metashape phase
+python3 /app/determine_datasets.py /data/config_list.txt \
+  --completion-log /data/completion-log-default.jsonl \
+  --require-phase metashape \
+  --skip-if-complete postprocess
+
+# No skip, no output file
+python3 /app/determine_datasets.py /data/config_list.txt
 ```
 
-**Output Format:**
+**Output Format (stdout):**
 ```json
 [
-  {
-    "project_name": "mission_001",
-    "project_name_sanitized": "mission-001",
-    "config": "argo-input/configs/mission_001.yml",
-    "iteration_id": "000_mission-001",
-    "match_photos_enabled": "true",
-    "match_photos_use_gpu": "true",
-    "align_cameras_enabled": "true",
-    "build_depth_maps_enabled": "true",
-    "build_point_cloud_enabled": "true",
-    "build_mesh_enabled": "false",
-    "build_mesh_use_gpu": "true",
-    "build_dem_orthomosaic_enabled": "true",
-    "match_photos_secondary_enabled": "false",
-    "match_photos_secondary_use_gpu": "true",
-    "align_cameras_secondary_enabled": "false"
-  }
+  {"project_name": "mission_001"},
+  {"project_name": "mission_002"}
 ]
 ```
 
-**Note:** The `iteration_id` is a unique identifier (`{index}_{sanitized_project_name}`) used to isolate each mission's working directory and prevent collisions during parallel processing.
+**Full configs file format (when output_file provided):**
+```json
+{
+  "mission_001": {
+    "project_name": "mission_001",
+    "config": "/data/argo-input/configs/mission_001.yml",
+    "match_photos_enabled": true,
+    "match_photos_use_gpu": true,
+    "align_cameras_enabled": true,
+    "build_depth_maps_enabled": true,
+    "build_point_cloud_enabled": true,
+    "build_mesh_enabled": false,
+    "build_dem_orthomosaic_enabled": true,
+    ...
+  }
+}
+```
 
 ### `generate_remaining_configs.py`
 
@@ -92,14 +97,14 @@ Utility script to generate a new config list containing only projects that have 
 **Usage:**
 ```bash
 python3 /app/generate_remaining_configs.py <config_list> <completion_log> \
-  [--level {metashape,postprocess}] \
+  [--phase {metashape,postprocess}] \
   [--output OUTPUT_FILE]
 ```
 
 **Arguments:**
 - `config_list`: Original config list file path
 - `completion_log`: Config-specific completion log file path (e.g., `completion-log-default.jsonl`)
-- `--level`: Completion level to check (default: `postprocess`)
+- `--phase`: Completion phase to check (default: `postprocess`)
 - `--output, -o`: Output file (default: stdout)
 
 **Example:**
@@ -109,7 +114,7 @@ python3 /app/generate_remaining_configs.py <config_list> <completion_log> \
 python3 /app/generate_remaining_configs.py \
   /data/argo-input/configs/batch1.txt \
   /data/argo-input/config-lists/completion-log-default.jsonl \
-  --level postprocess \
+  --phase postprocess \
   -o /data/argo-input/configs/batch1-remaining.txt
 ```
 
@@ -133,7 +138,7 @@ python3 /app/generate_retroactive_log.py \
   --internal-prefix PREFIX \
   [--public-bucket BUCKET] \
   [--public-prefix PREFIX] \
-  [--level {metashape,postprocess,both}] \
+  [--phase {metashape,postprocess,both}] \
   --output OUTPUT_FILE \
   [--append] \
   [--dry-run]
@@ -141,11 +146,11 @@ python3 /app/generate_retroactive_log.py \
 
 **Arguments:**
 - `--internal-bucket`: S3 bucket for internal/Metashape products (required)
-- `--internal-prefix`: S3 prefix for Metashape products, including any config-specific subdirectories (required, e.g., `photogrammetry/default-run` for default config, or `photogrammetry/default-run/photogrammetry_highres` for highres config)
+- `--internal-prefix`: S3 prefix for Metashape products, including any config-specific subdirectories (required)
 - `--public-bucket`: S3 bucket for public/postprocessed products
 - `--public-prefix`: S3 prefix for postprocessed products
-- `--level`: Which levels to detect (default: `both`)
-- `--output, -o`: Output file path (required). **Use config-specific names** (e.g., `completion-log-default.jsonl`, `completion-log-highres.jsonl`)
+- `--phase`: Which phases to detect (default: `both`)
+- `--output, -o`: Output file path (required). **Use config-specific names** (e.g., `completion-log-default.jsonl`)
 - `--append`: Append to existing log instead of overwriting
 - `--dry-run`: Preview output without writing
 
@@ -164,31 +169,13 @@ python3 /app/generate_retroactive_log.py \
   --public-prefix postprocessed \
   --output /data/argo-input/config-lists/completion-log-default.jsonl
 
-# For highres config, use config-specific prefix and output file
-python3 /app/generate_retroactive_log.py \
-  --internal-bucket ofo-internal \
-  --internal-prefix photogrammetry/default-run/photogrammetry_highres \
-  --public-bucket ofo-public \
-  --public-prefix postprocessed \
-  --output /data/argo-input/config-lists/completion-log-highres.jsonl
-
-# Dry run to preview results
+# Metashape only
 python3 /app/generate_retroactive_log.py \
   --internal-bucket ofo-internal \
   --internal-prefix photogrammetry/default-run \
-  --public-bucket ofo-public \
-  --public-prefix postprocessed \
-  --dry-run \
-  --output /tmp/completion-log-default.jsonl
+  --phase metashape \
+  --output /data/argo-input/config-lists/completion-log-default.jsonl
 ```
-
-**Note on multiple configs:**
-- Use separate output files for different configs
-- The log file name should indicate which config it's for
-- Examples:
-  - `completion-log-default.jsonl` (for default/NONE config)
-  - `completion-log-highres.jsonl` (for highres config)
-  - `completion-log-lowquality.jsonl` (for lowquality config)
 
 **Sentinel files for completion detection:**
 - **Metashape complete**: `*_report.pdf`
@@ -223,7 +210,7 @@ docker build -t argo-workflow-utils:local .
 ```bash
 # Test determine_datasets.py
 docker run --rm -v /path/to/data:/data argo-workflow-utils:local \
-  python3 /app/determine_datasets.py argo-input/config-lists/test.txt
+  python3 /app/determine_datasets.py argo-input/config-lists/missions.txt
 ```
 
 ### Container Build
@@ -235,8 +222,8 @@ The container is built automatically via GitHub Actions when changes are pushed 
 ## Usage in Workflows
 
 This container is used by:
-- `photogrammetry-workflow-stepbased.yaml` - Preprocessing step for mission parameters
-- Future workflow utilities
+- `metashape-workflow.yaml` - Preprocessing step for mission parameters
+- `postprocessing-workflow.yaml` - Preprocessing step for project filtering
 
 ## File Structure
 
@@ -245,8 +232,11 @@ docker-workflow-utils/
 ├── Dockerfile                      # Container definition
 ├── requirements.txt                # Python dependencies
 ├── determine_datasets.py           # Config preprocessing script
-├── generate_remaining_configs.py   # Generate list of uncompleted projects
-├── generate_retroactive_log.py     # Bootstrap completion log from S3
+├── download_imagery.py             # S3 imagery download script
+├── transform_config.py             # Config path transformation script
 ├── db_logger.py                    # Database logging (disabled)
-└── README.md                       # This file
+├── README.md                       # This file
+└── manually-run-utilities/
+    ├── generate_remaining_configs.py   # Generate list of uncompleted projects
+    └── generate_retroactive_log.py     # Bootstrap completion log from S3
 ```

@@ -3,10 +3,10 @@
 Generate a config list of projects not yet completed.
 
 Usage:
-    python generate_remaining_configs.py <config_list> <completion_log> [--level LEVEL]
+    python generate_remaining_configs.py <config_list> <completion_log> [--phase PHASE]
 
 Example:
-    python generate_remaining_configs.py /data/config_list.txt /data/completion-log-default.jsonl --level postprocess
+    python generate_remaining_configs.py /data/config_list.txt /data/completion-log-default.jsonl --phase postprocess
 
 Note: Use config-specific completion log files (e.g., completion-log-default.jsonl, completion-log-highres.jsonl)
 """
@@ -28,10 +28,10 @@ def main():
         help="Config-specific completion log file (e.g., completion-log-default.jsonl)",
     )
     parser.add_argument(
-        "--level",
+        "--phase",
         choices=["metashape", "postprocess"],
         default="postprocess",
-        help="Completion level to check",
+        help="Completion phase to check",
     )
     parser.add_argument("--output", "-o", help="Output file (default: stdout)")
 
@@ -47,13 +47,15 @@ def main():
                     continue
                 try:
                     entry = json.loads(line)
-                    # Check completion level based on --level argument
-                    if args.level == "metashape":
+                    # Support both 'phase' (current) and 'completion_level' (legacy)
+                    phase = entry.get("phase") or entry.get("completion_level")
+                    # Check completion phase based on --phase argument
+                    if args.phase == "metashape":
                         # Skip if any completion (metashape or postprocess)
                         completed.add(entry["project_name"])
                     elif (
-                        args.level == "postprocess"
-                        and entry["completion_level"] == "postprocess"
+                        args.phase == "postprocess"
+                        and phase == "postprocess"
                     ):
                         # Skip only if postprocess complete
                         completed.add(entry["project_name"])
