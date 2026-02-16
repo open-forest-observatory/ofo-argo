@@ -583,7 +583,7 @@ argo submit -n argo postprocessing-workflow.yaml \
 | `WORKFLOW_UTILS_IMAGE_TAG` | Docker image tag for the argo-workflow-utils container (default: `latest`). Use a specific branch name or tag to test development versions |
 | `AUTOMATE_METASHAPE_IMAGE_TAG` | Docker image tag for the automate-metashape container (default: `latest`). Use a specific branch name or tag to test development versions |
 | `LICENSE_RETRY_INTERVAL` | Seconds to wait between license acquisition retries (default: `300` = 5 minutes). See [License Retry Behavior](#license-retry-behavior) |
-| `LICENSE_MAX_RETRIES` | Maximum license retry attempts. `0` = no retries (fail immediately, default), `-1` = unlimited retries, `>0` = that many retries. See [License Retry Behavior](#license-retry-behavior) |
+| `LICENSE_MAX_RETRIES` | Maximum license retry attempts. Default: `180` (~15 hours at 5-minute intervals). `0` = no retries (fail immediately), `-1` = unlimited retries. See [License Retry Behavior](#license-retry-behavior) |
 | `LOG_HEARTBEAT_INTERVAL` | Seconds between heartbeat status lines during Metashape processing (default: `60`). Set to `0` to disable filtering and print all Metashape output (original behavior). See [Heartbeat Logger and Progress Monitoring](#heartbeat-logger-and-progress-monitoring) |
 | `LOG_BUFFER_SIZE` | Number of recent output lines kept in memory for error context (default: `100`). On failure, these lines are dumped to console for immediate debugging. See [Heartbeat Logger and Progress Monitoring](#heartbeat-logger-and-progress-monitoring) |
 | `PROGRESS_INTERVAL_PCT` | Percentage interval for progress reporting during Metashape API calls (default: `1`). Prints structured `[progress]` lines at each threshold (e.g., 1%, 2%, 3%). See [Heartbeat Logger and Progress Monitoring](#heartbeat-logger-and-progress-monitoring) |
@@ -619,7 +619,7 @@ These secrets should have been created (within the `argo` namespace) during [clu
 
 Metashape requires a floating license from the Agisoft license server. When multiple workflows compete for limited licenses, some pods may fail to acquire a license at startup. The workflow includes optional retry logic to handle this.
 
-**By default, retries are disabled** (`LICENSE_MAX_RETRIES=0`). If no license is available, the step fails immediately. To enable retries, set `LICENSE_MAX_RETRIES` to a positive number or `-1` for unlimited.
+**By default, retries are enabled** (`LICENSE_MAX_RETRIES=180`), allowing up to 180 attempts (~15 hours at the default 5-minute interval). To disable retries, set `LICENSE_MAX_RETRIES` to `0`. To retry indefinitely, set it to `-1`.
 
 **How it works (when retries are enabled):**
 
@@ -632,11 +632,12 @@ Metashape requires a floating license from the Agisoft license server. When mult
 
 | Value | Behavior |
 |-------|----------|
-| `0` (default) | No retries - fail immediately if no license |
+| `180` (default) | Retry up to 180 times (~15 hours at 5-minute intervals) |
+| `0` | No retries - fail immediately if no license |
 | `-1` | Unlimited retries |
 | `>0` | Retry up to that many times |
 
-**Example output when retries are disabled (default):**
+**Example output when retries are disabled (`LICENSE_MAX_RETRIES=0`):**
 ```
 [license-wrapper] Starting Metashape workflow (attempt 1)...
 No nodelocked license found
@@ -661,9 +662,9 @@ License server 149.165.171.237:5842: OK
 [license-wrapper] License check passed, proceeding with workflow...
 ```
 
-!!! tip "When to enable retries"
-    - **High contention (many parallel workflows)**: Set `LICENSE_MAX_RETRIES=-1` for unlimited retries, or a reasonable limit like `288` (24 hours at 5-minute intervals)
-    - **Low contention**: Keep the default (`0`) - if a license isn't available, something is likely wrong
+!!! tip "When to adjust retries"
+    - **High contention (many parallel workflows)**: Keep the default (`180`) or set `LICENSE_MAX_RETRIES=-1` for unlimited retries
+    - **Low contention / debugging**: Set `LICENSE_MAX_RETRIES=0` to fail immediately if a license isn't available
 
 ## Heartbeat Logger and Progress Monitoring
 
