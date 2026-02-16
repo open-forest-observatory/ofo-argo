@@ -643,7 +643,7 @@ def postprocess_photogrammetry_containerized(
             ]["full_path"].iloc[0]
         )
         output_file = Path(
-            postprocessed_path, "full", "photogrammetry-derived-alt.gpkg"
+            postprocessed_path, "full", f"{mission_id}_camera-locations.gpkg"
         )
 
         try:
