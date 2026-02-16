@@ -8,10 +8,11 @@ the logging feature was implemented, and generates a compatible completion log.
 Usage:
     python generate_retroactive_log.py \
         --internal-bucket ofo-internal \
-        --internal-prefix photogrammetry/default-run \
+        --internal-prefix photogrammetry-outputs/photogrammetry_03 \
         --public-bucket ofo-public \
-        --public-prefix postprocessed \
-        --output completion-log-default.jsonl
+        --public-prefix drone/missions_03 \
+        --public-config-subfolder photogrammetry_03 \
+        --output completion-log_02.jsonl
 
 Requirements:
     - boto3 (pip install boto3)
@@ -78,18 +79,30 @@ def list_s3_objects(
     return objects
 
 
-def extract_project_name_from_sentinel(key: str, prefix: str) -> Optional[str]:
+def extract_project_name_from_sentinel(
+    key: str, prefix: str, config_subfolder: Optional[str] = None
+) -> Optional[str]:
     """
     Extract project name from a sentinel file's S3 key.
 
-    Handles two structures:
+    Without config_subfolder, handles:
         prefix/project_name/project_name_report.pdf -> project_name (nested)
         prefix/project_name_report.pdf -> project_name (flat)
+
+    With config_subfolder (e.g., "photogrammetry_03"), only matches:
+        prefix/project_name/photogrammetry_03/..._report.pdf -> project_name
     """
     # Remove prefix
     relative = key[len(prefix) :].lstrip("/")
 
     parts = relative.split("/")
+
+    if config_subfolder:
+        # Require: project_name/config_subfolder/..._report.pdf
+        if len(parts) >= 3 and parts[1] == config_subfolder:
+            return parts[0]
+        return None
+
     if len(parts) >= 2:
         # Nested structure: project_name/filename
         return parts[0]
@@ -104,14 +117,24 @@ def extract_project_name_from_sentinel(key: str, prefix: str) -> Optional[str]:
 
 
 def detect_completed_projects(
-    client, bucket: str, prefix: str, label: str
+    client,
+    bucket: str,
+    prefix: str,
+    label: str,
+    config_subfolder: Optional[str] = None,
 ) -> Dict[str, datetime]:
     """
     Detect projects with sentinel files indicating completion.
 
+    Args:
+        config_subfolder: If provided, only match sentinels under this subfolder
+            within each project directory (e.g., "photogrammetry_03").
+
     Returns dict mapping project_name -> latest LastModified timestamp.
     """
     print(f"Scanning s3://{bucket}/{prefix} for {label} products...", file=sys.stderr)
+    if config_subfolder:
+        print(f"  Filtering to config subfolder: {config_subfolder}", file=sys.stderr)
 
     objects = list_s3_objects(client, bucket, prefix)
     print(f"  Found {len(objects)} objects", file=sys.stderr)
@@ -124,7 +147,7 @@ def detect_completed_projects(
         if not SENTINEL_PATTERN.search(key):
             continue
 
-        project_name = extract_project_name_from_sentinel(key, prefix)
+        project_name = extract_project_name_from_sentinel(key, prefix, config_subfolder)
         if project_name:
             timestamp = obj["LastModified"]
             if project_name not in projects or timestamp > projects[project_name]:
@@ -178,36 +201,23 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-    # Basic scan for default config
+    # Scan both phases for a specific config
+    # Internal: photogrammetry-outputs/photogrammetry_03/<project>/*_report.pdf
+    # Public:   drone/missions_03/<project>/photogrammetry_03/*_report.pdf
     python generate_retroactive_log.py \\
         --internal-bucket ofo-internal \\
-        --internal-prefix photogrammetry/default-run \\
+        --internal-prefix photogrammetry-outputs/photogrammetry_03 \\
         --public-bucket ofo-public \\
-        --public-prefix postprocessed \\
-        --output completion-log-default.jsonl
-
-    # For a specific config (use different prefix and output file)
-    python generate_retroactive_log.py \\
-        --internal-bucket ofo-internal \\
-        --internal-prefix photogrammetry/default-run/photogrammetry_highres \\
-        --public-bucket ofo-public \\
-        --public-prefix postprocessed \\
-        --output completion-log-highres.jsonl
+        --public-prefix drone/missions_03 \\
+        --public-config-subfolder photogrammetry_03 \\
+        --output completion-log-03.jsonl
 
     # Metashape only (no postprocess check)
     python generate_retroactive_log.py \\
         --internal-bucket ofo-internal \\
-        --internal-prefix photogrammetry/default-run \\
+        --internal-prefix photogrammetry-outputs/photogrammetry_03 \\
         --phase metashape \\
-        --output completion-log-default.jsonl
-
-Note on multiple configs:
-- Use separate output files for different configs
-- The log file name should indicate which config it's for
-- Examples:
-    completion-log-default.jsonl     (for default/NONE config)
-    completion-log-highres.jsonl     (for highres config)
-    completion-log-lowquality.jsonl  (for lowquality config)
+        --output completion-log-03.jsonl
         """,
     )
 
@@ -230,6 +240,13 @@ Note on multiple configs:
         "--public-prefix",
         default="",
         help="S3 prefix for postprocessed products (optional)",
+    )
+    parser.add_argument(
+        "--public-config-subfolder",
+        default="",
+        help="Photogrammetry config subfolder to match within each project directory "
+        "in the public bucket (e.g., photogrammetry_03). Only sentinel files under "
+        "this subfolder will count as postprocess completions.",
     )
     parser.add_argument(
         "--phase",
@@ -275,7 +292,11 @@ Note on multiple configs:
 
     if args.phase in ["postprocess", "both"]:
         postprocess_projects = detect_completed_projects(
-            client, args.public_bucket, args.public_prefix, "postprocess"
+            client,
+            args.public_bucket,
+            args.public_prefix,
+            "postprocess",
+            config_subfolder=args.public_config_subfolder or None,
         )
 
     # Generate log entries
