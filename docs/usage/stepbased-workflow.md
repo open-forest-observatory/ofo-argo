@@ -537,7 +537,6 @@ Once your cluster authentication is set up and your inputs are prepared, submit 
 
 ```bash
 argo submit -n argo metashape-workflow.yaml \
-  --name "metashape-$(date +%Y%m%d)" \
   -p CONFIG_LIST=/data/argo-input/configs/config-list.txt \
   -p TEMP_WORKING_DIR=/data/argo-output/tmp/derek-0202 \
   -p S3_BUCKET_INTERNAL=ofo-internal \
@@ -548,13 +547,15 @@ argo submit -n argo metashape-workflow.yaml \
   -p AUTOMATE_METASHAPE_IMAGE_TAG=latest
 ```
 
+!!! tip "Naming your workflow"
+    You can optionally pass `--name "my-workflow-name"` to give your workflow a custom name. If omitted, Argo will auto-generate a unique name.
+
 ### Postprocessing workflow
 
 Run after Metashape completes (or on projects with existing Metashape outputs in S3):
 
 ```bash
 argo submit -n argo postprocessing-workflow.yaml \
-  --name "postprocess-$(date +%Y%m%d)" \
   -p CONFIG_LIST=/data/argo-input/configs/config-list.txt \
   -p TEMP_WORKING_DIR=/data/argo-output/tmp/derek-0202 \
   -p S3_BUCKET_INTERNAL=ofo-internal \

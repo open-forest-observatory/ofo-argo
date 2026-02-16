@@ -34,7 +34,6 @@ The **step-based workflow** (`photogrammetry-workflow-stepbased.yaml`) provides 
 
 **Documentation:**
 - 📖 [Complete Guide](https://ofo-argo-docs.netlify.app/usage/stepbased-workflow/) - Full usage instructions, troubleshooting, and advanced topics
-- ⚡ [Quick Reference](https://ofo-argo-docs.netlify.app/usage/stepbased-quick-reference/) - Command cheat sheet and common patterns
 
 ## Files & Directories In this Repository
 
@@ -46,6 +45,6 @@ The **step-based workflow** (`photogrammetry-workflow-stepbased.yaml`) provides 
 | mkdocs.yml | Configuration for the MkDocs documentation site |
 | docker-workflow-utils/ | Utility docker container for workflow scripts (preprocessing, DB logging) |
 | docker-photogrammetry-postprocessing/ | Files defining custom docker containers performing core workflow tasks (e.g. postprocessing) |
-| setup/ | Kubernetes and Argo setup configurations (described in [admin docs](https://ofo-argo-docs.netlify.app/usage/stepbased-quick-reference/admin/)) |
+| setup/ | Kubernetes and Argo setup configurations (described in [admin docs](https://ofo-argo-docs.netlify.app/admin/)) |
 | test-workflows/ | Test workflow definitions for development and validation |
 | implementation-plans/ | Technical implementation plans for workflow development |
