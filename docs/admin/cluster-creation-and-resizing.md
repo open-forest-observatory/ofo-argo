@@ -296,8 +296,26 @@ To check whether it took (or in the future to make sure it remained set), run th
 helm get values nvidia-gpu-operator -n gpu-operator | grep -A1 "mig:"
 ```
 
-!!! note "Cluster upgrades"
-    This setting may be reset if the cluster template is upgraded and Magnum redeploys the GPU Operator. Re-run this command after cluster upgrades if MIG resources stop appearing.
+!!! warning "Magnum resets this setting on every nodegroup operation"
+    Every `openstack coe nodegroup create` or `delete` triggers Magnum to run `helm upgrade` on the
+    cluster's addon stack, which redeploys the GPU Operator without the `mig.strategy=mixed` setting.
+    To prevent this, deploy the MIG enforcer CronJob (see below), which automatically re-applies
+    the setting within 5 minutes of any reset.
+
+#### Deploy MIG strategy enforcer
+
+This CronJob checks the GPU Operator's ClusterPolicy every 5 minutes and patches `mig.strategy`
+back to `mixed` if Magnum has reset it:
+
+```bash
+kubectl apply -f setup/k8s/gpu-operator-mig-enforcer.yaml
+```
+
+To verify it's running:
+
+```bash
+kubectl get cronjob gpu-operator-mig-enforcer -n gpu-operator
+```
 
 
 ## Configure MIG (Multi-Instance GPU)
