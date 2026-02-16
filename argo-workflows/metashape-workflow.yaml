@@ -45,7 +45,7 @@ spec:
       - name: LICENSE_RETRY_INTERVAL
         value: "300"
       - name: LICENSE_MAX_RETRIES
-        value: "0"
+        value: "180"
       # Heartbeat logger and progress callback configuration
       - name: LOG_HEARTBEAT_INTERVAL
         value: "60"  # Seconds between heartbeat status lines
