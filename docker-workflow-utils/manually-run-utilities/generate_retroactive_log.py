@@ -141,9 +141,8 @@ def generate_log_entries(
     """
     Generate completion log entries from detected projects.
 
-    A project gets:
-    - 'postprocess' level if found in postprocess_projects
-    - 'metashape' level if found only in metashape_projects
+    A project gets an entry for each phase it has completed (metashape, postprocess,
+    or both).
 
     Note: config_id is not included in entries. Use separate log files per config.
     """
@@ -151,21 +150,20 @@ def generate_log_entries(
     all_projects = set(metashape_projects.keys()) | set(postprocess_projects.keys())
 
     for project_name in sorted(all_projects):
-        # Determine completion level (postprocess > metashape)
+        if project_name in metashape_projects:
+            entries.append({
+                "project_name": project_name,
+                "phase": "metashape",
+                "timestamp": metashape_projects[project_name].isoformat(),
+                "workflow_name": "retroactive-bootstrap",
+            })
         if project_name in postprocess_projects:
-            level = "postprocess"
-            timestamp = postprocess_projects[project_name]
-        else:
-            level = "metashape"
-            timestamp = metashape_projects[project_name]
-
-        entry = {
-            "project_name": project_name,
-            "phase": level,
-            "timestamp": timestamp.isoformat(),
-            "workflow_name": "retroactive-bootstrap",
-        }
-        entries.append(entry)
+            entries.append({
+                "project_name": project_name,
+                "phase": "postprocess",
+                "timestamp": postprocess_projects[project_name].isoformat(),
+                "workflow_name": "retroactive-bootstrap",
+            })
 
     return entries
 
