@@ -213,7 +213,7 @@ def compute_height_above_ground(camera_file: str, dtm_file: str) -> gpd.GeoDataF
     cameras_gdf["valid_dtm"] = cameras_gdf["valid_dtm"].astype("boolean")
     # Add an image_id field representing the filename (without path) to correspond with the OFO
     # convention
-    cameras_gdf["image_id"] = cameras_gdf.label.str.split("/").str[-1]
+    cameras_gdf["image_id"] = cameras_gdf.label.apply(lambda x: Path(x).stem)
     # Convert to lat lon
     cameras_gdf.to_crs(4326, inplace=True)
 
