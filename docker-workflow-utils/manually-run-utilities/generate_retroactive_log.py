@@ -151,19 +151,23 @@ def generate_log_entries(
 
     for project_name in sorted(all_projects):
         if project_name in metashape_projects:
-            entries.append({
-                "project_name": project_name,
-                "phase": "metashape",
-                "timestamp": metashape_projects[project_name].isoformat(),
-                "workflow_name": "retroactive-bootstrap",
-            })
+            entries.append(
+                {
+                    "project_name": project_name,
+                    "phase": "metashape",
+                    "timestamp": metashape_projects[project_name].isoformat(),
+                    "workflow_name": "retroactive-bootstrap",
+                }
+            )
         if project_name in postprocess_projects:
-            entries.append({
-                "project_name": project_name,
-                "phase": "postprocess",
-                "timestamp": postprocess_projects[project_name].isoformat(),
-                "workflow_name": "retroactive-bootstrap",
-            })
+            entries.append(
+                {
+                    "project_name": project_name,
+                    "phase": "postprocess",
+                    "timestamp": postprocess_projects[project_name].isoformat(),
+                    "workflow_name": "retroactive-bootstrap",
+                }
+            )
 
     return entries
 
