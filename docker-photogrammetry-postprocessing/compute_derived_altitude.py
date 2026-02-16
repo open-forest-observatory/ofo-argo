@@ -152,7 +152,7 @@ def compute_height_above_ground(camera_file: str, dtm_file: str) -> gpd.GeoDataF
         gpd.GeoDataFrame:
             GeoDataFrame with camera locations as Point geometries in EPSG:4326.
             * 'label' the image path
-            * 'altitude' the image altitude above ground level in meters
+            * 'altitude_agl' the image altitude above ground level in meters
             * 'valid_dtm' was the camera above a valid DTM pixel
             * 'camera_aligned' was the camera aligned by photogrammetry
             * 'ground_elevation' the height of the ground in meters
@@ -184,7 +184,7 @@ def compute_height_above_ground(camera_file: str, dtm_file: str) -> gpd.GeoDataF
     cameras_gdf.loc[~cameras_gdf.valid_dtm, "ground_elevation"] = np.nan
 
     # Compute the difference between the ground elevation and the camera elevation.
-    cameras_gdf["altitude"] = cameras_gdf.geometry.z - cameras_gdf["ground_elevation"]
+    cameras_gdf["altitude_agl"] = cameras_gdf.geometry.z - cameras_gdf["ground_elevation"]
 
     # Note that these cameras aligned properly
     cameras_gdf["camera_aligned"] = True
@@ -198,7 +198,7 @@ def compute_height_above_ground(camera_file: str, dtm_file: str) -> gpd.GeoDataF
             "camera_aligned": [False] * n_unaligned_cameras,
             "valid_dtm": [False] * n_unaligned_cameras,
             "ground_elevation": [np.nan] * n_unaligned_cameras,
-            "altitude": [np.nan] * n_unaligned_cameras,
+            "altitude_agl": [np.nan] * n_unaligned_cameras,
             "geometry": [None] * n_unaligned_cameras,
         },
         crs=cameras_gdf.crs,
@@ -208,6 +208,9 @@ def compute_height_above_ground(camera_file: str, dtm_file: str) -> gpd.GeoDataF
     cameras_gdf = gpd.GeoDataFrame(
         pd.concat((cameras_gdf, unaligned_cameras_gdf)), crs=cameras_gdf.crs
     )
+    # Use nullable boolean dtype to prevent coercion to float during concat
+    cameras_gdf["camera_aligned"] = cameras_gdf["camera_aligned"].astype("boolean")
+    cameras_gdf["valid_dtm"] = cameras_gdf["valid_dtm"].astype("boolean")
     # Add an image_id field representing the filename (without path) to correspond with the OFO
     # convention
     cameras_gdf["image_id"] = cameras_gdf.label.str.split("/").str[-1]
