@@ -164,21 +164,18 @@ def process_mission(bucket, missions_prefix, photogrammetry_subfolder, mission_i
 
     Creates its own S3 client so it can safely run in a thread pool.
 
-    Returns True if processed successfully, False if skipped/failed.
+    Returns (success: bool, message: str).
     """
     client = get_s3_client()
-    print(f"\n{mission_id}:", file=sys.stderr)
-    metadata_key = f"{missions_prefix}/{mission_id}/metadata-images/{mission_id}_image-metadata.gpkg"
+    metadata_key = f"{missions_prefix}/{mission_id}/metadata-mission/{mission_id}_mission-metadata.gpkg"
     camera_key = f"{missions_prefix}/{mission_id}/{photogrammetry_subfolder}/full/{mission_id}_camera-locations.gpkg"
 
     # Check both files exist
     if not s3_key_exists(client, bucket, metadata_key):
-        print(f"  SKIP: image-metadata not found: {metadata_key}", file=sys.stderr)
-        return False
+        return False, f"SKIP: image-metadata not found: {metadata_key}"
 
     if not s3_key_exists(client, bucket, camera_key):
-        print(f"  SKIP: camera-locations not found: {camera_key}", file=sys.stderr)
-        return False
+        return False, f"SKIP: camera-locations not found: {camera_key}"
 
     with tempfile.TemporaryDirectory() as tmpdir:
         local_metadata = os.path.join(tmpdir, "image-metadata.gpkg")
@@ -192,19 +189,15 @@ def process_mission(bucket, missions_prefix, photogrammetry_subfolder, mission_i
         camera_gdf = gpd.read_file(local_camera)
 
         if "altitude_agl" not in camera_gdf.columns:
-            print(f"  SKIP: no altitude_agl column in camera-locations", file=sys.stderr)
-            return False
+            return False, "SKIP: no altitude_agl column in camera-locations"
 
         agl_mean, agl_fidelity = compute_agl_summary(camera_gdf)
 
         if agl_mean is None:
-            print(f"  SKIP: insufficient AGL data", file=sys.stderr)
-            return False
-
-        print(f"  agl_mean={agl_mean}, agl_fidelity={agl_fidelity}", file=sys.stderr)
+            return False, "SKIP: insufficient AGL data"
 
         if dry_run:
-            return True
+            return True, f"agl_mean={agl_mean}, agl_fidelity={agl_fidelity}"
 
         # Read image metadata, add columns, and save
         metadata_gdf = gpd.read_file(local_metadata)
@@ -214,9 +207,7 @@ def process_mission(bucket, missions_prefix, photogrammetry_subfolder, mission_i
 
         # Re-upload
         upload_s3_file(client, bucket, metadata_key, local_metadata)
-        print(f"  Uploaded updated metadata", file=sys.stderr)
-
-    return True
+        return True, f"agl_mean={agl_mean}, agl_fidelity={agl_fidelity} — uploaded"
 
 
 def main():
@@ -288,12 +279,13 @@ def main():
         for future in as_completed(futures):
             mission_id = futures[future]
             try:
-                success = future.result()
+                success, message = future.result()
             except Exception as e:
                 print(f"\n{mission_id}:\n  ERROR: {e}", file=sys.stderr)
                 skipped += 1
                 continue
 
+            print(f"\n{mission_id}:\n  {message}", file=sys.stderr)
             if success:
                 processed += 1
             else:
