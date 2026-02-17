@@ -2,6 +2,7 @@
 Photogrammetry post-processing functions.
 Converts raw photogrammetry products into deliverable versions (COGs, CHMs, thumbnails).
 Python conversion of 20_postprocess-photogrammetry-products.R
+Also computes the height above ground for each camera which was aligned by photogrammetry
 """
 
 import os
@@ -17,6 +18,8 @@ from rasterio.enums import ColorInterp
 from rasterio.mask import mask
 from rasterio.warp import Resampling, calculate_default_transform, reproject
 from shapely.geometry import Point
+
+from compute_derived_altitude import compute_height_above_ground
 
 matplotlib.use("Agg")  # Non-interactive backend
 import matplotlib.pyplot as plt
@@ -618,6 +621,46 @@ def postprocess_photogrammetry_containerized(
 
         except Exception as e:
             print(f"Warning: Failed to create thumbnail for {tif_file}: {e}")
+
+    # Create the height above ground file
+    # Check if both input files exist
+    if (
+        f"{mission_id}_cameras.xml" in product_filenames
+        and f"{mission_id}_dtm-ptcloud.tif" in product_filenames
+    ):
+        print("Computing height above ground for aligned cameras")
+        # Find the matching full file paths in the dataframe of photogrammetry outputs
+        cameras_file = Path(
+            photogrammetry_output_files[
+                photogrammetry_output_files["photogrammetry_output_filename"]
+                == f"{mission_id}_cameras.xml"
+            ]["full_path"].iloc[0]
+        )
+        DTM_file = Path(
+            photogrammetry_output_files[
+                photogrammetry_output_files["photogrammetry_output_filename"]
+                == f"{mission_id}_dtm-ptcloud.tif"
+            ]["full_path"].iloc[0]
+        )
+        output_file = Path(
+            postprocessed_path, "full", f"{mission_id}_camera-locations.gpkg"
+        )
+
+        try:
+            height_above_ground = compute_height_above_ground(
+                camera_file=cameras_file, dtm_file=DTM_file
+            )
+            height_above_ground.to_file(output_file)
+            print(
+                f"Successfully created height above ground: {output_file.name}"
+            )
+        except Exception as e:
+            print(f"Failed to compute height above ground: {e}")
+    else:
+        print(
+            "Skipping height above ground computation (missing cameras.xml or dtm-ptcloud.tif)"
+        )
+
 
     ## Copy non-raster files
 
