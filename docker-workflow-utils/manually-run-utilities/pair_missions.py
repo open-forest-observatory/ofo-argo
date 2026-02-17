@@ -68,7 +68,9 @@ LO_PITCH_MAX = 38
 MIN_FIDELITY = 50
 
 # Temporal pairing criterion: maximum difference in days between missions
-MAX_DATE_DIFF_DAYS = 365*1.5 # (allows pairing between early in Year 1 and late in Year 2)
+MAX_DATE_DIFF_DAYS = (
+    365 * 1.5
+)  # (allows pairing between early in Year 1 and late in Year 2)
 
 # Spatial pairing criterion: minimum intersection area in hectares
 MIN_OVERLAP_HA = 2.0
@@ -160,9 +162,15 @@ def classify_mission(row):
 
     pitch = abs(float(pitch))
 
-    if HN_ALTITUDE_MIN <= alt <= HN_ALTITUDE_MAX and HN_PITCH_MIN <= pitch <= HN_PITCH_MAX:
+    if (
+        HN_ALTITUDE_MIN <= alt <= HN_ALTITUDE_MAX
+        and HN_PITCH_MIN <= pitch <= HN_PITCH_MAX
+    ):
         return "hn"
-    if LO_ALTITUDE_MIN <= alt <= LO_ALTITUDE_MAX and LO_PITCH_MIN <= pitch <= LO_PITCH_MAX:
+    if (
+        LO_ALTITUDE_MIN <= alt <= LO_ALTITUDE_MAX
+        and LO_PITCH_MIN <= pitch <= LO_PITCH_MAX
+    ):
         return "lo"
 
     return None
@@ -199,8 +207,11 @@ def find_valid_pairs(missions_gdf):
     hn = missions[missions["_type"] == "hn"].copy()
     lo = missions[missions["_type"] == "lo"].copy()
 
-    print(f"Classified {len(hn)} missions as hn, {len(lo)} as lo "
-          f"(of {len(missions)} total)", file=sys.stderr)
+    print(
+        f"Classified {len(hn)} missions as hn, {len(lo)} as lo "
+        f"(of {len(missions)} total)",
+        file=sys.stderr,
+    )
 
     if hn.empty or lo.empty:
         print("No valid pairs possible — one side is empty.", file=sys.stderr)
@@ -213,14 +224,18 @@ def find_valid_pairs(missions_gdf):
     # Build pairs via spatial overlay (intersection)
     pairs = gpd.overlay(
         hn[["mission_id", "earliest_date_derived", "geometry"]].rename(
-            columns={"mission_id": "hn_mission_id",
-                     "earliest_date_derived": "hn_date",
-                     "geometry": "geometry"}
+            columns={
+                "mission_id": "hn_mission_id",
+                "earliest_date_derived": "hn_date",
+                "geometry": "geometry",
+            }
         ),
         lo[["mission_id", "earliest_date_derived", "geometry"]].rename(
-            columns={"mission_id": "lo_mission_id",
-                     "earliest_date_derived": "lo_date",
-                     "geometry": "geometry"}
+            columns={
+                "mission_id": "lo_mission_id",
+                "earliest_date_derived": "lo_date",
+                "geometry": "geometry",
+            }
         ),
         how="intersection",
         keep_geom_type=False,
@@ -242,7 +257,9 @@ def find_valid_pairs(missions_gdf):
     pairs = pairs[
         pairs["date_diff_days"].isna() | (pairs["date_diff_days"] <= MAX_DATE_DIFF_DAYS)
     ].copy()
-    print(f"Pairs within {MAX_DATE_DIFF_DAYS}-day window: {len(pairs)}", file=sys.stderr)
+    print(
+        f"Pairs within {MAX_DATE_DIFF_DAYS}-day window: {len(pairs)}", file=sys.stderr
+    )
 
     if pairs.empty:
         return pd.DataFrame()
@@ -283,22 +300,26 @@ def build_pair_polygons(pairs):
         hn_poly = hn_fp.intersection(lo_fp)
         lo_poly = lo_fp.intersection(hn_fp.buffer(LO_BUFFER_M))
 
-        rows.append({
-            "composite_id": composite_id,
-            "mission_type": "hn",
-            "mission_id": row["hn_mission_id"],
-            "date": row["hn_date"],
-            "area_m2": hn_poly.area,
-            "geometry": hn_poly,
-        })
-        rows.append({
-            "composite_id": composite_id,
-            "mission_type": "lo",
-            "mission_id": row["lo_mission_id"],
-            "date": row["lo_date"],
-            "area_m2": lo_poly.area,
-            "geometry": lo_poly,
-        })
+        rows.append(
+            {
+                "composite_id": composite_id,
+                "mission_type": "hn",
+                "mission_id": row["hn_mission_id"],
+                "date": row["hn_date"],
+                "area_m2": hn_poly.area,
+                "geometry": hn_poly,
+            }
+        )
+        rows.append(
+            {
+                "composite_id": composite_id,
+                "mission_type": "lo",
+                "mission_id": row["lo_mission_id"],
+                "date": row["lo_date"],
+                "area_m2": lo_poly.area,
+                "geometry": lo_poly,
+            }
+        )
 
     return gpd.GeoDataFrame(rows, crs=WORKING_CRS)
 
@@ -373,8 +394,12 @@ def filter_prefer_within_year(pairs, pair_polygons):
         if len(rows) <= 1:
             continue
 
-        within = rows[rows["date_diff_days"].notna() & (rows["date_diff_days"] < WITHIN_YEAR_DAYS)]
-        cross = rows[rows["date_diff_days"].isna() | (rows["date_diff_days"] >= WITHIN_YEAR_DAYS)]
+        within = rows[
+            rows["date_diff_days"].notna() & (rows["date_diff_days"] < WITHIN_YEAR_DAYS)
+        ]
+        cross = rows[
+            rows["date_diff_days"].isna() | (rows["date_diff_days"] >= WITHIN_YEAR_DAYS)
+        ]
 
         if within.empty or cross.empty:
             continue
@@ -410,16 +435,18 @@ def select_images(pair_polygons, images_gdf):
     # Spatial join: each image matched to the pair polygon(s) it falls within
     selected = gpd.sjoin(
         images,
-        pair_polygons[["composite_id", "mission_type", "mission_id", "geometry"]].rename(
-            columns={"mission_id": "pair_mission_id"}
-        ),
+        pair_polygons[
+            ["composite_id", "mission_type", "mission_id", "geometry"]
+        ].rename(columns={"mission_id": "pair_mission_id"}),
         how="inner",
         predicate="within",
     )
 
     # Keep only images whose mission_id matches the pair's mission_id
     selected = selected[selected["mission_id"] == selected["pair_mission_id"]].copy()
-    selected.drop(columns=["index_right", "pair_mission_id"], errors="ignore", inplace=True)
+    selected.drop(
+        columns=["index_right", "pair_mission_id"], errors="ignore", inplace=True
+    )
 
     return selected
 
@@ -451,9 +478,7 @@ def report_duplications(pairs):
         overlaps = _compute_partner_overlaps(partner_geoms, partners)
         hn_overlap_cache[mission_id] = overlaps
         dup_type = "same-area" if _is_same_area(overlaps) else "different-area"
-        overlap_str = ", ".join(
-            f"{a}–{b}: {pct:.0f}%" for a, b, pct in overlaps
-        )
+        overlap_str = ", ".join(f"{a}–{b}: {pct:.0f}%" for a, b, pct in overlaps)
         print(
             f"  hn {mission_id} appears in {count} pairs "
             f"(lo partners: {partners}, type: {dup_type}, "
@@ -469,9 +494,7 @@ def report_duplications(pairs):
         overlaps = _compute_partner_overlaps(partner_geoms, partners)
         lo_overlap_cache[mission_id] = overlaps
         dup_type = "same-area" if _is_same_area(overlaps) else "different-area"
-        overlap_str = ", ".join(
-            f"{a}–{b}: {pct:.0f}%" for a, b, pct in overlaps
-        )
+        overlap_str = ", ".join(f"{a}–{b}: {pct:.0f}%" for a, b, pct in overlaps)
         print(
             f"  lo {mission_id} appears in {count} pairs "
             f"(hn partners: {partners}, type: {dup_type}, "
@@ -486,10 +509,16 @@ def report_duplications(pairs):
     diff_area_lo = len(multi_lo) - same_area_lo
 
     print(f"\n  Summary:", file=sys.stderr)
-    print(f"    hn missions in multiple pairs: {len(multi_hn)} "
-          f"(same-area: {same_area_hn}, different-area: {diff_area_hn})", file=sys.stderr)
-    print(f"    lo missions in multiple pairs: {len(multi_lo)} "
-          f"(same-area: {same_area_lo}, different-area: {diff_area_lo})", file=sys.stderr)
+    print(
+        f"    hn missions in multiple pairs: {len(multi_hn)} "
+        f"(same-area: {same_area_hn}, different-area: {diff_area_hn})",
+        file=sys.stderr,
+    )
+    print(
+        f"    lo missions in multiple pairs: {len(multi_lo)} "
+        f"(same-area: {same_area_lo}, different-area: {diff_area_lo})",
+        file=sys.stderr,
+    )
 
 
 def _compute_partner_overlaps(geoms, labels):
@@ -555,7 +584,7 @@ def main():
     parser.add_argument(
         "--s3-upload-composites-folder",
         help="S3 prefix for uploading outputs (e.g. drone/mission-composites_01). "
-             "Requires --bucket.",
+        "Requires --bucket.",
     )
 
     args = parser.parse_args()
@@ -600,8 +629,10 @@ def main():
     missions_gdf = gpd.read_file(missions_path)
     images_gdf = gpd.read_file(images_path)
 
-    print(f"Loaded {len(missions_gdf)} missions, {len(images_gdf)} images",
-          file=sys.stderr)
+    print(
+        f"Loaded {len(missions_gdf)} missions, {len(images_gdf)} images",
+        file=sys.stderr,
+    )
 
     # ---- Find pairs -------------------------------------------------------
     pairs = find_valid_pairs(missions_gdf)
@@ -624,8 +655,11 @@ def main():
     # Back to geographic CRS for output
     pair_polygons_out = pair_polygons.to_crs("EPSG:4326")
 
-    print(f"\nPair polygons: {len(pair_polygons_out)} rows "
-          f"({len(pairs)} pairs x 2 mission types)", file=sys.stderr)
+    print(
+        f"\nPair polygons: {len(pair_polygons_out)} rows "
+        f"({len(pairs)} pairs x 2 mission types)",
+        file=sys.stderr,
+    )
 
     # ---- Select images ----------------------------------------------------
     selected_images = select_images(pair_polygons, images_gdf)
@@ -635,10 +669,14 @@ def main():
 
     # Count duplicated images
     if "image_id" in selected_images_out.columns:
-        dup_images = selected_images_out.duplicated(subset=["image_id"], keep=False).sum()
+        dup_images = selected_images_out.duplicated(
+            subset=["image_id"], keep=False
+        ).sum()
         unique_images = selected_images_out["image_id"].nunique()
-        print(f"  Unique images: {unique_images}, duplicated rows: {dup_images}",
-              file=sys.stderr)
+        print(
+            f"  Unique images: {unique_images}, duplicated rows: {dup_images}",
+            file=sys.stderr,
+        )
 
     # ---- Save outputs -----------------------------------------------------
     polygons_filename = "selected-composites-polygons.gpkg"
@@ -648,8 +686,12 @@ def main():
 
     if args.local_output_composites_folder:
         os.makedirs(args.local_output_composites_folder, exist_ok=True)
-        pairs_path = os.path.join(args.local_output_composites_folder, polygons_filename)
-        images_out_path = os.path.join(args.local_output_composites_folder, images_filename)
+        pairs_path = os.path.join(
+            args.local_output_composites_folder, polygons_filename
+        )
+        images_out_path = os.path.join(
+            args.local_output_composites_folder, images_filename
+        )
 
         pair_polygons_out.to_file(pairs_path, driver="GPKG")
         print(f"\nWrote {pairs_path}", file=sys.stderr)
@@ -659,8 +701,10 @@ def main():
 
     if args.s3_upload_composites_folder:
         if not args.bucket:
-            print("ERROR: --s3-upload-composites-folder requires --bucket",
-                  file=sys.stderr)
+            print(
+                "ERROR: --s3-upload-composites-folder requires --bucket",
+                file=sys.stderr,
+            )
             sys.exit(1)
         if not using_s3:
             # Need an S3 client even if input was local

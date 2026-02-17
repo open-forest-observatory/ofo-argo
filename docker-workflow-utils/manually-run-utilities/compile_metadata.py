@@ -79,7 +79,9 @@ def rclone_lsf(remote_path, dirs_only=False):
     if dirs_only:
         cmd += ["--dirs-only"]
     result = subprocess.run(cmd, check=True, capture_output=True, text=True)
-    return [line.rstrip("/") for line in result.stdout.strip().splitlines() if line.strip()]
+    return [
+        line.rstrip("/") for line in result.stdout.strip().splitlines() if line.strip()
+    ]
 
 
 def discover_missions(bucket, missions_prefix):
@@ -120,8 +122,12 @@ def collect_metadata(bucket, missions_prefix, mission_ids, tmpdir):
     mission_gdfs = []
     image_gdfs = []
 
-    mission_files = sorted(glob.glob(os.path.join(tmpdir, "*/metadata-mission/*_mission-metadata.gpkg")))
-    image_files = sorted(glob.glob(os.path.join(tmpdir, "*/metadata-images/*_image-metadata.gpkg")))
+    mission_files = sorted(
+        glob.glob(os.path.join(tmpdir, "*/metadata-mission/*_mission-metadata.gpkg"))
+    )
+    image_files = sorted(
+        glob.glob(os.path.join(tmpdir, "*/metadata-images/*_image-metadata.gpkg"))
+    )
 
     for f in mission_files:
         mission_id = os.path.basename(f).split("_")[0]
@@ -158,9 +164,7 @@ def main():
         description="Compile per-mission metadata into single GeoPackages",
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
-    parser.add_argument(
-        "--bucket", required=True, help="S3 bucket (e.g. ofo-public)"
-    )
+    parser.add_argument("--bucket", required=True, help="S3 bucket (e.g. ofo-public)")
     parser.add_argument(
         "--missions-prefix",
         required=True,

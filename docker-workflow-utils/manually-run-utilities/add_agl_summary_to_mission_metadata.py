@@ -157,7 +157,9 @@ def compute_agl_summary(camera_locations_gdf):
     return agl_mean, agl_fidelity
 
 
-def process_mission(bucket, missions_prefix, photogrammetry_subfolder, mission_id, dry_run=False):
+def process_mission(
+    bucket, missions_prefix, photogrammetry_subfolder, mission_id, dry_run=False
+):
     """
     Process a single mission: download camera-locations, compute AGL summary,
     add columns to image-metadata, and re-upload.
@@ -216,9 +218,7 @@ def main():
         description="Backfill AGL summary columns onto mission image-metadata files",
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
-    parser.add_argument(
-        "--bucket", required=True, help="S3 bucket (e.g. ofo-public)"
-    )
+    parser.add_argument("--bucket", required=True, help="S3 bucket (e.g. ofo-public)")
     parser.add_argument(
         "--missions-prefix",
         required=True,
@@ -254,7 +254,10 @@ def main():
         print(f"Processing {len(mission_ids)} specified missions", file=sys.stderr)
     else:
         client = get_s3_client()
-        print(f"Discovering missions in s3://{args.bucket}/{args.missions_prefix}/...", file=sys.stderr)
+        print(
+            f"Discovering missions in s3://{args.bucket}/{args.missions_prefix}/...",
+            file=sys.stderr,
+        )
         mission_ids = discover_missions(client, args.bucket, args.missions_prefix)
         print(f"Found {len(mission_ids)} missions", file=sys.stderr)
 
