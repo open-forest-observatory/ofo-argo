@@ -4,25 +4,28 @@ Pair high-nadir (hn) and low-oblique (lo) drone missions based on spatial overla
 date proximity, altitude, pitch, and terrain-follow fidelity.
 
 Outputs:
-  - A pairs GeoPackage with one polygon per mission per pair (hn cropped to overlap
-    with lo, lo cropped to 100 m beyond hn footprint).
-  - A selected-images GeoPackage with images falling within each pair polygon.
+  - selected-composites-polygons.gpkg: one polygon per mission per pair (hn cropped
+    to overlap with lo, lo cropped to 100 m beyond hn footprint).
+  - selected-composites-images.gpkg: images falling within each pair polygon.
 
 Usage:
-    python pair_missions.py \
-        --bucket ofo-public \
-        --missions-prefix drone/missions_03
-
-    # With local files instead of S3:
-    python pair_missions.py \
-        --local-missions metadata-missions-compiled.gpkg \
-        --local-images metadata-images-compiled.gpkg
-
-    # Dry run (no file writes / uploads):
+    # From S3, save locally and upload results:
     python pair_missions.py \
         --bucket ofo-public \
         --missions-prefix drone/missions_03 \
-        --dry-run
+        --local-output-composites-folder ./output \
+        --s3-upload-composites-folder drone/mission-composites_01
+
+    # With local files, save locally only:
+    python pair_missions.py \
+        --local-missions metadata-missions-compiled.gpkg \
+        --local-images metadata-images-compiled.gpkg \
+        --local-output-composites-folder ./output
+
+    # Dry run (omit both output flags):
+    python pair_missions.py \
+        --bucket ofo-public \
+        --missions-prefix drone/missions_03
 
 Requirements:
     - geopandas, pandas, numpy, shapely
@@ -99,9 +102,8 @@ WITHIN_YEAR_AREA_MARGIN = 0.10
 #     missions_prefix=None,
 #     local_missions="~/repo-data-local/tmp/metadata-missions-compiled.gpkg",
 #     local_images="~/repo-data-local/tmp/metadata-images-compiled.gpkg",
-#     output_dir=".",
-#     upload=False,
-#     dry_run=True,
+#     local_output_composites_folder="./output",
+#     s3_upload_composites_folder=None,
 # )
 
 
@@ -545,21 +547,15 @@ def main():
         help="Path to local metadata-images-compiled.gpkg",
     )
 
-    # Output
+    # Output (both optional; omit both for a dry run)
     parser.add_argument(
-        "--output-dir",
-        default=".",
-        help="Local directory for output files (default: current dir)",
+        "--local-output-composites-folder",
+        help="Local directory to save output files (omit to skip local save)",
     )
     parser.add_argument(
-        "--upload",
-        action="store_true",
-        help="Upload outputs to S3 under --missions-prefix",
-    )
-    parser.add_argument(
-        "--dry-run",
-        action="store_true",
-        help="Compute pairs and report but don't write files",
+        "--s3-upload-composites-folder",
+        help="S3 prefix for uploading outputs (e.g. drone/mission-composites_01). "
+             "Requires --bucket.",
     )
 
     args = parser.parse_args()
@@ -569,8 +565,10 @@ def main():
         args.local_missions = os.path.expanduser(args.local_missions)
     if args.local_images:
         args.local_images = os.path.expanduser(args.local_images)
-    if args.output_dir:
-        args.output_dir = os.path.expanduser(args.output_dir)
+    if args.local_output_composites_folder:
+        args.local_output_composites_folder = os.path.expanduser(
+            args.local_output_composites_folder
+        )
 
     # Validate args
     using_s3 = args.bucket and args.missions_prefix
@@ -642,30 +640,50 @@ def main():
         print(f"  Unique images: {unique_images}, duplicated rows: {dup_images}",
               file=sys.stderr)
 
-    if args.dry_run:
-        print("\n[DRY RUN] No files written.", file=sys.stderr)
-        return
-
     # ---- Save outputs -----------------------------------------------------
-    os.makedirs(args.output_dir, exist_ok=True)
+    polygons_filename = "selected-composites-polygons.gpkg"
+    images_filename = "selected-composites-images.gpkg"
 
-    pairs_path = os.path.join(args.output_dir, "paired-mission-polygons.gpkg")
-    images_out_path = os.path.join(args.output_dir, "paired-mission-images.gpkg")
+    wrote_anything = False
 
-    pair_polygons_out.to_file(pairs_path, driver="GPKG")
-    print(f"\nWrote {pairs_path}", file=sys.stderr)
+    if args.local_output_composites_folder:
+        os.makedirs(args.local_output_composites_folder, exist_ok=True)
+        pairs_path = os.path.join(args.local_output_composites_folder, polygons_filename)
+        images_out_path = os.path.join(args.local_output_composites_folder, images_filename)
 
-    selected_images_out.to_file(images_out_path, driver="GPKG")
-    print(f"Wrote {images_out_path}", file=sys.stderr)
+        pair_polygons_out.to_file(pairs_path, driver="GPKG")
+        print(f"\nWrote {pairs_path}", file=sys.stderr)
+        selected_images_out.to_file(images_out_path, driver="GPKG")
+        print(f"Wrote {images_out_path}", file=sys.stderr)
+        wrote_anything = True
 
-    # ---- Upload to S3 if requested ----------------------------------------
-    if args.upload and using_s3:
-        pairs_key = f"{args.missions_prefix}/paired-mission-polygons.gpkg"
-        images_key = f"{args.missions_prefix}/paired-mission-images.gpkg"
+    if args.s3_upload_composites_folder:
+        if not args.bucket:
+            print("ERROR: --s3-upload-composites-folder requires --bucket",
+                  file=sys.stderr)
+            sys.exit(1)
+        if not using_s3:
+            # Need an S3 client even if input was local
+            client = get_s3_client()
+
+        # Write to a temp dir if we haven't saved locally
+        if not args.local_output_composites_folder:
+            tmpout = tempfile.mkdtemp()
+            pairs_path = os.path.join(tmpout, polygons_filename)
+            images_out_path = os.path.join(tmpout, images_filename)
+            pair_polygons_out.to_file(pairs_path, driver="GPKG")
+            selected_images_out.to_file(images_out_path, driver="GPKG")
+
+        pairs_key = f"{args.s3_upload_composites_folder}/{polygons_filename}"
+        images_key = f"{args.s3_upload_composites_folder}/{images_filename}"
         upload_s3_file(client, args.bucket, pairs_key, pairs_path)
-        print(f"Uploaded s3://{args.bucket}/{pairs_key}", file=sys.stderr)
+        print(f"\nUploaded s3://{args.bucket}/{pairs_key}", file=sys.stderr)
         upload_s3_file(client, args.bucket, images_key, images_out_path)
         print(f"Uploaded s3://{args.bucket}/{images_key}", file=sys.stderr)
+        wrote_anything = True
+
+    if not wrote_anything:
+        print("\nNo output flags specified; no files written.", file=sys.stderr)
 
     print("\nDone.", file=sys.stderr)
 
