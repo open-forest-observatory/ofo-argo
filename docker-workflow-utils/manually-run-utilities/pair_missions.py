@@ -259,7 +259,7 @@ def find_valid_pairs(missions_gdf):
     ).reset_index(drop=True)
 
     # Composite pair ID: hn_mission_id _ lo_mission_id
-    pairs["pair_id"] = pairs["hn_mission_id"] + "_" + pairs["lo_mission_id"]
+    pairs["composite_id"] = pairs["hn_mission_id"] + "_" + pairs["lo_mission_id"]
 
     return pairs
 
@@ -272,11 +272,11 @@ def build_pair_polygons(pairs):
     - lo polygon = intersection(lo_footprint, hn_footprint.buffer(LO_BUFFER_M))
 
     Returns a GeoDataFrame with columns:
-      pair_id, mission_type ('hn'/'lo'), mission_id, date, area_m2, geometry
+      composite_id, mission_type ('hn'/'lo'), mission_id, date, area_m2, geometry
     """
     rows = []
     for idx, row in pairs.iterrows():
-        pair_id = row["pair_id"]
+        composite_id = row["composite_id"]
         hn_fp = make_valid(row["hn_geom"])
         lo_fp = make_valid(row["lo_geom"])
 
@@ -284,7 +284,7 @@ def build_pair_polygons(pairs):
         lo_poly = lo_fp.intersection(hn_fp.buffer(LO_BUFFER_M))
 
         rows.append({
-            "pair_id": pair_id,
+            "composite_id": composite_id,
             "mission_type": "hn",
             "mission_id": row["hn_mission_id"],
             "date": row["hn_date"],
@@ -292,7 +292,7 @@ def build_pair_polygons(pairs):
             "geometry": hn_poly,
         })
         rows.append({
-            "pair_id": pair_id,
+            "composite_id": composite_id,
             "mission_type": "lo",
             "mission_id": row["lo_mission_id"],
             "date": row["lo_date"],
@@ -334,7 +334,7 @@ def filter_subset_pairs(pairs, pair_polygons):
                 if gj.is_empty:
                     continue
                 if gi.intersection(gj).area / ai >= SUBSET_AREA_THRESHOLD:
-                    pairs_to_drop.add(rows.loc[idxs[i], "pair_id"])
+                    pairs_to_drop.add(rows.loc[idxs[i], "composite_id"])
                     break  # already dropping this pair, no need to check more
 
     if pairs_to_drop:
@@ -344,9 +344,9 @@ def filter_subset_pairs(pairs, pair_polygons):
             f"{sorted(pairs_to_drop)}",
             file=sys.stderr,
         )
-        pairs = pairs[~pairs["pair_id"].isin(pairs_to_drop)].reset_index(drop=True)
+        pairs = pairs[~pairs["composite_id"].isin(pairs_to_drop)].reset_index(drop=True)
         pair_polygons = pair_polygons[
-            ~pair_polygons["pair_id"].isin(pairs_to_drop)
+            ~pair_polygons["composite_id"].isin(pairs_to_drop)
         ].reset_index(drop=True)
 
     return pairs, pair_polygons
@@ -363,8 +363,8 @@ def filter_prefer_within_year(pairs, pair_polygons):
 
     # Merge date_diff_days onto pair_polygons for easy lookup
     pp = pair_polygons.merge(
-        pairs[["pair_id", "date_diff_days"]],
-        on="pair_id",
+        pairs[["composite_id", "date_diff_days"]],
+        on="composite_id",
         how="left",
     )
 
@@ -383,7 +383,7 @@ def filter_prefer_within_year(pairs, pair_polygons):
 
         for _, crow in cross.iterrows():
             if crow["area_m2"] <= best_within_area * (1 + WITHIN_YEAR_AREA_MARGIN):
-                pairs_to_drop.add(crow["pair_id"])
+                pairs_to_drop.add(crow["composite_id"])
 
     if pairs_to_drop:
         print(
@@ -391,9 +391,9 @@ def filter_prefer_within_year(pairs, pair_polygons):
             f"pairings: {sorted(pairs_to_drop)}",
             file=sys.stderr,
         )
-        pairs = pairs[~pairs["pair_id"].isin(pairs_to_drop)].reset_index(drop=True)
+        pairs = pairs[~pairs["composite_id"].isin(pairs_to_drop)].reset_index(drop=True)
         pair_polygons = pair_polygons[
-            ~pair_polygons["pair_id"].isin(pairs_to_drop)
+            ~pair_polygons["composite_id"].isin(pairs_to_drop)
         ].reset_index(drop=True)
 
     return pairs, pair_polygons
@@ -403,14 +403,14 @@ def select_images(pair_polygons, images_gdf):
     """
     Select images that fall within each pair polygon.
 
-    Returns a GeoDataFrame of images with pair_id and mission_type attached.
+    Returns a GeoDataFrame of images with composite_id and mission_type attached.
     """
     images = images_gdf.to_crs(WORKING_CRS)
 
     # Spatial join: each image matched to the pair polygon(s) it falls within
     selected = gpd.sjoin(
         images,
-        pair_polygons[["pair_id", "mission_type", "mission_id", "geometry"]].rename(
+        pair_polygons[["composite_id", "mission_type", "mission_id", "geometry"]].rename(
             columns={"mission_id": "pair_mission_id"}
         ),
         how="inner",
