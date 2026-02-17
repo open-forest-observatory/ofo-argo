@@ -2,9 +2,9 @@
 """
 Compile all mission-level and image-level metadata into single GeoPackages.
 
-Iterates over missions in S3, downloads each mission's metadata files,
-concatenates them (adding a mission_id column), and uploads the compiled
-files back to S3.
+Iterates over missions in S3, downloads each mission's metadata files using
+rclone, concatenates them (adding a mission_id column), and uploads the
+compiled files back to S3.
 
 Usage:
     python compile_metadata.py \
@@ -24,26 +24,24 @@ Usage:
         --missions 000016 000017
 
 Requirements:
-    - boto3, geopandas, pandas
-    - S3 credentials configured (env vars, ~/.aws/credentials, or IAM role)
+    - rclone, geopandas, pandas
+    - rclone remote configured via environment variables (see below)
 
-Environment variables for S3:
-    S3_ENDPOINT: S3 endpoint URL (for non-AWS S3)
-    AWS_ACCESS_KEY_ID: Access key
-    AWS_SECRET_ACCESS_KEY: Secret key
+Environment variables for rclone (configures the js2s3 remote without a config file):
+    RCLONE_CONFIG_JS2S3_TYPE: Set to "s3"
+    RCLONE_CONFIG_JS2S3_PROVIDER: S3 provider (e.g., "Other")
+    RCLONE_CONFIG_JS2S3_ENDPOINT: S3 endpoint URL
+    RCLONE_CONFIG_JS2S3_ENV_AUTH: Set to "true" to use AWS env vars for auth
+    AWS_ACCESS_KEY_ID: S3 access key
+    AWS_SECRET_ACCESS_KEY: S3 secret key
 """
 
 import argparse
+import glob
 import os
+import subprocess
 import sys
 import tempfile
-
-try:
-    import boto3
-    from botocore.config import Config
-except ImportError:
-    print("Error: boto3 required. Install with: pip install boto3", file=sys.stderr)
-    sys.exit(1)
 
 try:
     import geopandas as gpd
@@ -55,99 +53,91 @@ except ImportError:
     )
     sys.exit(1)
 
-
-def get_s3_client():
-    """Create S3 client with optional custom endpoint."""
-    endpoint = os.environ.get("S3_ENDPOINT")
-
-    if endpoint:
-        return boto3.client(
-            "s3",
-            endpoint_url=endpoint,
-            aws_access_key_id=os.environ.get("AWS_ACCESS_KEY_ID")
-            or os.environ.get("S3_ACCESS_KEY"),
-            aws_secret_access_key=os.environ.get("AWS_SECRET_ACCESS_KEY")
-            or os.environ.get("S3_SECRET_KEY"),
-            config=Config(signature_version="s3v4"),
-        )
-    else:
-        return boto3.client("s3")
+RCLONE_REMOTE = "js2s3"
 
 
-def discover_missions(client, bucket, missions_prefix):
+def rclone_copy(src, dst, includes=None):
+    """Run an rclone copy command with optional --include filters."""
+    cmd = ["rclone", "copy", src, dst, "--transfers", "8", "--checkers", "8"]
+    if includes:
+        for pattern in includes:
+            cmd += ["--include", pattern]
+    print(f"  rclone copy {src} -> {dst}", file=sys.stderr)
+    subprocess.run(cmd, check=True)
+
+
+def rclone_copyto(src, dst):
+    """Run an rclone copyto command (single file)."""
+    cmd = ["rclone", "copyto", src, dst]
+    print(f"  rclone copyto {src} -> {dst}", file=sys.stderr)
+    subprocess.run(cmd, check=True)
+
+
+def rclone_lsf(remote_path, dirs_only=False):
+    """List items at a remote path using rclone lsf."""
+    cmd = ["rclone", "lsf", remote_path]
+    if dirs_only:
+        cmd += ["--dirs-only"]
+    result = subprocess.run(cmd, check=True, capture_output=True, text=True)
+    return [line.rstrip("/") for line in result.stdout.strip().splitlines() if line.strip()]
+
+
+def discover_missions(bucket, missions_prefix):
     """List mission IDs by finding top-level subdirectories."""
-    paginator = client.get_paginator("list_objects_v2")
-    mission_ids = set()
-
-    for page in paginator.paginate(
-        Bucket=bucket, Prefix=f"{missions_prefix}/", Delimiter="/"
-    ):
-        for prefix_obj in page.get("CommonPrefixes", []):
-            parts = prefix_obj["Prefix"].rstrip("/").split("/")
-            mission_ids.add(parts[-1])
-
-    return sorted(mission_ids)
+    remote_path = f"{RCLONE_REMOTE}:{bucket}/{missions_prefix}/"
+    return sorted(rclone_lsf(remote_path, dirs_only=True))
 
 
-def s3_key_exists(client, bucket, key):
-    """Check if an S3 key exists."""
-    try:
-        client.head_object(Bucket=bucket, Key=key)
-        return True
-    except client.exceptions.ClientError:
-        return False
-
-
-def download_s3_file(client, bucket, key, local_path):
-    """Download a file from S3."""
-    os.makedirs(os.path.dirname(local_path), exist_ok=True)
-    client.download_file(bucket, key, local_path)
-
-
-def upload_s3_file(client, bucket, key, local_path):
-    """Upload a file to S3."""
-    client.upload_file(local_path, bucket, key)
-
-
-def collect_metadata(client, bucket, missions_prefix, mission_ids):
+def collect_metadata(bucket, missions_prefix, mission_ids, tmpdir):
     """
     Download and concatenate metadata files across all missions.
 
+    Uses a single rclone copy with --include filters to download all matching
+    files in parallel, then reads and concatenates them locally.
+
+    If specific mission_ids are provided, downloads only those missions'
+    metadata. Otherwise downloads all metadata files matching the pattern.
+
     Returns (missions_gdf, images_gdf) — either may be None if no data found.
     """
+    remote_path = f"{RCLONE_REMOTE}:{bucket}/{missions_prefix}/"
+
+    if mission_ids:
+        includes = []
+        for mid in mission_ids:
+            includes.append(f"{mid}/metadata-mission/{mid}_mission-metadata.gpkg")
+            includes.append(f"{mid}/metadata-images/{mid}_image-metadata.gpkg")
+    else:
+        includes = [
+            "*/metadata-mission/*_mission-metadata.gpkg",
+            "*/metadata-images/*_image-metadata.gpkg",
+        ]
+
+    print(f"\nDownloading metadata files...", file=sys.stderr)
+    rclone_copy(remote_path, tmpdir, includes=includes)
+
+    # Read downloaded files
     mission_gdfs = []
     image_gdfs = []
 
-    for mission_id in mission_ids:
-        mission_key = f"{missions_prefix}/{mission_id}/metadata-mission/{mission_id}_mission-metadata.gpkg"
-        image_key = f"{missions_prefix}/{mission_id}/metadata-images/{mission_id}_image-metadata.gpkg"
+    mission_files = sorted(glob.glob(os.path.join(tmpdir, "*/metadata-mission/*_mission-metadata.gpkg")))
+    image_files = sorted(glob.glob(os.path.join(tmpdir, "*/metadata-images/*_image-metadata.gpkg")))
 
-        print(f"\n{mission_id}:", file=sys.stderr)
+    for f in mission_files:
+        mission_id = os.path.basename(f).split("_")[0]
+        gdf = gpd.read_file(f)
+        if "mission_id" not in gdf.columns:
+            gdf.insert(0, "mission_id", mission_id)
+        mission_gdfs.append(gdf)
+        print(f"  {mission_id} mission-metadata: {len(gdf)} rows", file=sys.stderr)
 
-        with tempfile.TemporaryDirectory() as tmpdir:
-            # Mission metadata
-            if s3_key_exists(client, bucket, mission_key):
-                local_path = os.path.join(tmpdir, "mission.gpkg")
-                download_s3_file(client, bucket, mission_key, local_path)
-                gdf = gpd.read_file(local_path)
-                if "mission_id" not in gdf.columns:
-                    gdf.insert(0, "mission_id", mission_id)
-                mission_gdfs.append(gdf)
-                print(f"  mission-metadata: {len(gdf)} rows", file=sys.stderr)
-            else:
-                print(f"  mission-metadata: not found", file=sys.stderr)
-
-            # Image metadata
-            if s3_key_exists(client, bucket, image_key):
-                local_path = os.path.join(tmpdir, "images.gpkg")
-                download_s3_file(client, bucket, image_key, local_path)
-                gdf = gpd.read_file(local_path)
-                if "mission_id" not in gdf.columns:
-                    gdf.insert(0, "mission_id", mission_id)
-                image_gdfs.append(gdf)
-                print(f"  image-metadata: {len(gdf)} rows", file=sys.stderr)
-            else:
-                print(f"  image-metadata: not found", file=sys.stderr)
+    for f in image_files:
+        mission_id = os.path.basename(f).split("_")[0]
+        gdf = gpd.read_file(f)
+        if "mission_id" not in gdf.columns:
+            gdf.insert(0, "mission_id", mission_id)
+        image_gdfs.append(gdf)
+        print(f"  {mission_id} image-metadata: {len(gdf)} rows", file=sys.stderr)
 
     missions_compiled = (
         gpd.GeoDataFrame(pd.concat(mission_gdfs, ignore_index=True))
@@ -189,30 +179,28 @@ def main():
 
     args = parser.parse_args()
 
-    client = get_s3_client()
-
     # Discover or use specified missions
     if args.missions:
         mission_ids = args.missions
         print(f"Processing {len(mission_ids)} specified missions", file=sys.stderr)
     else:
         print(
-            f"Discovering missions in s3://{args.bucket}/{args.missions_prefix}/...",
+            f"Discovering missions in {RCLONE_REMOTE}:{args.bucket}/{args.missions_prefix}/...",
             file=sys.stderr,
         )
-        mission_ids = discover_missions(client, args.bucket, args.missions_prefix)
+        mission_ids = discover_missions(args.bucket, args.missions_prefix)
         print(f"Found {len(mission_ids)} missions", file=sys.stderr)
 
     if args.dry_run:
         print("[DRY RUN] No files will be uploaded", file=sys.stderr)
 
-    # Collect all metadata
-    missions_compiled, images_compiled = collect_metadata(
-        client, args.bucket, args.missions_prefix, mission_ids
-    )
-
-    # Save and upload
     with tempfile.TemporaryDirectory() as tmpdir:
+        # Download and collect all metadata
+        missions_compiled, images_compiled = collect_metadata(
+            args.bucket, args.missions_prefix, mission_ids, tmpdir
+        )
+
+        # Save and upload
         if missions_compiled is not None:
             local_path = os.path.join(tmpdir, "metadata-missions-compiled.gpkg")
             missions_compiled.to_file(local_path, driver="GPKG")
@@ -222,9 +210,9 @@ def main():
                 file=sys.stderr,
             )
             if not args.dry_run:
-                upload_key = f"{args.missions_prefix}/metadata-missions-compiled.gpkg"
-                upload_s3_file(client, args.bucket, upload_key, local_path)
-                print(f"Uploaded to s3://{args.bucket}/{upload_key}", file=sys.stderr)
+                remote_path = f"{RCLONE_REMOTE}:{args.bucket}/{args.missions_prefix}/metadata-missions-compiled.gpkg"
+                rclone_copyto(local_path, remote_path)
+                print(f"Uploaded to {remote_path}", file=sys.stderr)
         else:
             print("\nNo mission metadata found", file=sys.stderr)
 
@@ -237,9 +225,9 @@ def main():
                 file=sys.stderr,
             )
             if not args.dry_run:
-                upload_key = f"{args.missions_prefix}/metadata-images-compiled.gpkg"
-                upload_s3_file(client, args.bucket, upload_key, local_path)
-                print(f"Uploaded to s3://{args.bucket}/{upload_key}", file=sys.stderr)
+                remote_path = f"{RCLONE_REMOTE}:{args.bucket}/{args.missions_prefix}/metadata-images-compiled.gpkg"
+                rclone_copyto(local_path, remote_path)
+                print(f"Uploaded to {remote_path}", file=sys.stderr)
         else:
             print("\nNo image metadata found", file=sys.stderr)
 
