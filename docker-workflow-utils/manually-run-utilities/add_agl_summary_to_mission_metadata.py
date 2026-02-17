@@ -7,20 +7,20 @@ altitude_agl), computes summary statistics, and writes them as new columns
 (agl_mean, agl_fidelity) onto the image-metadata file, then re-uploads it.
 
 Usage:
-    python backfill_agl_summary.py \
+    python add_agl_summary_to_mission_metadata.py \
         --bucket ofo-public \
         --missions-prefix drone/missions_03 \
         --photogrammetry-subfolder photogrammetry_03
 
     # Dry run (no uploads):
-    python backfill_agl_summary.py \
+    python add_agl_summary_to_mission_metadata.py \
         --bucket ofo-public \
         --missions-prefix drone/missions_03 \
         --photogrammetry-subfolder photogrammetry_03 \
         --dry-run
 
     # Process specific missions only:
-    python backfill_agl_summary.py \
+    python add_agl_summary_to_mission_metadata.py \
         --bucket ofo-public \
         --missions-prefix drone/missions_03 \
         --photogrammetry-subfolder photogrammetry_03 \
