@@ -14,12 +14,11 @@ import matplotlib
 import numpy as np
 import pandas as pd
 import rasterio
+from compute_derived_altitude import compute_height_above_ground
 from rasterio.enums import ColorInterp
 from rasterio.mask import mask
 from rasterio.warp import Resampling, calculate_default_transform, reproject
 from shapely.geometry import Point
-
-from compute_derived_altitude import compute_height_above_ground
 
 matplotlib.use("Agg")  # Non-interactive backend
 import matplotlib.pyplot as plt
