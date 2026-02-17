@@ -65,7 +65,7 @@ LO_PITCH_MAX = 38
 MIN_FIDELITY = 50
 
 # Temporal pairing criterion: maximum difference in days between missions
-MAX_DATE_DIFF_DAYS = 365
+MAX_DATE_DIFF_DAYS = 365*1.5 # (allows pairing between early in Year 1 and late in Year 2)
 
 # Spatial pairing criterion: minimum intersection area in hectares
 MIN_OVERLAP_HA = 2.0
@@ -75,6 +75,35 @@ LO_BUFFER_M = 100
 
 # Projected CRS used for area calculations and buffering (metres)
 WORKING_CRS = "EPSG:32610"
+
+# Subset-filter: fraction of area to consider one footprint "entirely a subset"
+SUBSET_AREA_THRESHOLD = 0.99
+
+# Subset-filter: only drop the smaller footprint if its area is less than this
+# fraction of the larger footprint's area (avoids dropping near-equal pairs)
+SUBSET_SIZE_RATIO = 0.75
+
+# Within-year preference: date-diff threshold (days) defining "within-year"
+WITHIN_YEAR_DAYS = 150
+
+# Within-year preference: keep a cross-year pairing only if its footprint area
+# exceeds the best within-year footprint by more than this fraction
+WITHIN_YEAR_AREA_MARGIN = 0.10
+
+# # -------------------------------------------------------------------------
+# # For interaactive running: define args as if called from command line
+# # -------------------------------------------------------------------------
+
+# args = argparse.Namespace(
+#     bucket=None,
+#     missions_prefix=None,
+#     local_missions="~/repo-data-local/tmp/metadata-missions-compiled.gpkg",
+#     local_images="~/repo-data-local/tmp/metadata-images-compiled.gpkg",
+#     output_dir=".",
+#     upload=False,
+#     dry_run=True,
+# )
+
 
 # ---------------------------------------------------------------------------
 # S3 helpers (only used when --bucket is supplied)
@@ -238,7 +267,7 @@ def build_pair_polygons(pairs):
     - lo polygon = intersection(lo_footprint, hn_footprint.buffer(LO_BUFFER_M))
 
     Returns a GeoDataFrame with columns:
-      pair_id, mission_type ('hn'/'lo'), mission_id, geometry
+      pair_id, mission_type ('hn'/'lo'), mission_id, date, area_m2, geometry
     """
     rows = []
     for idx, row in pairs.iterrows():
@@ -253,16 +282,117 @@ def build_pair_polygons(pairs):
             "pair_id": pair_id,
             "mission_type": "hn",
             "mission_id": row["hn_mission_id"],
+            "date": row["hn_date"],
+            "area_m2": hn_poly.area,
             "geometry": hn_poly,
         })
         rows.append({
             "pair_id": pair_id,
             "mission_type": "lo",
             "mission_id": row["lo_mission_id"],
+            "date": row["lo_date"],
+            "area_m2": lo_poly.area,
             "geometry": lo_poly,
         })
 
     return gpd.GeoDataFrame(rows, crs=WORKING_CRS)
+
+
+def filter_subset_pairs(pairs, pair_polygons):
+    """
+    Remove pairs where a mission's cropped footprint is entirely a subset of
+    its cropped footprint in a different pairing.  When this occurs, keep only
+    the pairing that gives that mission the larger footprint.
+    """
+    pairs_to_drop = set()
+
+    for mission_id in pair_polygons["mission_id"].unique():
+        rows = pair_polygons[pair_polygons["mission_id"] == mission_id]
+        if len(rows) <= 1:
+            continue
+
+        idxs = rows.index.tolist()
+        for i in range(len(idxs)):
+            ai = rows.loc[idxs[i], "area_m2"]
+            if ai <= 0:
+                continue
+            gi = make_valid(rows.loc[idxs[i], "geometry"])
+            for j in range(len(idxs)):
+                if i == j:
+                    continue
+                aj = rows.loc[idxs[j], "area_m2"]
+                if ai >= aj:
+                    continue  # only check if gi is the smaller one
+                if ai >= SUBSET_SIZE_RATIO * aj:
+                    continue  # too similar in size to consider a subset
+                gj = make_valid(rows.loc[idxs[j], "geometry"])
+                if gj.is_empty:
+                    continue
+                if gi.intersection(gj).area / ai >= SUBSET_AREA_THRESHOLD:
+                    pairs_to_drop.add(rows.loc[idxs[i], "pair_id"])
+                    break  # already dropping this pair, no need to check more
+
+    if pairs_to_drop:
+        print(
+            f"\nDropping {len(pairs_to_drop)} pair(s) where a mission's footprint "
+            f"is entirely a subset of its footprint in another pairing: "
+            f"{sorted(int(p) for p in pairs_to_drop)}",
+            file=sys.stderr,
+        )
+        pairs = pairs[~pairs.index.isin(pairs_to_drop)].reset_index(drop=True)
+        pair_polygons = pair_polygons[
+            ~pair_polygons["pair_id"].isin(pairs_to_drop)
+        ].reset_index(drop=True)
+
+    return pairs, pair_polygons
+
+
+def filter_prefer_within_year(pairs, pair_polygons):
+    """
+    For missions appearing in multiple pairs, prefer within-year pairings
+    (date_diff_days < WITHIN_YEAR_DAYS).  Drop cross-year pairings unless the
+    mission's cropped footprint in the cross-year pairing is more than
+    WITHIN_YEAR_AREA_MARGIN larger than its largest within-year footprint.
+    """
+    pairs_to_drop = set()
+
+    # Merge date_diff_days onto pair_polygons for easy lookup
+    pp = pair_polygons.merge(
+        pairs[["date_diff_days"]],
+        left_on="pair_id",
+        right_index=True,
+        how="left",
+    )
+
+    for mission_id in pp["mission_id"].unique():
+        rows = pp[pp["mission_id"] == mission_id]
+        if len(rows) <= 1:
+            continue
+
+        within = rows[rows["date_diff_days"].notna() & (rows["date_diff_days"] < WITHIN_YEAR_DAYS)]
+        cross = rows[rows["date_diff_days"].isna() | (rows["date_diff_days"] >= WITHIN_YEAR_DAYS)]
+
+        if within.empty or cross.empty:
+            continue
+
+        best_within_area = within["area_m2"].max()
+
+        for _, crow in cross.iterrows():
+            if crow["area_m2"] <= best_within_area * (1 + WITHIN_YEAR_AREA_MARGIN):
+                pairs_to_drop.add(crow["pair_id"])
+
+    if pairs_to_drop:
+        print(
+            f"\nDropping {len(pairs_to_drop)} pair(s) in favour of within-year "
+            f"pairings: {sorted(int(p) for p in pairs_to_drop)}",
+            file=sys.stderr,
+        )
+        pairs = pairs[~pairs.index.isin(pairs_to_drop)].reset_index(drop=True)
+        pair_polygons = pair_polygons[
+            ~pair_polygons["pair_id"].isin(pairs_to_drop)
+        ].reset_index(drop=True)
+
+    return pairs, pair_polygons
 
 
 def select_images(pair_polygons, images_gdf):
@@ -432,6 +562,14 @@ def main():
 
     args = parser.parse_args()
 
+    # Expand ~ in paths
+    if args.local_missions:
+        args.local_missions = os.path.expanduser(args.local_missions)
+    if args.local_images:
+        args.local_images = os.path.expanduser(args.local_images)
+    if args.output_dir:
+        args.output_dir = os.path.expanduser(args.output_dir)
+
     # Validate args
     using_s3 = args.bucket and args.missions_prefix
     using_local = args.local_missions and args.local_images
@@ -476,6 +614,13 @@ def main():
 
     # ---- Build output polygons --------------------------------------------
     pair_polygons = build_pair_polygons(pairs)
+
+    # ---- Filter subset pairs ----------------------------------------------
+    pairs, pair_polygons = filter_subset_pairs(pairs, pair_polygons)
+
+    # ---- Prefer within-year pairings --------------------------------------
+    pairs, pair_polygons = filter_prefer_within_year(pairs, pair_polygons)
+
     # Back to geographic CRS for output
     pair_polygons_out = pair_polygons.to_crs("EPSG:4326")
 
