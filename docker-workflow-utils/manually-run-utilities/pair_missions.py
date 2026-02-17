@@ -256,6 +256,9 @@ def find_valid_pairs(missions_gdf):
         ["overlap_area_ha", "date_diff_days"], ascending=[False, True]
     ).reset_index(drop=True)
 
+    # Composite pair ID: hn_mission_id _ lo_mission_id
+    pairs["pair_id"] = pairs["hn_mission_id"] + "_" + pairs["lo_mission_id"]
+
     return pairs
 
 
@@ -271,7 +274,7 @@ def build_pair_polygons(pairs):
     """
     rows = []
     for idx, row in pairs.iterrows():
-        pair_id = idx
+        pair_id = row["pair_id"]
         hn_fp = make_valid(row["hn_geom"])
         lo_fp = make_valid(row["lo_geom"])
 
@@ -336,10 +339,10 @@ def filter_subset_pairs(pairs, pair_polygons):
         print(
             f"\nDropping {len(pairs_to_drop)} pair(s) where a mission's footprint "
             f"is entirely a subset of its footprint in another pairing: "
-            f"{sorted(int(p) for p in pairs_to_drop)}",
+            f"{sorted(pairs_to_drop)}",
             file=sys.stderr,
         )
-        pairs = pairs[~pairs.index.isin(pairs_to_drop)].reset_index(drop=True)
+        pairs = pairs[~pairs["pair_id"].isin(pairs_to_drop)].reset_index(drop=True)
         pair_polygons = pair_polygons[
             ~pair_polygons["pair_id"].isin(pairs_to_drop)
         ].reset_index(drop=True)
@@ -358,9 +361,8 @@ def filter_prefer_within_year(pairs, pair_polygons):
 
     # Merge date_diff_days onto pair_polygons for easy lookup
     pp = pair_polygons.merge(
-        pairs[["date_diff_days"]],
-        left_on="pair_id",
-        right_index=True,
+        pairs[["pair_id", "date_diff_days"]],
+        on="pair_id",
         how="left",
     )
 
@@ -384,10 +386,10 @@ def filter_prefer_within_year(pairs, pair_polygons):
     if pairs_to_drop:
         print(
             f"\nDropping {len(pairs_to_drop)} pair(s) in favour of within-year "
-            f"pairings: {sorted(int(p) for p in pairs_to_drop)}",
+            f"pairings: {sorted(pairs_to_drop)}",
             file=sys.stderr,
         )
-        pairs = pairs[~pairs.index.isin(pairs_to_drop)].reset_index(drop=True)
+        pairs = pairs[~pairs["pair_id"].isin(pairs_to_drop)].reset_index(drop=True)
         pair_polygons = pair_polygons[
             ~pair_polygons["pair_id"].isin(pairs_to_drop)
         ].reset_index(drop=True)
