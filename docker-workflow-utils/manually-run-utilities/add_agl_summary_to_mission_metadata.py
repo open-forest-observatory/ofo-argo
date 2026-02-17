@@ -26,6 +26,13 @@ Usage:
         --photogrammetry-subfolder photogrammetry_03 \
         --missions 000016 000017
 
+    # Run with more parallel threads (default 8):
+    python add_agl_summary_to_mission_metadata.py \
+        --bucket ofo-public \
+        --missions-prefix drone/missions_03 \
+        --photogrammetry-subfolder photogrammetry_03 \
+        --workers 16
+
 Requirements:
     - boto3, geopandas, numpy
     - S3 credentials configured (env vars, ~/.aws/credentials, or IAM role)
@@ -40,6 +47,7 @@ import argparse
 import os
 import sys
 import tempfile
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
 import numpy as np
@@ -62,11 +70,16 @@ except ImportError:
 
 
 def get_s3_client():
-    """Create S3 client with optional custom endpoint."""
+    """Create S3 client with optional custom endpoint.
+
+    Each call creates a new session + client, which is safe for use in threads
+    (boto3 clients/sessions should not be shared across threads).
+    """
+    session = boto3.Session()
     endpoint = os.environ.get("S3_ENDPOINT")
 
     if endpoint:
-        return boto3.client(
+        return session.client(
             "s3",
             endpoint_url=endpoint,
             aws_access_key_id=os.environ.get("AWS_ACCESS_KEY_ID")
@@ -76,7 +89,7 @@ def get_s3_client():
             config=Config(signature_version="s3v4"),
         )
     else:
-        return boto3.client("s3")
+        return session.client("s3")
 
 
 def discover_missions(client, bucket, missions_prefix):
@@ -144,13 +157,17 @@ def compute_agl_summary(camera_locations_gdf):
     return agl_mean, agl_fidelity
 
 
-def process_mission(client, bucket, missions_prefix, photogrammetry_subfolder, mission_id, dry_run=False):
+def process_mission(bucket, missions_prefix, photogrammetry_subfolder, mission_id, dry_run=False):
     """
     Process a single mission: download camera-locations, compute AGL summary,
     add columns to image-metadata, and re-upload.
 
+    Creates its own S3 client so it can safely run in a thread pool.
+
     Returns True if processed successfully, False if skipped/failed.
     """
+    client = get_s3_client()
+    print(f"\n{mission_id}:", file=sys.stderr)
     metadata_key = f"{missions_prefix}/{mission_id}/metadata-images/{mission_id}_image-metadata.gpkg"
     camera_key = f"{missions_prefix}/{mission_id}/{photogrammetry_subfolder}/full/{mission_id}_camera-locations.gpkg"
 
@@ -230,16 +247,21 @@ def main():
         action="store_true",
         help="Compute and print results without uploading",
     )
+    parser.add_argument(
+        "--workers",
+        type=int,
+        default=8,
+        help="Number of parallel threads (default: 8)",
+    )
 
     args = parser.parse_args()
 
-    client = get_s3_client()
-
-    # Discover or use specified missions
+    # Discover or use specified missions (uses its own client for the listing call)
     if args.missions:
         mission_ids = args.missions
         print(f"Processing {len(mission_ids)} specified missions", file=sys.stderr)
     else:
+        client = get_s3_client()
         print(f"Discovering missions in s3://{args.bucket}/{args.missions_prefix}/...", file=sys.stderr)
         mission_ids = discover_missions(client, args.bucket, args.missions_prefix)
         print(f"Found {len(mission_ids)} missions", file=sys.stderr)
@@ -250,20 +272,32 @@ def main():
     processed = 0
     skipped = 0
 
-    for mission_id in mission_ids:
-        print(f"\n{mission_id}:", file=sys.stderr)
-        success = process_mission(
-            client,
-            args.bucket,
-            args.missions_prefix,
-            args.photogrammetry_subfolder,
-            mission_id,
-            dry_run=args.dry_run,
-        )
-        if success:
-            processed += 1
-        else:
-            skipped += 1
+    with ThreadPoolExecutor(max_workers=args.workers) as executor:
+        futures = {
+            executor.submit(
+                process_mission,
+                args.bucket,
+                args.missions_prefix,
+                args.photogrammetry_subfolder,
+                mission_id,
+                dry_run=args.dry_run,
+            ): mission_id
+            for mission_id in mission_ids
+        }
+
+        for future in as_completed(futures):
+            mission_id = futures[future]
+            try:
+                success = future.result()
+            except Exception as e:
+                print(f"\n{mission_id}:\n  ERROR: {e}", file=sys.stderr)
+                skipped += 1
+                continue
+
+            if success:
+                processed += 1
+            else:
+                skipped += 1
 
     print(f"\nDone: {processed} processed, {skipped} skipped", file=sys.stderr)
 
