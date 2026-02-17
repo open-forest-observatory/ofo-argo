@@ -650,16 +650,13 @@ def postprocess_photogrammetry_containerized(
                 camera_file=cameras_file, dtm_file=DTM_file
             )
             height_above_ground.to_file(output_file)
-            print(
-                f"Successfully created height above ground: {output_file.name}"
-            )
+            print(f"Successfully created height above ground: {output_file.name}")
         except Exception as e:
             print(f"Failed to compute height above ground: {e}")
     else:
         print(
             "Skipping height above ground computation (missing cameras.xml or dtm-ptcloud.tif)"
         )
-
 
     ## Copy non-raster files
 

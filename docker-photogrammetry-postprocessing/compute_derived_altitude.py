@@ -184,7 +184,9 @@ def compute_height_above_ground(camera_file: str, dtm_file: str) -> gpd.GeoDataF
     cameras_gdf.loc[~cameras_gdf.valid_dtm, "ground_elevation"] = np.nan
 
     # Compute the difference between the ground elevation and the camera elevation.
-    cameras_gdf["altitude_agl"] = cameras_gdf.geometry.z - cameras_gdf["ground_elevation"]
+    cameras_gdf["altitude_agl"] = (
+        cameras_gdf.geometry.z - cameras_gdf["ground_elevation"]
+    )
 
     # Note that these cameras aligned properly
     cameras_gdf["camera_aligned"] = True
