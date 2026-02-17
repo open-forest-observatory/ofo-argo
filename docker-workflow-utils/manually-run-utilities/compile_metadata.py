@@ -58,7 +58,7 @@ RCLONE_REMOTE = "js2s3"
 
 def rclone_copy(src, dst, includes=None):
     """Run an rclone copy command with optional --include filters."""
-    cmd = ["rclone", "copy", src, dst, "--transfers", "8", "--checkers", "8"]
+    cmd = ["rclone", "copy", src, dst, "--transfers", "32", "--checkers", "32"]
     if includes:
         for pattern in includes:
             cmd += ["--include", pattern]
