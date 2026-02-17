@@ -178,8 +178,8 @@ def process_mission(bucket, missions_prefix, photogrammetry_subfolder, mission_i
         return False, f"SKIP: camera-locations not found: {camera_key}"
 
     with tempfile.TemporaryDirectory() as tmpdir:
-        local_metadata = os.path.join(tmpdir, "image-metadata.gpkg")
-        local_camera = os.path.join(tmpdir, "camera-locations.gpkg")
+        local_metadata = os.path.join(tmpdir, f"{mission_id}_mission-metadata.gpkg")
+        local_camera = os.path.join(tmpdir, f"{mission_id}_camera-locations.gpkg")
 
         # Download both files
         download_s3_file(client, bucket, metadata_key, local_metadata)
@@ -199,10 +199,11 @@ def process_mission(bucket, missions_prefix, photogrammetry_subfolder, mission_i
         if dry_run:
             return True, f"agl_mean={agl_mean}, agl_fidelity={agl_fidelity}"
 
-        # Read image metadata, add columns, and save
+        # Read image metadata, add columns, and save (remove first to avoid adding a second layer)
         metadata_gdf = gpd.read_file(local_metadata)
         metadata_gdf["agl_mean"] = agl_mean
         metadata_gdf["agl_fidelity"] = agl_fidelity
+        os.remove(local_metadata)
         metadata_gdf.to_file(local_metadata, driver="GPKG")
 
         # Re-upload
