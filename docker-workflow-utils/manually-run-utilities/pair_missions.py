@@ -13,7 +13,7 @@ Usage:
     python pair_missions.py \
         --bucket ofo-public \
         --missions-prefix drone/missions_03 \
-        --local-output-composites-folder ./output \
+        --local-output-composites-folder ~/repo-data-local/tmp \
         --s3-upload-composites-folder drone/mission-composites_01
 
     # With local files, save locally only:
