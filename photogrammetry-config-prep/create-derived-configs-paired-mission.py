@@ -14,8 +14,6 @@ from pathlib import Path
 
 import geopandas as gpd
 import yaml
-from shapely.geometry import Point
-from shapely.ops import unary_union
 
 # =============================================================================
 # Configuration Constants
@@ -41,6 +39,9 @@ OUTPUT_DIR_CONFIGS = Path(
 OUTPUT_DIR_SUBSETS = Path(
     "/ofo-share/repos/david/ofo-argo/photogrammetry-config-prep/config-prep-runs/run-03/derived-subsets"
 )
+# Once everything is mounted in Argo, where will the subset files be
+# TODO, figure out a way to make this more flexible
+SUBSETS_FOLDER_IN_ARGO = "/data/argo-inputs/david-photogrammetry-0218/subsets"
 
 # S3 path prefix for drone mission imagery downloads.
 # The full path will be: {S3_DRONE_MISSIONS_PATH}/{mission_id}/images/{mission_id}_images.zip
@@ -204,7 +205,7 @@ def main():
         images_subset = included_images["image_id"].tolist()
 
         # TODO figure out this pathing
-        images_subsets_file = ""
+        images_subsets_file = f"{SUBSETS_FOLDER_IN_ARGO}/{paired_missions_id}.txt"
 
         # Create derived config
         derived_config = create_derived_config(
