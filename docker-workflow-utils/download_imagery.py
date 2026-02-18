@@ -239,6 +239,11 @@ def main() -> None:
     images_subset_file = os.environ.get("IMAGES_SUBSET_FILE", "")
 
     if images_subset_file != "":
+        print(f"Trying to read from {images_subset_file}")
+
+        files = list(Path("/data/argo-input").glob("*"))
+        print(files)
+
         with open(images_subset_file, "r") as f:
             images_subset = [line.strip() for line in f if line.strip()]
 
