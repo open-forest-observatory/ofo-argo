@@ -224,7 +224,7 @@ spec:
             arguments:
               parameters:
                 - name: imagery-zip-downloads
-                  value: "{{=toJson(sprig.fromJson(tasks['load-config'].outputs.result).s3_imagery_zip_downloads)}}"
+                  value: "{{=toJson(sprig.fromJson(tasks['load-config'].outputs.result).imagery_zip_downloads)}}"
                 - name: project-name
                   value: "{{inputs.parameters.project-name}}"
                   # TODO, check that this is the right way to parse the config
