@@ -229,7 +229,7 @@ spec:
                   value: "{{inputs.parameters.project-name}}"
                   # TODO, check that this is the right way to parse the config
                 - name: images-subset-file
-                  value: "{{=toJson(sprig.fromJson(tasks['load-config'].outputs.result).imagery-subset-file)}}"
+                  value: "{{=toJson(sprig.fromJson(tasks['load-config'].outputs.result).imagery_subset_file)}}"
 
           # Step 0b: Transform config to resolve __DOWNLOADED__ paths (always runs, idempotent)
           # If no downloads occurred, the transform is a no-op (copies config unchanged)
