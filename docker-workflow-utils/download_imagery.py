@@ -242,6 +242,13 @@ def main() -> None:
         print(f"Trying to read from {images_subset_file}")
 
         files = list(Path("/data/argo-input").glob("*"))
+        print("Files in /data/argo-input:")
+        print(files)
+
+        files = list(
+            Path("/data/argo-input/david-photogrammetry-0218/subsets").glob("*")
+        )
+        print("Files in /data/argo-input/david-photogrammetry-0218/subsets:")
         print(files)
 
         with open(images_subset_file, "r") as f:
