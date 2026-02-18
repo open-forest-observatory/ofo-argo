@@ -243,15 +243,14 @@ def main() -> None:
         images_subset_file = images_subset_file.strip('"')
         print(f"Trying to read from {images_subset_file}")
 
+        # Read which image_ids to retain
         with open(images_subset_file, "r") as f:
             images_subset = [line.strip() for line in f if line.strip()]
 
-        print("Deleting images not in the specified subset")
+        # Read all downloaded files
         downloaded_files = [f for f in Path(download_dir).rglob("*") if f.is_file()]
 
-        stems = [f.stem for f in downloaded_files]
-        print(f"Stems: {stems}")
-
+        # Exclude any files not in the inclusion list
         files_to_delete = [f for f in downloaded_files if f.stem not in images_subset]
 
         print(f"Removing {len(files_to_delete)} files not in subset")
