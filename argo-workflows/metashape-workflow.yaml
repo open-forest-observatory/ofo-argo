@@ -224,9 +224,12 @@ spec:
             arguments:
               parameters:
                 - name: imagery-zip-downloads
-                  value: "{{=toJson(sprig.fromJson(tasks['load-config'].outputs.result).imagery_zip_downloads)}}"
+                  value: "{{=toJson(sprig.fromJson(tasks['load-config'].outputs.result).s3_imagery_zip_downloads)}}"
                 - name: project-name
                   value: "{{inputs.parameters.project-name}}"
+                  # TODO, check that this is the right way to parse the config
+                - name: images-subset-file
+                  value: "{{=sprig.fromJson(tasks['load-config'].outputs.result).images_subset_file}}"
 
           # Step 0b: Transform config to resolve __DOWNLOADED__ paths (always runs, idempotent)
           # If no downloads occurred, the transform is a no-op (copies config unchanged)
@@ -643,6 +646,7 @@ spec:
         parameters:
           - name: imagery-zip-downloads
           - name: project-name
+          - name: images-subset-file
       # Ensure CPU pods only schedule on CPU nodes (labeled by NFD based on nodegroup name)
       nodeSelector:
         feature.node.kubernetes.io/workload-type: cpu
@@ -657,6 +661,8 @@ spec:
             value: "{{inputs.parameters.imagery-zip-downloads}}"
           - name: DOWNLOAD_DIR
             value: "{{workflow.parameters.TEMP_WORKING_DIR}}/{{workflow.name}}/{{inputs.parameters.project-name}}/photogrammetry/downloaded-raw-imagery"
+          - name: IMAGES_SUBSET_FILE
+            value: "{{inputs.parameters.images-subset-file}}"
           - name: S3_PROVIDER
             valueFrom:
               secretKeyRef:

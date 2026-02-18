@@ -236,6 +236,21 @@ def main() -> None:
             print(f"ERROR: Unexpected error for {s3_path}: {e}")
             failed_paths.append(s3_path)
 
+    images_subset_file = os.environ.get("IMAGES_SUBSET_FILE", "")
+
+    if images_subset_file != "":
+        with open(images_subset_file, "r") as f:
+            images_subset = [line.strip() for line in f if line.strip()]
+
+        print("Deleting images not in the specified subset")
+        downloaded_files = [f for f in Path(download_dir).rglob("*") if f.is_file()]
+
+        files_to_delete = [f for f in downloaded_files if f.name not in images_subset]
+
+        print(f"Removing {len(files_to_delete)} files not in subset")
+        for f in files_to_delete:
+            os.remove(f)
+
     # Report results
     print("\n" + "=" * 60)
     if failed_paths:
