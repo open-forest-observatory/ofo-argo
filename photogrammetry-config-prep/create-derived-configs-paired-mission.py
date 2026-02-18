@@ -21,21 +21,20 @@ from shapely.ops import unary_union
 # Configuration Constants
 # =============================================================================
 
-# Path to the GeoPackage containing drone mission polygons and metadata
-MISSIONS_GPKG_PATH = "/home/derek/repos/ofo-argo/photogrammetry-config-prep/config-prep-runs/run-03/input/ofo-all-missions-metadata-curated.gpkg"
-
-# Path to the KML file defining the priority area (missions near this area are processed first)
-# Set to None to disable priority sorting
-PRIORITY_AREA_KML_PATH = "/home/derek/repos/ofo-argo/photogrammetry-config-prep/config-prep-runs/run-03/input/priority-area.kml"
-
-# Buffer distance in degrees for priority area proximity check (~0.1 degrees ≈ 10km at mid-latitudes)
-PRIORITY_BUFFER_DEGREES = 0.1
+# Path to the GeoPackage containing which images were selected
+COMPOSITE_IMAGES_GPKG_PATH = Path(
+    "/ofo-share/repos/david/ofo-argo/scratch/paired-photogrammetry/selected-composites-images.gpkg"
+)
 
 # Path to the base automate-metashape configuration YAML
-BASE_CONFIG_PATH = "/home/derek/repos/ofo-argo/photogrammetry-config-prep/config-prep-runs/run-03/input/config-base.yml"
+BASE_CONFIG_PATH = Path(
+    "/ofo-share/repos/david/ofo-argo/photogrammetry-config-prep/config-prep-runs/run-03/input/config-base.yml"
+)
 
 # Output directory for derived config files
-OUTPUT_DIR = "/home/derek/repos/ofo-argo/photogrammetry-config-prep/config-prep-runs/run-03/derived-configs"
+OUTPUT_DIR = Path(
+    "/ofo-share/repos/david/ofo-argo/photogrammetry-config-prep/config-prep-runs/run-03/derived-configs"
+)
 
 # S3 path prefix for drone mission imagery downloads.
 # The full path will be: {S3_DRONE_MISSIONS_PATH}/{mission_id}/images/{mission_id}_images.zip
@@ -91,6 +90,9 @@ def create_derived_config(
     photo_paths: list[str],
     project_crs: str,
     s3_download_path: str,
+    altitude_offset: float,
+    lower_offset_folders: list[str],
+    upper_offset_folders: list[str],
 ) -> dict:
     """
     Create a derived config by applying mission-specific overrides to the base config.
@@ -108,7 +110,14 @@ def create_derived_config(
     config = copy.deepcopy(base_config)
     config["project"]["photo_path"] = photo_paths
     config["project"]["project_crs"] = project_crs
+    # TODO this needs to be updated to be multiple ones
     config["argo"]["s3_imagery_zip_download"] = s3_download_path
+    config["add_photos"]["apply_paired_altitude_offset"] = True
+    config["add_photos"]["paired_altitude_offset"] = altitude_offset
+    # So this is tricky because these need to be in the same format as how they are actually done in
+    # the argo run. But I don't know what that is until it's run.
+    config["add_photos"]["lower_offset_folders"] = lower_offset_folders
+    config["add_photos"]["upper_offset_folders"] = upper_offset_folders
     return config
 
 
@@ -118,50 +127,42 @@ def create_derived_config(
 
 
 def main():
-    gpkg_path = Path(MISSIONS_GPKG_PATH)
-    base_config_path = Path(BASE_CONFIG_PATH)
-    output_dir = Path(OUTPUT_DIR)
+    images_metadata_gdf = gpd.read_file(COMPOSITE_IMAGES_GPKG_PATH)
 
-    # Load mission metadata
-    print(f"Loading missions from: {gpkg_path}")
-    missions_gdf = gpd.read_file(gpkg_path)
-    print(f"Found {len(missions_gdf)} missions")
-
-    # Load priority area if specified
-    priority_area_buffered = None
-    if PRIORITY_AREA_KML_PATH:
-        priority_kml_path = Path(PRIORITY_AREA_KML_PATH)
-        if priority_kml_path.exists():
-            print(f"Loading priority area from: {priority_kml_path}")
-            priority_gdf = gpd.read_file(priority_kml_path)
-            # Merge all geometries and buffer by the configured distance
-            priority_area = unary_union(priority_gdf.geometry)
-            priority_area_buffered = priority_area.buffer(PRIORITY_BUFFER_DEGREES)
-            print(
-                f"Priority area loaded and buffered by {PRIORITY_BUFFER_DEGREES} degrees (~10km)"
-            )
+    images_by_pair = images_metadata_gdf.groupby("composite_id")
 
     # Load base configuration
-    print(f"Loading base config from: {base_config_path}")
-    with open(base_config_path) as f:
+    print(f"Loading base config from: {BASE_CONFIG_PATH}")
+    with open(BASE_CONFIG_PATH) as f:
         base_config = yaml.safe_load(f)
 
     # Create output directory
-    output_dir.mkdir(parents=True, exist_ok=True)
+    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
     # Process each mission
     success_count = 0
-    priority_config_filenames = []
     standard_config_filenames = []
-    for idx, row in missions_gdf.iterrows():
-        mission_id = row["mission_id"]
-        sub_mission_ids_str = row["sub_mission_ids"]
 
-        # Validate sub_mission_ids
-        if not sub_mission_ids_str or (
-            isinstance(sub_mission_ids_str, float) and math.isnan(sub_mission_ids_str)
-        ):
-            raise ValueError(f"Mission {mission_id} has empty or null sub_mission_ids")
+    for mission_id, row in images_by_pair:
+        # TODO determine if this needs to be a nanmean
+        mean_altitudes = (
+            row[["altitude_agl", "mission_type"]].groupby("mission_type").mean()
+        )
+
+        altitude_difference = float(
+            mean_altitudes.loc["hn", "altitude_agl"]
+            - mean_altitudes.loc["lo", "altitude_agl"]
+        )
+        breakpoint()
+
+        # mission_id = row["mission_id"]
+        # sub_mission_ids_str = row["sub_mission_ids"]
+
+        ## Validate sub_mission_ids
+        # if not sub_mission_ids_str or (
+        #    isinstance(sub_mission_ids_str, float) and math.isnan(sub_mission_ids_str)
+        # ):
+        #    raise ValueError(f"Mission {mission_id} has empty or null sub_mission_ids")
 
         # Compute centroid for UTM zone calculation
         centroid = row.geometry.centroid
@@ -182,37 +183,28 @@ def main():
             photo_paths,
             project_crs,
             s3_download_path,
+            altitude_offset=altitude_difference,
         )
 
         # Write to output file
         output_filename = f"{mission_id}.yml"
-        output_path = output_dir / output_filename
+        output_path = OUTPUT_DIR / output_filename
         with open(output_path, "w") as f:
             yaml.dump(derived_config, f, default_flow_style=False, sort_keys=False)
 
-        # Classify as priority or standard based on centroid location
-        if priority_area_buffered is not None and priority_area_buffered.contains(
-            Point(centroid.x, centroid.y)
-        ):
-            priority_config_filenames.append(output_filename)
-        else:
-            standard_config_filenames.append(output_filename)
+        standard_config_filenames.append(output_filename)
+
         success_count += 1
 
     # Write config list file with priority and standard sections
-    config_list_path = output_dir / "config-list.txt"
+    config_list_path = OUTPUT_DIR / "config-list.txt"
     with open(config_list_path, "w") as f:
-        f.write("# High-priority missions\n")
-        for filename in priority_config_filenames:
-            f.write(f"{filename}\n")
-        f.write("\n")
         f.write("# Standard-priority missions\n")
         for filename in standard_config_filenames:
             f.write(f"{filename}\n")
         f.write("\n")
 
-    print(f"Successfully created {success_count} derived config files in: {output_dir}")
-    print(f"  - Priority: {len(priority_config_filenames)}")
+    print(f"Successfully created {success_count} derived config files in: {OUTPUT_DIR}")
     print(f"  - Standard: {len(standard_config_filenames)}")
     print(f"Config list written to: {config_list_path}")
 
