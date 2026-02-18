@@ -35,8 +35,11 @@ BASE_CONFIG_PATH = Path(
 )
 
 # Output directory for derived config files
-OUTPUT_DIR = Path(
+OUTPUT_DIR_CONFIGS = Path(
     "/ofo-share/repos/david/ofo-argo/photogrammetry-config-prep/config-prep-runs/run-03/derived-configs"
+)
+OUTPUT_DIR_SUBSETS = Path(
+    "/ofo-share/repos/david/ofo-argo/photogrammetry-config-prep/config-prep-runs/run-03/derived-subsets"
 )
 
 # S3 path prefix for drone mission imagery downloads.
@@ -96,7 +99,7 @@ def create_derived_config(
     altitude_offset: float,
     lower_offset_folders: list[str],
     upper_offset_folders: list[str],
-    image_subset: list[str],
+    images_subset_file: str,
 ) -> dict:
     """
     Create a derived config by applying mission-specific overrides to the base config.
@@ -123,7 +126,7 @@ def create_derived_config(
 
     # Argo
     config["argo"]["s3_imagery_zip_download"] = s3_download_path
-    config["argo"]["image_subset"] = image_subset
+    config["argo"]["images_subset_file"] = images_subset_file
 
     return config
 
@@ -144,8 +147,9 @@ def main():
     with open(BASE_CONFIG_PATH) as f:
         base_config = yaml.safe_load(f)
 
-    # Create output directory
-    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+    # Create output directories
+    OUTPUT_DIR_CONFIGS.mkdir(parents=True, exist_ok=True)
+    OUTPUT_DIR_SUBSETS.mkdir(parents=True, exist_ok=True)
 
     # Process each mission
     success_count = 0
@@ -197,7 +201,10 @@ def main():
         ]
 
         # Get image paths
-        image_subset = included_images["image_id"].tolist()
+        images_subset = included_images["image_id"].tolist()
+
+        # TODO figure out this pathing
+        images_subsets_file = ""
 
         # Create derived config
         derived_config = create_derived_config(
@@ -209,28 +216,36 @@ def main():
             altitude_offset=altitude_difference,
             lower_offset_folders=photo_paths_lo,
             upper_offset_folders=photo_paths_hn,
-            image_subset=image_subset,
+            images_subset_file=images_subsets_file,
         )
 
         # Write to output file
-        output_filename = f"{paired_missions_id}.yml"
-        output_path = OUTPUT_DIR / output_filename
-        with open(output_path, "w") as f:
+        output_config_filename = f"{paired_missions_id}.yml"
+        output_config_path = OUTPUT_DIR_CONFIGS / output_config_filename
+        with open(output_config_path, "w") as f:
             yaml.dump(derived_config, f, default_flow_style=False, sort_keys=False)
 
-        standard_config_filenames.append(output_filename)
+        standard_config_filenames.append(output_config_filename)
+
+        # Output subset
+        output_subset_path = OUTPUT_DIR_SUBSETS / f"{paired_missions_id}.txt"
+        with open(output_subset_path, "w") as f:
+            for image_id in images_subset:
+                f.write(f"{image_id}\n")
 
         success_count += 1
 
     # Write config list file with priority and standard sections
-    config_list_path = OUTPUT_DIR / "config-list.txt"
+    config_list_path = OUTPUT_DIR_CONFIGS / "config-list.txt"
     with open(config_list_path, "w") as f:
         f.write("# Standard-priority missions\n")
         for filename in standard_config_filenames:
             f.write(f"{filename}\n")
         f.write("\n")
 
-    print(f"Successfully created {success_count} derived config files in: {OUTPUT_DIR}")
+    print(
+        f"Successfully created {success_count} derived config files in: {OUTPUT_DIR_CONFIGS}"
+    )
     print(f"  - Standard: {len(standard_config_filenames)}")
     print(f"Config list written to: {config_list_path}")
 
