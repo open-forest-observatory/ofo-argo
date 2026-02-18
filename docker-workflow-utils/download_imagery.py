@@ -243,23 +243,16 @@ def main() -> None:
         images_subset_file = images_subset_file.strip('"')
         print(f"Trying to read from {images_subset_file}")
 
-        files = list(Path("/data/argo-input").glob("*"))
-        print("Files in /data/argo-input:")
-        print(files)
-
-        files = list(
-            Path("/data/argo-input/david-photogrammetry-0218/subsets").glob("*")
-        )
-        print("Files in /data/argo-input/david-photogrammetry-0218/subsets:")
-        print(files)
-
         with open(images_subset_file, "r") as f:
             images_subset = [line.strip() for line in f if line.strip()]
 
         print("Deleting images not in the specified subset")
         downloaded_files = [f for f in Path(download_dir).rglob("*") if f.is_file()]
 
-        files_to_delete = [f for f in downloaded_files if f.name not in images_subset]
+        stems = [f.stem for f in downloaded_files]
+        print(f"Stems: {stems}")
+
+        files_to_delete = [f for f in downloaded_files if f.stem not in images_subset]
 
         print(f"Removing {len(files_to_delete)} files not in subset")
         for f in files_to_delete:
