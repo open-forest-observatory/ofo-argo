@@ -239,6 +239,8 @@ def main() -> None:
     images_subset_file = os.environ.get("IMAGES_SUBSET_FILE", "")
 
     if images_subset_file != "":
+        # Remove extra quotes if present
+        images_subset_file = images_subset_file.strip('"')
         print(f"Trying to read from {images_subset_file}")
 
         files = list(Path("/data/argo-input").glob("*"))
