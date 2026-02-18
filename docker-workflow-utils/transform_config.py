@@ -126,14 +126,12 @@ def has_download_prefix(paths: List[str]) -> bool:
     return any(path.startswith(DOWNLOAD_PREFIX) for path in paths)
 
 
-def transform_attribute(
-    project: Dict[str, str], attribute_name: str, download_path: str
-):
+def transform_attribute(block: Dict[str, str], attribute_name: str, download_path: str):
     """
     Transform config project by replacing __DOWNLOADED__ prefix in photo_path entries.
 
     Args:
-        project: Original config dictionary for the project
+        block: Original config dictionary for the corresponding block (e.g., project)
         attribute_name: The name of the attribute to transform (e.g., "photo_path")
         download_path: Actual path to downloaded imagery
 
@@ -141,16 +139,18 @@ def transform_attribute(
         Transformed config dictionary (modified in place as well)
     """
     # Transform photo_path
-    photo_path = project.get(attribute_name)
+    photo_path = block.get(attribute_name)
     if photo_path is not None:
         paths = normalize_photo_path(photo_path)
         transformed_paths = [transform_path(p, download_path) for p in paths]
 
         # Preserve original format (string vs list)
         if isinstance(photo_path, str):
-            project[attribute_name] = transformed_paths[0] if transformed_paths else ""
+            block[attribute_name] = transformed_paths[0] if transformed_paths else ""
         else:
-            project[attribute_name] = transformed_paths
+            block[attribute_name] = transformed_paths
+
+    return block
 
 
 def transform_config(config: Dict[str, Any], download_path: str) -> Dict[str, Any]:
@@ -173,10 +173,18 @@ def transform_config(config: Dict[str, Any], download_path: str) -> Dict[str, An
     # Replace __DOWNLOADED__ prefix in relevant attributes
     project = transform_attribute(project, "photo_path", download_path)
     project = transform_attribute(project, "photo_path_secondary", download_path)
-    project = transform_attribute(project, "lower_offset_folders", download_path)
-    project = transform_attribute(project, "upper_offset_folders", download_path)
 
     transformed["project"] = project
+
+    # Get the add_photos section
+    add_photos = transformed.get("add_photos", {})
+
+    # Replace __DOWNLOADED__ prefix in relevant attributes
+    add_photos = transform_attribute(add_photos, "lower_offset_folders", download_path)
+    add_photos = transform_attribute(add_photos, "upper_offset_folders", download_path)
+
+    transformed["add_photos"] = add_photos
+
     return transformed
 
 
