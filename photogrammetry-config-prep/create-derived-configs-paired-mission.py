@@ -41,7 +41,7 @@ OUTPUT_DIR_SUBSETS = Path(
 )
 # Once everything is mounted in Argo, where will the subset files be
 # TODO, figure out a way to make this more flexible
-SUBSETS_FOLDER_IN_ARGO = "/data/argo-inputs/david-photogrammetry-0218/subsets"
+SUBSETS_FOLDER_IN_ARGO = "/data/argo-input/david-photogrammetry-0218/subsets"
 
 # S3 path prefix for drone mission imagery downloads.
 # The full path will be: {S3_DRONE_MISSIONS_PATH}/{mission_id}/images/{mission_id}_images.zip
