@@ -25,6 +25,9 @@ from shapely.ops import unary_union
 COMPOSITE_IMAGES_GPKG_PATH = Path(
     "/ofo-share/repos/david/ofo-argo/scratch/paired-photogrammetry/selected-composites-images.gpkg"
 )
+MISSION_METADATA_GPKG_PATH = Path(
+    "/ofo-share/repos/david/ofo-argo/scratch/paired-photogrammetry/metadata-missions-compiled.gpkg"
+)
 
 # Path to the base automate-metashape configuration YAML
 BASE_CONFIG_PATH = Path(
@@ -93,6 +96,7 @@ def create_derived_config(
     altitude_offset: float,
     lower_offset_folders: list[str],
     upper_offset_folders: list[str],
+    image_subset: list[str],
 ) -> dict:
     """
     Create a derived config by applying mission-specific overrides to the base config.
@@ -110,14 +114,17 @@ def create_derived_config(
     config = copy.deepcopy(base_config)
     config["project"]["photo_path"] = photo_paths
     config["project"]["project_crs"] = project_crs
-    # TODO this needs to be updated to be multiple ones
-    config["argo"]["s3_imagery_zip_download"] = s3_download_path
+
+    # Altitude adjustment parameters
     config["add_photos"]["apply_paired_altitude_offset"] = True
     config["add_photos"]["paired_altitude_offset"] = altitude_offset
-    # So this is tricky because these need to be in the same format as how they are actually done in
-    # the argo run. But I don't know what that is until it's run.
     config["add_photos"]["lower_offset_folders"] = lower_offset_folders
     config["add_photos"]["upper_offset_folders"] = upper_offset_folders
+
+    # Argo
+    config["argo"]["s3_imagery_zip_download"] = s3_download_path
+    config["argo"]["image_subset"] = image_subset
+
     return config
 
 
@@ -128,6 +135,7 @@ def create_derived_config(
 
 def main():
     images_metadata_gdf = gpd.read_file(COMPOSITE_IMAGES_GPKG_PATH)
+    mission_metadata_gdf = gpd.read_file(MISSION_METADATA_GPKG_PATH)
 
     images_by_pair = images_metadata_gdf.groupby("composite_id")
 
@@ -143,51 +151,69 @@ def main():
     success_count = 0
     standard_config_filenames = []
 
-    for mission_id, row in images_by_pair:
+    for paired_missions_id, included_images in images_by_pair:
         # TODO determine if this needs to be a nanmean
         mean_altitudes = (
-            row[["altitude_agl", "mission_type"]].groupby("mission_type").mean()
+            included_images[["altitude_agl", "mission_type"]]
+            .groupby("mission_type")
+            .mean()
         )
 
         altitude_difference = float(
             mean_altitudes.loc["hn", "altitude_agl"]
             - mean_altitudes.loc["lo", "altitude_agl"]
         )
-        breakpoint()
 
-        # mission_id = row["mission_id"]
-        # sub_mission_ids_str = row["sub_mission_ids"]
+        mission_id_lo, mission_id_hn = paired_missions_id.split("_")
 
-        ## Validate sub_mission_ids
-        # if not sub_mission_ids_str or (
-        #    isinstance(sub_mission_ids_str, float) and math.isnan(sub_mission_ids_str)
-        # ):
-        #    raise ValueError(f"Mission {mission_id} has empty or null sub_mission_ids")
+        # TODO either load these from the metadata-missions-compiled file or add them to the
+        # composites metadata.
+        sub_mission_ids_lo = mission_metadata_gdf.query("mission_id == @mission_id_lo")[
+            "sub_mission_ids"
+        ].values[0]
+        sub_mission_ids_hn = mission_metadata_gdf.query("mission_id == @mission_id_hn")[
+            "sub_mission_ids"
+        ].values[0]
 
         # Compute centroid for UTM zone calculation
-        centroid = row.geometry.centroid
-        project_crs = compute_utm_epsg(centroid.x, centroid.y)
+        centroid = included_images.dissolve().centroid
+        project_crs = compute_utm_epsg(centroid.x.values[0], centroid.y.values[0])
 
         # Generate photo paths from sub-mission IDs
-        photo_paths = parse_sub_mission_ids(str(sub_mission_ids_str), str(mission_id))
+        # This needs to be updated to handle the fact that this is paired. So we'll compute one
+        # set of LO and HN photo paths and then this will be the concatanation of them.
+        photo_paths_lo = parse_sub_mission_ids(
+            str(sub_mission_ids_lo), str(mission_id_lo)
+        )
+        photo_paths_hn = parse_sub_mission_ids(
+            str(sub_mission_ids_hn), str(mission_id_hn)
+        )
+        photo_paths = photo_paths_lo + photo_paths_hn
 
         # Generate S3 download path
-        s3_download_path = (
+        s3_download_paths = [
             f"{S3_DRONE_MISSIONS_PATH}/{mission_id}/images/{mission_id}_images.zip"
-        )
+            for mission_id in [mission_id_lo, mission_id_hn]
+        ]
+
+        # Get image paths
+        image_subset = included_images["image_id"].tolist()
 
         # Create derived config
         derived_config = create_derived_config(
             base_config,
-            mission_id,
+            paired_missions_id,  # unused
             photo_paths,
             project_crs,
-            s3_download_path,
+            s3_download_paths,
             altitude_offset=altitude_difference,
+            lower_offset_folders=photo_paths_lo,
+            upper_offset_folders=photo_paths_hn,
+            image_subset=image_subset,
         )
 
         # Write to output file
-        output_filename = f"{mission_id}.yml"
+        output_filename = f"{paired_missions_id}.yml"
         output_path = OUTPUT_DIR / output_filename
         with open(output_path, "w") as f:
             yaml.dump(derived_config, f, default_flow_style=False, sort_keys=False)
