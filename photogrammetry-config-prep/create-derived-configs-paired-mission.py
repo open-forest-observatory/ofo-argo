@@ -8,9 +8,13 @@ the base config with mission-specific values (photo paths, CRS, S3 download path
 Dependencies: geopandas, pyyaml
 """
 
+import os
 import copy
 import math
 from pathlib import Path
+import tempfile
+from typing import List
+import subprocess
 
 import geopandas as gpd
 import yaml
@@ -36,12 +40,8 @@ BASE_CONFIG_PATH = Path(
 OUTPUT_DIR_CONFIGS = Path(
     "/ofo-share/repos/david/ofo-argo/photogrammetry-config-prep/config-prep-runs/run-03/derived-configs"
 )
-OUTPUT_DIR_SUBSETS = Path(
-    "/ofo-share/repos/david/ofo-argo/photogrammetry-config-prep/config-prep-runs/run-03/derived-subsets"
-)
-# Once everything is mounted in Argo, where will the subset files be
-# TODO, figure out a way to make this more flexible
-SUBSETS_FOLDER_IN_ARGO = "/data/argo-input/david-photogrammetry-0218/subsets"
+# The path, starting at the bucket, for the subsets file that will be referenced in the config
+S3_COMPOSITE_MISSIONS_PATH = "ofo-public/drone/mission-composites_01"
 
 # S3 path prefix for drone mission imagery downloads.
 # The full path will be: {S3_DRONE_MISSIONS_PATH}/{mission_id}/images/{mission_id}_images.zip
@@ -51,10 +51,72 @@ SUBSETS_FOLDER_IN_ARGO = "/data/argo-input/david-photogrammetry-0218/subsets"
 # cluster's s3-credentials Kubernetes secret.
 S3_DRONE_MISSIONS_PATH = "ofo-public/drone/missions_03"
 
+# For uploading, the following environment variables must be set
+# S3_PROVIDER: S3 provider for rclone (e.g., 'Ceph', 'AWS')
+# S3_ENDPOINT: S3 endpoint URL
+# S3_ACCESS_KEY: S3 access key ID
+# S3_SECRET_KEY: S3 secret access key
+
 
 # =============================================================================
 # Helper Functions
 # =============================================================================
+def get_s3_flags() -> List[str]:
+    """Build common S3 authentication flags for rclone commands."""
+    return [
+        "--s3-provider",
+        os.environ.get("S3_PROVIDER", ""),
+        "--s3-endpoint",
+        os.environ.get("S3_ENDPOINT", ""),
+        "--s3-access-key-id",
+        os.environ.get("S3_ACCESS_KEY", ""),
+        "--s3-secret-access-key",
+        os.environ.get("S3_SECRET_KEY", ""),
+    ]
+
+
+def upload_subset_file(local_path: str, s3_path: str) -> str:
+    """
+    Download a zip file from S3 using rclone.
+
+    Args:
+        local_path: Where the file currently is
+        s3_path: S3 path to download (format: 'bucket/path/to/file.zip')
+
+    Returns:
+        Local path to the downloaded zip file
+
+    Raises:
+        subprocess.CalledProcessError: If upload fails
+    """
+    # Use rclone's on-the-fly backend syntax (:s3:) which configures the
+    # S3 backend using command-line flags rather than a config file.
+    # This avoids needing a pre-configured remote like "js2s3:".
+    rclone_url = f":s3:{s3_path}"
+
+    print(f"Uploading: {local_path}")
+    print(f"  -> {s3_path}")
+
+    # Note that this will create containing folders if needed
+    cmd = [
+        "rclone",
+        "copyto",
+        local_path,
+        rclone_url,
+        "--progress",
+        "--transfers",
+        "1",
+        "--checkers",
+        "1",
+        "--retries",
+        "5",
+        "--retries-sleep",
+        "15s",
+        "--stats",
+        "30s",
+    ] + get_s3_flags()
+    # TODO consider checking for a successful value
+    subprocess.run(cmd, check=True)
 
 
 def compute_utm_epsg(longitude: float, latitude: float) -> str:
@@ -150,7 +212,6 @@ def main():
 
     # Create output directories
     OUTPUT_DIR_CONFIGS.mkdir(parents=True, exist_ok=True)
-    OUTPUT_DIR_SUBSETS.mkdir(parents=True, exist_ok=True)
 
     # Process each mission
     success_count = 0
@@ -205,8 +266,8 @@ def main():
         # Get image paths
         images_subset = included_images["image_id"].tolist()
 
-        # TODO figure out this pathing
-        images_subsets_file = f"{SUBSETS_FOLDER_IN_ARGO}/{paired_missions_id}.txt"
+        # The path on S3 where the file will be uploaded to
+        images_subsets_path_remote = f"{S3_COMPOSITE_MISSIONS_PATH}/{paired_missions_id}/{paired_missions_id}_images_subset.txt"
 
         # Create derived config
         derived_config = create_derived_config(
@@ -218,7 +279,7 @@ def main():
             altitude_offset=altitude_difference,
             lower_offset_folders=photo_paths_lo,
             upper_offset_folders=photo_paths_hn,
-            images_subset_file=images_subsets_file,
+            images_subset_file=images_subsets_path_remote,
         )
 
         # Write to output file
@@ -229,11 +290,15 @@ def main():
 
         standard_config_filenames.append(output_config_filename)
 
-        # Output subset
-        output_subset_path = OUTPUT_DIR_SUBSETS / f"{paired_missions_id}.txt"
-        with open(output_subset_path, "w") as f:
+        # Output subset to a temp file and then upload to S3
+        with tempfile.NamedTemporaryFile(mode="w") as tmp_subset_file:
             for image_id in images_subset:
-                f.write(f"{image_id}\n")
+                tmp_subset_file.write(f"{image_id}\n")
+            tmp_subset_file.flush()
+
+            # Upload the subset file to S3 (images_subsets_path_remote)
+            # This will create the needed folder
+            upload_subset_file(tmp_subset_file.name, images_subsets_path_remote)
 
         success_count += 1
 
