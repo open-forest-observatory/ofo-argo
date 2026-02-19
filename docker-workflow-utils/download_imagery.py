@@ -61,16 +61,16 @@ def extract_filename_from_url(url: str) -> str:
     return url.rstrip("/").split("/")[-1]
 
 
-def download_zip(s3_path: str, download_dir: str) -> str:
+def download_s3(s3_path: str, download_dir: str) -> str:
     """
-    Download a zip file from S3 using rclone.
+    Download a file from S3 using rclone.
 
     Args:
         s3_path: S3 path to download (format: 'bucket/path/to/file.zip')
         download_dir: Local directory to download to
 
     Returns:
-        Local path to the downloaded zip file
+        Local path to the downloaded file
 
     Raises:
         subprocess.CalledProcessError: If download fails
@@ -208,7 +208,7 @@ def main() -> None:
 
         try:
             # Download the zip file
-            zip_path = download_zip(s3_path, download_dir)
+            zip_path = download_s3(s3_path, download_dir)
 
             # Determine extraction folder name (filename without .zip extension)
             filename = extract_filename_from_url(s3_path)
@@ -241,7 +241,7 @@ def main() -> None:
 
     # If present, apply the filtering process
     if s3_imagery_subset_path != "":
-        images_subset_file = download_zip(s3_imagery_subset_path, download_dir)
+        images_subset_file = download_s3(s3_imagery_subset_path, download_dir)
 
         # Remove extra quotes if present
         images_subset_file = images_subset_file.strip('"')
