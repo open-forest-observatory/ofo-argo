@@ -169,7 +169,8 @@ def main():
             - mean_altitudes.loc["lo", "altitude_agl"]
         )
 
-        mission_id_lo, mission_id_hn = paired_missions_id.split("_")
+        # The paired_mission_id is just the two mission IDs concatenated
+        mission_id_hn, mission_id_lo = paired_missions_id.split("_")
 
         # TODO either load these from the metadata-missions-compiled file or add them to the
         # composites metadata.
