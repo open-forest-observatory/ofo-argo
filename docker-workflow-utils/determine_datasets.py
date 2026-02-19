@@ -504,7 +504,9 @@ def process_config_file(config_path: str) -> Dict[str, Any]:
             or user_memory_default
             or DEFAULT_MEMORY_REQUEST_CPU_MODE
         ),
-        "images_subset_file": get_nested(config, ["argo", "images_subset_file"], ""),
+        "s3_imagery_subset_path": get_nested(
+            config, ["argo", "s3_imagery_subset_path"], ""
+        ),
     }
 
     return mission

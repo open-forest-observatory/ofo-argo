@@ -236,9 +236,13 @@ def main() -> None:
             print(f"ERROR: Unexpected error for {s3_path}: {e}")
             failed_paths.append(s3_path)
 
-    images_subset_file = os.environ.get("IMAGES_SUBSET_FILE", "")
+    # Attempt to download the file listing a subset of images to retain
+    s3_imagery_subset_path = os.environ.get("S3_IMAGERY_SUBSET_PATH", "")
 
-    if images_subset_file != "":
+    # If present, apply the filtering process
+    if s3_imagery_subset_path != "":
+        images_subset_file = download_zip(s3_imagery_subset_path, download_dir)
+
         # Remove extra quotes if present
         images_subset_file = images_subset_file.strip('"')
         print(f"Trying to read from {images_subset_file}")

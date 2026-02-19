@@ -162,7 +162,7 @@ def create_derived_config(
     altitude_offset: float,
     lower_offset_folders: list[str],
     upper_offset_folders: list[str],
-    images_subset_file: str,
+    s3_imagery_subset_path: str,
 ) -> dict:
     """
     Create a derived config by applying mission-specific overrides to the base config.
@@ -189,7 +189,7 @@ def create_derived_config(
 
     # Argo
     config["argo"]["s3_imagery_zip_download"] = s3_download_path
-    config["argo"]["images_subset_file"] = images_subset_file
+    config["argo"]["s3_imagery_subset_path"] = s3_imagery_subset_path
 
     return config
 
@@ -267,7 +267,7 @@ def main():
         images_subset = included_images["image_id"].tolist()
 
         # The path on S3 where the file will be uploaded to
-        images_subsets_path_remote = f"{S3_COMPOSITE_MISSIONS_PATH}/{paired_missions_id}/{paired_missions_id}_images_subset.txt"
+        s3_imagery_subset_path = f"{S3_COMPOSITE_MISSIONS_PATH}/{paired_missions_id}/{paired_missions_id}_images_subset.txt"
 
         # Create derived config
         derived_config = create_derived_config(
@@ -279,7 +279,7 @@ def main():
             altitude_offset=altitude_difference,
             lower_offset_folders=photo_paths_lo,
             upper_offset_folders=photo_paths_hn,
-            images_subset_file=images_subsets_path_remote,
+            s3_imagery_subset_path=s3_imagery_subset_path,
         )
 
         # Write to output file
@@ -298,7 +298,7 @@ def main():
 
             # Upload the subset file to S3 (images_subsets_path_remote)
             # This will create the needed folder
-            upload_subset_file(tmp_subset_file.name, images_subsets_path_remote)
+            upload_subset_file(tmp_subset_file.name, s3_imagery_subset_path)
 
         success_count += 1
 
