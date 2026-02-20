@@ -237,7 +237,7 @@ def main() -> None:
             failed_paths.append(s3_path)
 
     # Attempt to download the file listing a subset of images to retain
-    s3_imagery_subset_path = os.environ.get("S3_IMAGERY_SUBSET_PATH", "")
+    s3_imagery_subset_path = os.environ.get("S3_IMAGERY_SUBSET_PATH", "").strip('"')
 
     # If present, apply the filtering process
     if s3_imagery_subset_path != "":
