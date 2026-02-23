@@ -54,7 +54,8 @@ spec:
       - name: PROGRESS_INTERVAL_PCT
         value: "1"  # Print progress every N percent (e.g., 1 = print at 1%, 2%, 3%...)
       # Completion tracking and skip behavior
-      # Path to completion log file (empty = disable skip/logging)
+      # Path to completion log file (empty = disable skip/logging), this should be a "jsonl" file
+      # in the input directory
       - name: COMPLETION_LOG_PATH
         value: ""
       # Skip projects that already have a completed metashape phase in the completion log
