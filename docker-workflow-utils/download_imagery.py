@@ -61,16 +61,16 @@ def extract_filename_from_url(url: str) -> str:
     return url.rstrip("/").split("/")[-1]
 
 
-def download_zip(s3_path: str, download_dir: str) -> str:
+def download_s3(s3_path: str, download_dir: str) -> str:
     """
-    Download a zip file from S3 using rclone.
+    Download a file from S3 using rclone.
 
     Args:
         s3_path: S3 path to download (format: 'bucket/path/to/file.zip')
         download_dir: Local directory to download to
 
     Returns:
-        Local path to the downloaded zip file
+        Local path to the downloaded file
 
     Raises:
         subprocess.CalledProcessError: If download fails
@@ -208,7 +208,7 @@ def main() -> None:
 
         try:
             # Download the zip file
-            zip_path = download_zip(s3_path, download_dir)
+            zip_path = download_s3(s3_path, download_dir)
 
             # Determine extraction folder name (filename without .zip extension)
             filename = extract_filename_from_url(s3_path)
@@ -235,6 +235,31 @@ def main() -> None:
         except Exception as e:
             print(f"ERROR: Unexpected error for {s3_path}: {e}")
             failed_paths.append(s3_path)
+
+    # Attempt to download the file listing a subset of images to retain
+    s3_imagery_subset_path = os.environ.get("S3_IMAGERY_SUBSET_PATH", "").strip('"')
+
+    # If present, apply the filtering process
+    if s3_imagery_subset_path != "":
+        images_subset_file = download_s3(s3_imagery_subset_path, download_dir)
+
+        # Remove extra quotes if present
+        images_subset_file = images_subset_file.strip('"')
+        print(f"Trying to read from {images_subset_file}")
+
+        # Read which image_ids to retain
+        with open(images_subset_file, "r") as f:
+            images_subset = [line.strip() for line in f if line.strip()]
+
+        # Read all downloaded files
+        downloaded_files = [f for f in Path(download_dir).rglob("*") if f.is_file()]
+
+        # Exclude any files not in the inclusion list
+        files_to_delete = [f for f in downloaded_files if f.stem not in images_subset]
+
+        print(f"Removing {len(files_to_delete)} files not in subset")
+        for f in files_to_delete:
+            os.remove(f)
 
     # Report results
     print("\n" + "=" * 60)

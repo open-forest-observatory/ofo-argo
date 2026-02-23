@@ -54,7 +54,8 @@ spec:
       - name: PROGRESS_INTERVAL_PCT
         value: "1"  # Print progress every N percent (e.g., 1 = print at 1%, 2%, 3%...)
       # Completion tracking and skip behavior
-      # Path to completion log file (empty = disable skip/logging)
+      # Path to completion log file (empty = disable skip/logging), this should be a "jsonl" file
+      # in the input directory
       - name: COMPLETION_LOG_PATH
         value: ""
       # Skip projects that already have a completed metashape phase in the completion log
@@ -227,6 +228,9 @@ spec:
                   value: "{{=toJson(sprig.fromJson(tasks['load-config'].outputs.result).imagery_zip_downloads)}}"
                 - name: project-name
                   value: "{{inputs.parameters.project-name}}"
+                  # TODO, check that this is the right way to parse the config
+                - name: s3-imagery-subset-path
+                  value: "{{=toJson(sprig.fromJson(tasks['load-config'].outputs.result).s3_imagery_subset_path)}}"
 
           # Step 0b: Transform config to resolve __DOWNLOADED__ paths (always runs, idempotent)
           # If no downloads occurred, the transform is a no-op (copies config unchanged)
@@ -643,6 +647,7 @@ spec:
         parameters:
           - name: imagery-zip-downloads
           - name: project-name
+          - name: s3-imagery-subset-path
       # Ensure CPU pods only schedule on CPU nodes (labeled by NFD based on nodegroup name)
       nodeSelector:
         feature.node.kubernetes.io/workload-type: cpu
@@ -657,6 +662,8 @@ spec:
             value: "{{inputs.parameters.imagery-zip-downloads}}"
           - name: DOWNLOAD_DIR
             value: "{{workflow.parameters.TEMP_WORKING_DIR}}/{{workflow.name}}/{{inputs.parameters.project-name}}/photogrammetry/downloaded-raw-imagery"
+          - name: S3_IMAGERY_SUBSET_PATH
+            value: "{{inputs.parameters.s3-imagery-subset-path}}"
           - name: S3_PROVIDER
             valueFrom:
               secretKeyRef:

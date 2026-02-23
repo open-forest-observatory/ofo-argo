@@ -169,22 +169,30 @@ def process_mission(
     Returns (success: bool, message: str).
     """
     client = get_s3_client()
-    metadata_key = f"{missions_prefix}/{mission_id}/metadata-mission/{mission_id}_mission-metadata.gpkg"
+    mission_key = f"{missions_prefix}/{mission_id}/metadata-mission/{mission_id}_mission-metadata.gpkg"
+    image_key = f"{missions_prefix}/{mission_id}/metadata-images/{mission_id}_image-metadata.gpkg"
     camera_key = f"{missions_prefix}/{mission_id}/{photogrammetry_subfolder}/full/{mission_id}_camera-locations.gpkg"
 
-    # Check both files exist
-    if not s3_key_exists(client, bucket, metadata_key):
-        return False, f"SKIP: image-metadata not found: {metadata_key}"
+    # Check all files exist
+    if not s3_key_exists(client, bucket, mission_key):
+        return False, f"SKIP: mission-metadata not found: {mission_key}"
+
+    if not s3_key_exists(client, bucket, image_key):
+        return False, f"SKIP: image-metadata not found: {image_key}"
 
     if not s3_key_exists(client, bucket, camera_key):
         return False, f"SKIP: camera-locations not found: {camera_key}"
 
     with tempfile.TemporaryDirectory() as tmpdir:
-        local_metadata = os.path.join(tmpdir, f"{mission_id}_mission-metadata.gpkg")
+        local_mission_metadata = os.path.join(
+            tmpdir, f"{mission_id}_mission-metadata.gpkg"
+        )
+        local_image_metadata = os.path.join(tmpdir, f"{mission_id}_image-metadata.gpkg")
         local_camera = os.path.join(tmpdir, f"{mission_id}_camera-locations.gpkg")
 
         # Download both files
-        download_s3_file(client, bucket, metadata_key, local_metadata)
+        download_s3_file(client, bucket, mission_key, local_mission_metadata)
+        download_s3_file(client, bucket, image_key, local_image_metadata)
         download_s3_file(client, bucket, camera_key, local_camera)
 
         # Read camera locations and compute summary
@@ -195,6 +203,21 @@ def process_mission(
 
         agl_mean, agl_fidelity = compute_agl_summary(camera_gdf)
 
+        # Add attributes to the camera_gdf for the three positional columns
+        # Ensure lat-lon before recording
+        camera_gdf.to_crs(4326, inplace=True)
+        # TODO determine what would happen if there were a null geometry value. Nan?
+        camera_gdf["photogrammetry_lon"] = camera_gdf.geometry.x
+        camera_gdf["photogrammetry_lat"] = camera_gdf.geometry.y
+        camera_gdf["photogrammetry_asl"] = camera_gdf.geometry.z
+        # Remove the geometry to avoid having two geometry columns
+        camera_gdf = camera_gdf.drop(columns="geometry")
+
+        # Read image locations
+        image_gdf = gpd.read_file(local_image_metadata)
+        # Merge the photogrammetry data into the initial imagery metadata
+        image_gdf = image_gdf.merge(camera_gdf, on="image_id")
+
         if agl_mean is None:
             return False, "SKIP: insufficient AGL data"
 
@@ -202,14 +225,19 @@ def process_mission(
             return True, f"agl_mean={agl_mean}, agl_fidelity={agl_fidelity}"
 
         # Read image metadata, add columns, and save (remove first to avoid adding a second layer)
-        metadata_gdf = gpd.read_file(local_metadata)
+        metadata_gdf = gpd.read_file(local_mission_metadata)
         metadata_gdf["agl_mean"] = agl_mean
         metadata_gdf["agl_fidelity"] = agl_fidelity
-        os.remove(local_metadata)
-        metadata_gdf.to_file(local_metadata, driver="GPKG")
+        os.remove(local_mission_metadata)
+        metadata_gdf.to_file(local_mission_metadata, driver="GPKG")
+
+        # Save the updated imagery data after removing the old one (to avoid second layer)
+        os.remove(local_image_metadata)
+        image_gdf.to_file(local_image_metadata, driver="GPKG")
 
         # Re-upload
-        upload_s3_file(client, bucket, metadata_key, local_metadata)
+        upload_s3_file(client, bucket, mission_key, local_mission_metadata)
+        upload_s3_file(client, bucket, image_key, local_image_metadata)
         return True, f"agl_mean={agl_mean}, agl_fidelity={agl_fidelity} — uploaded"
 
 
