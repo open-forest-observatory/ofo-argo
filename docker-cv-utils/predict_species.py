@@ -17,7 +17,9 @@ def main(input_folder, model_path, config_path):
     ]
 
     preds = [inferencer(str(f)) for f in input_files]
-    print(preds)
+    labels = [pred[0]["pred_label"] for pred in preds]
+    preds_per_image = {str(f): label for f, label in zip(input_files, labels)}
+    print(preds_per_image)
 
 
 def parse_args():
