@@ -220,6 +220,12 @@ spec:
         volumeMounts:
           - name: data
             mountPath: /data
+        resources:
+          requests:
+            cpu: 1
+            memory: "2Gi"
+          limits:
+            memory: "4Gi"
         command: ["python", "/app/chip_images.py",
                   "{{inputs.parameters.images-folder}}",
                   "{{inputs.parameters.renders-folder}}",
@@ -295,6 +301,12 @@ spec:
         volumeMounts:
           - name: data
             mountPath: /data
+        resources:
+          requests:
+            cpu: 1
+            memory: "2Gi"
+          limits:
+            memory: "4Gi"
         command: ["python"]
         source: |
           import json
