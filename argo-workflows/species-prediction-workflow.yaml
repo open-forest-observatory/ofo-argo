@@ -162,7 +162,7 @@ spec:
           - name: chm-file
           - name: detected-trees-file
       container:
-        image: ghcr.io/open-forest-observatory/tree-detection-framework:feature-dr-containerize
+        image: ghcr.io/open-forest-observatory/tree-detection-framework:main
         volumeMounts:
           - name: data
             mountPath: /data
