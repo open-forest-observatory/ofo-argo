@@ -209,6 +209,8 @@ spec:
           - name: model-path
           - name: config-path
           - name: output-path
+      # Disable workflow-level non-GPU affinity; let GPU resource request handle node selection
+      affinity: {}
       script:
         image: waikatodatamining/mmpretrain:1.2.0_cuda11.1
         volumeMounts:
