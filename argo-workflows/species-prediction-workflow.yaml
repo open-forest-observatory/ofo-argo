@@ -222,10 +222,10 @@ spec:
             mountPath: /data
         resources:
           requests:
-            cpu: 1
-            memory: "2Gi"
+            cpu: 4
+            memory: "8Gi"
           limits:
-            memory: "4Gi"
+            memory: "8Gi"
         command: ["python", "/app/chip_images.py",
                   "{{inputs.parameters.images-folder}}",
                   "{{inputs.parameters.renders-folder}}",
