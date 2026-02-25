@@ -216,9 +216,9 @@ spec:
             mountPath: /data
         resources:
           requests:
-            nvidia.com/gpu: 1
+            nvidia.com/mig-1g.5gb: 1
           limits:
-            nvidia.com/gpu: 1
+            nvidia.com/mig-1g.5gb: 1
         command: ["python"]
         source: |
           import json
