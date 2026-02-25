@@ -228,7 +228,7 @@ spec:
 
           from mmpretrain.apis import ImageClassificationInferencer
 
-          input_folder = Path("{{inputs.parameters.chips-folder}}"")
+          input_folder = Path("{{inputs.parameters.chips-folder}}")
           config_path = "{{inputs.parameters.config-path}}"
           model_path = "{{inputs.parameters.model-path}}"
           output_path = Path("{{inputs.parameters.output-path}}")
@@ -257,3 +257,63 @@ spec:
           output_path.parent.mkdir(exist_ok=True, parents=True)
           with open(output_path, "w") as file_h:
               json.dump(results_per_file, file_h)
+
+    - name: assign-predictions-to-trees
+      inputs:
+        parameters:
+          - name: input-trees-file
+          - name: image-level-predictions-file
+          - name: column-name
+          - name: output-trees-file
+      script:
+        image: runsascoded/geopandas:0.10.2
+        volumeMounts:
+          - name: data
+            mountPath: /data
+        command: ["python"]
+        source: |
+          import json
+          import geopandas as gpd
+          import pandas as pd
+          import numpy as np
+          from pathlib import Path
+
+          column_name = "{{inputs.parameters.column-name}}"
+          image_level_predictions_file = "{{inputs.parameters.image-level-predictions-file}}"
+          input_trees_path = Path("{{inputs.parameters.input-trees-file}}")
+          output_trees_path = Path("{{inputs.parameters.output-trees-file}}")
+
+          with open(image_level_predictions_file, "r") as f:
+              preds = json.load(f)
+
+          input_files = list(preds.keys())
+          labels = list(preds.values())
+
+          tree_IDs = [Path(f).stem for f in input_files]
+
+          preds_df = pd.DataFrame({"tree_ID": tree_IDs, column_name: labels})
+
+          def fair_mode(series):
+              """Tie break if there two or more options"""
+              modes = series.mode()
+              mode = np.random.choice(modes)
+              return mode
+
+          grouped = preds_df.groupby(["tree_ID"]).apply(
+              lambda x: fair_mode(x["tree_species_pred"])
+          )
+          grouped = pd.DataFrame(
+              {"unique_ID": grouped.index, column_name: grouped.values}
+          )
+          grouped["unique_ID"] = grouped["unique_ID"].astype(str)
+          grouped["unique_ID"] = grouped["unique_ID"].str.pad(5, fillchar="0")
+          grouped["unique_ID"] = grouped["unique_ID"].astype(str)
+
+          detected_trees = gpd.read_file(input_trees_path)
+          detected_trees["unique_ID"] = detected_trees["unique_ID"].astype(str)
+          detected_trees = detected_trees.merge(grouped, on="unique_ID", how="left")
+
+          # create output folder
+          output_trees_path.parent.mkdir(parents=True, exist_ok=True)
+
+          detected_trees.to_file(output_trees_path)
