@@ -291,7 +291,7 @@ spec:
           - name: column-name
           - name: output-trees-file
       script:
-        image: runsascoded/geopandas:0.10.2
+        image: uhoosborne/geopandas:latest
         volumeMounts:
           - name: data
             mountPath: /data
