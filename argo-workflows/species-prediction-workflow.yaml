@@ -131,6 +131,31 @@ spec:
                    value: "{{workflow.parameters.LD_CONFIG_PATH}}"
                  - name: output-path
                    value: "{{workflow.parameters.OUTPUT_FOLDER}}/classified-chips-LD.json"
+        - - name: assign-species-predictions-to-trees
+            template: assign-predictions-to-trees
+            arguments:
+              parameters:
+                 - name: input-trees-file
+                   value: "{{workflow.parameters.OUTPUT_FOLDER}}/detected_trees.gpkg"
+                 - name: image-level-predictions-file
+                   value: "{{workflow.parameters.OUTPUT_FOLDER}}/classified-chips-species.json"
+                 - name: column-name
+                   value: "species_prediction"
+                 - name: output-trees-file
+                   value: "{{workflow.parameters.OUTPUT_FOLDER}}/detected_trees_w_species.gpkg"
+        - - name: assign-live-dead-predictions-to-trees
+            template: assign-predictions-to-trees
+            arguments:
+              parameters:
+                 - name: input-trees-file
+                   value: "{{workflow.parameters.OUTPUT_FOLDER}}/detected_trees_w_species.gpkg"
+                 - name: image-level-predictions-file
+                   value: "{{workflow.parameters.OUTPUT_FOLDER}}/classified-chips-LD.json"
+                 - name: column-name
+                   value: "live_dead_prediction"
+                 - name: output-trees-file
+                   value: "{{workflow.parameters.OUTPUT_FOLDER}}/detected_trees_w_species_and_live_dead.gpkg"
+## Definitions of individual steps (templates)
     - name: detect-trees
       inputs:
         parameters:
@@ -293,18 +318,16 @@ spec:
 
           preds_df = pd.DataFrame({"tree_ID": tree_IDs, column_name: labels})
 
+
           def fair_mode(series):
               """Tie break if there two or more options"""
               modes = series.mode()
               mode = np.random.choice(modes)
               return mode
 
-          grouped = preds_df.groupby(["tree_ID"]).apply(
-              lambda x: fair_mode(x["tree_species_pred"])
-          )
-          grouped = pd.DataFrame(
-              {"unique_ID": grouped.index, column_name: grouped.values}
-          )
+
+          grouped = preds_df.groupby(["tree_ID"]).apply(lambda x: fair_mode(x[column_name]))
+          grouped = pd.DataFrame({"unique_ID": grouped.index, column_name: grouped.values})
           grouped["unique_ID"] = grouped["unique_ID"].astype(str)
           grouped["unique_ID"] = grouped["unique_ID"].str.pad(5, fillchar="0")
           grouped["unique_ID"] = grouped["unique_ID"].astype(str)
