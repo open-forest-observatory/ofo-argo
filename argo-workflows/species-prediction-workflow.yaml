@@ -101,6 +101,16 @@ spec:
             template: chip-images
             arguments:
               parameters:
+                 - name: images-folder
+                   value: "{{workflow.parameters.IMAGE_FOLDER}}"
+                 - name: renders-folder
+                   value: "{{workflow.parameters.OUTPUT_FOLDER}}/renders"
+                 - name: output-folder
+                   value: "{{workflow.parameters.OUTPUT_FOLDER}}/chips"
+        - - name: classify-chips-species
+            template: classify-chips
+            arguments:
+              parameters:
                  - name: chips-folder
                    value: "{{workflow.parameters.OUTPUT_FOLDER}}/chips"
                  - name: model-path
@@ -222,17 +232,21 @@ spec:
           output_path = Path("{{inputs.parameters.output-path}}")
 
           # Listing input files
-          input_files = sorted(Path(input_folder).rglob(".png"))
+          input_files = [
+              str(f)
+              for f in Path(input_folder).rglob("*")
+              if f.suffix.lower() in [".jpg", ".jpeg", ".png"]
+          ]
           print(f"Running on {len(input_files)} files")
 
           # Setting up the model
           inferencer = ImageClassificationInferencer(model=config_path, pretrained=model_path, device="cuda")
 
           # Run inference. This is the slow step.
-          results = inferencer(input_files)
+          results = inferencer(input_files, batch_size=4)
 
           # Extract predicted classes
-          pred_labels = [int(r["pred_label"]) for r in results]
+          pred_labels = [r["pred_class"] for r in results]
 
           # Build a dict from filename to predicted class
           results_per_file = {str(k): v for k, v in zip(input_files, pred_labels)}
