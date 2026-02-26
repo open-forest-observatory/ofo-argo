@@ -26,7 +26,7 @@ BACKGROUND_VALUE = (
 
 # Other parameters
 BBOX_PADDING_RATIO = 0.02
-IMAGE_RES_CONSTRAINT = 250  # min edge length (height or width) to save
+IMAGE_RES_CONSTRAINT = 50  # min edge length (height and width) to save
 # The number of processes to use for chipping.
 
 
