@@ -24,6 +24,11 @@ BACKGROUND_VALUE = (
     128,
 )  # Value to set background pixels (0-255, recommend 128 for mid-gray)
 
+# This value is what is used as the background value for the rendered masks.
+# Be careful since IDs_to_labels must be overwritten to force 0 to be the background class during
+# the rendering process.
+RENDER_NULL_ID = 0
+
 # Other parameters
 BBOX_PADDING_RATIO = 0.02
 IMAGE_RES_CONSTRAINT = 50  # min edge length (height and width) to save
@@ -61,7 +66,13 @@ def filter_contours_by_area(binary_mask, area_threshold=0.5):
     return filtered_mask
 
 
-def chip_images(image_path, mask_path, output_folder, IDs_to_labels):
+def chip_images(
+    image_path,
+    mask_path,
+    output_folder,
+    IDs_to_labels,
+    render_null_ID=RENDER_NULL_ID,
+):
     img = Image.open(image_path)  # load image
     img_array = (
         np.array(img) if MASK_BACKGROUND else None
@@ -74,8 +85,8 @@ def chip_images(image_path, mask_path, output_folder, IDs_to_labels):
         # Indicates a mallformed image in the current experiments
         return
 
-    # TODO remove the 255 filter once it's reset to 0 being the background
-    individual_shapes = list(shapes(mask_ids, mask=mask_ids != 255))
+    # The background is all non-tree pixels
+    individual_shapes = list(shapes(mask_ids, mask=mask_ids != render_null_ID))
 
     # No polygons, skip
     if len(individual_shapes) == 0:
