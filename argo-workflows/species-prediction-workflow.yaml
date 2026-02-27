@@ -65,103 +65,135 @@ spec:
         claimName: ceph-share-rw-pvc2
 
   templates:
-    # the 'main' template defines the order of high-level steps to be completed in the workflow.
-    # the 'process-datasets' step has a looping directive (withParam) which goes through each dataset name and processes it.
+    # The 'main' template reads the datasets file and fans out to process each dataset in parallel.
     - name: main
       steps:
-        - - name: detect-trees
-            template: detect-trees
+        - - name: determine-datasets
+            template: determine-datasets
+        - - name: process-datasets
+            template: process-dataset-workflow
             arguments:
               parameters:
-                 - name: chm-file
-                   value: "{{workflow.parameters.CHM_FILE}}"
-                 - name: detected-tree-tops-file
-                   value: "{{workflow.parameters.OUTPUT_FOLDER}}/detected_tree_tops.gpkg"
-                 - name: detected-tree-crowns-file
-                   value: "{{workflow.parameters.OUTPUT_FOLDER}}/detected_tree_crowns.gpkg"
-                 - name: chip-size
-                   value: "{{workflow.parameters.CHIP_SIZE}}"
-                 - name: chip-stride
-                   value: "{{workflow.parameters.CHIP_STRIDE}}"
-        - - name: render-instance-labels
-            template: render-instance-labels
-            arguments:
-              parameters:
-                 - name: mesh-file
-                   value: "{{workflow.parameters.MESH_FILE}}"
-                 - name: cameras-file
-                   value: "{{workflow.parameters.CAMERAS_FILE}}"
-                 - name: dtm-file
-                   value: "{{workflow.parameters.DTM_FILE}}"
-                 - name: trees-file
-                   value: "{{workflow.parameters.OUTPUT_FOLDER}}/detected_tree_crowns.gpkg"
-                 - name: mesh-crs
-                   value: "{{workflow.parameters.MESH_CRS}}"
-                 - name: image-folder
-                   value: "{{workflow.parameters.IMAGE_FOLDER}}"
-                 - name: original-image-folder
-                   value: "{{workflow.parameters.ORIGINAL_IMAGE_FOLDER}}"
-                 - name: render-savefolder
-                   value: "{{workflow.parameters.OUTPUT_FOLDER}}/renders"
-        - - name: chip-images
-            template: chip-images
-            arguments:
-              parameters:
-                 - name: images-folder
-                   value: "{{workflow.parameters.IMAGE_FOLDER}}"
-                 - name: renders-folder
-                   value: "{{workflow.parameters.OUTPUT_FOLDER}}/renders"
-                 - name: output-folder
-                   value: "{{workflow.parameters.OUTPUT_FOLDER}}/chips"
-        - - name: classify-chips-species
-            template: classify-chips
-            arguments:
-              parameters:
-                 - name: chips-folder
-                   value: "{{workflow.parameters.OUTPUT_FOLDER}}/chips"
-                 - name: model-path
-                   value: "{{workflow.parameters.SPECIES_MODEL_PATH}}"
-                 - name: config-path
-                   value: "{{workflow.parameters.SPECIES_CONFIG_PATH}}"
-                 - name: output-path
-                   value: "{{workflow.parameters.OUTPUT_FOLDER}}/classified-chips-species.json"
-        - - name: classify-chips-live-dead
-            template: classify-chips
-            arguments:
-              parameters:
-                 - name: chips-folder
-                   value: "{{workflow.parameters.OUTPUT_FOLDER}}/chips"
-                 - name: model-path
-                   value: "{{workflow.parameters.LD_MODEL_PATH}}"
-                 - name: config-path
-                   value: "{{workflow.parameters.LD_CONFIG_PATH}}"
-                 - name: output-path
-                   value: "{{workflow.parameters.OUTPUT_FOLDER}}/classified-chips-LD.json"
-        - - name: assign-species-predictions-to-trees
-            template: assign-predictions-to-trees
-            arguments:
-              parameters:
-                 - name: input-trees-file
-                   value: "{{workflow.parameters.OUTPUT_FOLDER}}/detected_tree_crowns.gpkg"
-                 - name: image-level-predictions-file
-                   value: "{{workflow.parameters.OUTPUT_FOLDER}}/classified-chips-species.json"
-                 - name: column-name
-                   value: "species_prediction"
-                 - name: output-trees-file
-                   value: "{{workflow.parameters.OUTPUT_FOLDER}}/detected_trees_w_species.gpkg"
-        - - name: assign-live-dead-predictions-to-trees
-            template: assign-predictions-to-trees
-            arguments:
-              parameters:
-                 - name: input-trees-file
-                   value: "{{workflow.parameters.OUTPUT_FOLDER}}/detected_trees_w_species.gpkg"
-                 - name: image-level-predictions-file
-                   value: "{{workflow.parameters.OUTPUT_FOLDER}}/classified-chips-LD.json"
-                 - name: column-name
-                   value: "live_dead_prediction"
-                 - name: output-trees-file
-                   value: "{{workflow.parameters.OUTPUT_FOLDER}}/detected_trees_w_species_and_live_dead.gpkg"
+                - name: dataset-name
+                  value: "{{item}}"
+            # Continue processing remaining datasets even if one fails
+            withParam: "{{steps.determine-datasets.outputs.result}}"
+
+    - name: process-dataset-workflow
+      inputs:
+        parameters:
+          - name: dataset-name
+      dag:
+        # failFast=false ensures other datasets continue if this one fails
+        failFast: false
+        tasks:
+          - - name: detect-trees
+              template: detect-trees
+              arguments:
+                parameters:
+                   - name: chm-file
+                     value: "{{workflow.parameters.CHM_FILE}}"
+                   - name: detected-tree-tops-file
+                     value: "{{workflow.parameters.OUTPUT_FOLDER}}/detected_tree_tops.gpkg"
+                   - name: detected-tree-crowns-file
+                     value: "{{workflow.parameters.OUTPUT_FOLDER}}/detected_tree_crowns.gpkg"
+                   - name: chip-size
+                     value: "{{workflow.parameters.CHIP_SIZE}}"
+                   - name: chip-stride
+                     value: "{{workflow.parameters.CHIP_STRIDE}}"
+          - - name: render-instance-labels
+              template: render-instance-labels
+              arguments:
+                parameters:
+                   - name: mesh-file
+                     value: "{{workflow.parameters.MESH_FILE}}"
+                   - name: cameras-file
+                     value: "{{workflow.parameters.CAMERAS_FILE}}"
+                   - name: dtm-file
+                     value: "{{workflow.parameters.DTM_FILE}}"
+                   - name: trees-file
+                     value: "{{workflow.parameters.OUTPUT_FOLDER}}/detected_tree_crowns.gpkg"
+                   - name: mesh-crs
+                     value: "{{workflow.parameters.MESH_CRS}}"
+                   - name: image-folder
+                     value: "{{workflow.parameters.IMAGE_FOLDER}}"
+                   - name: original-image-folder
+                     value: "{{workflow.parameters.ORIGINAL_IMAGE_FOLDER}}"
+                   - name: render-savefolder
+                     value: "{{workflow.parameters.OUTPUT_FOLDER}}/renders"
+          - - name: chip-images
+              template: chip-images
+              arguments:
+                parameters:
+                   - name: images-folder
+                     value: "{{workflow.parameters.IMAGE_FOLDER}}"
+                   - name: renders-folder
+                     value: "{{workflow.parameters.OUTPUT_FOLDER}}/renders"
+                   - name: output-folder
+                     value: "{{workflow.parameters.OUTPUT_FOLDER}}/chips"
+          - - name: classify-chips-species
+              template: classify-chips
+              arguments:
+                parameters:
+                   - name: chips-folder
+                     value: "{{workflow.parameters.OUTPUT_FOLDER}}/chips"
+                   - name: model-path
+                     value: "{{workflow.parameters.SPECIES_MODEL_PATH}}"
+                   - name: config-path
+                     value: "{{workflow.parameters.SPECIES_CONFIG_PATH}}"
+                   - name: output-path
+                     value: "{{workflow.parameters.OUTPUT_FOLDER}}/classified-chips-species.json"
+          - - name: classify-chips-live-dead
+              template: classify-chips
+              arguments:
+                parameters:
+                   - name: chips-folder
+                     value: "{{workflow.parameters.OUTPUT_FOLDER}}/chips"
+                   - name: model-path
+                     value: "{{workflow.parameters.LD_MODEL_PATH}}"
+                   - name: config-path
+                     value: "{{workflow.parameters.LD_CONFIG_PATH}}"
+                   - name: output-path
+                     value: "{{workflow.parameters.OUTPUT_FOLDER}}/classified-chips-LD.json"
+          - - name: assign-species-predictions-to-trees
+              template: assign-predictions-to-trees
+              arguments:
+                parameters:
+                   - name: input-trees-file
+                     value: "{{workflow.parameters.OUTPUT_FOLDER}}/detected_tree_crowns.gpkg"
+                   - name: image-level-predictions-file
+                     value: "{{workflow.parameters.OUTPUT_FOLDER}}/classified-chips-species.json"
+                   - name: column-name
+                     value: "species_prediction"
+                   - name: output-trees-file
+                     value: "{{workflow.parameters.OUTPUT_FOLDER}}/detected_trees_w_species.gpkg"
+          - - name: assign-live-dead-predictions-to-trees
+              template: assign-predictions-to-trees
+              arguments:
+                parameters:
+                   - name: input-trees-file
+                     value: "{{workflow.parameters.OUTPUT_FOLDER}}/detected_trees_w_species.gpkg"
+                   - name: image-level-predictions-file
+                     value: "{{workflow.parameters.OUTPUT_FOLDER}}/classified-chips-LD.json"
+                   - name: column-name
+                     value: "live_dead_prediction"
+                   - name: output-trees-file
+                     value: "{{workflow.parameters.OUTPUT_FOLDER}}/detected_trees_w_species_and_live_dead.gpkg"
 ## Definitions of individual steps (templates)
+    # Parse the newline-separated datasets file into a JSON array of dataset names
+    - name: determine-datasets
+      script:
+        image: python:3.9
+        volumeMounts:
+          - name: data
+            mountPath: /data
+        command: ["python3"]
+        source: |
+          import json, sys
+          with open("/data/{{workflow.parameters.DATASETS_FILE}}", "r") as f:
+              datasets = [line.strip() for line in f if line.strip()]
+          json.dump(datasets, sys.stdout)
+
     - name: detect-trees
       inputs:
         parameters:
