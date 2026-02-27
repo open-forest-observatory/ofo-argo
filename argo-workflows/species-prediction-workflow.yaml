@@ -176,7 +176,7 @@ spec:
             value: "3600"
       container:
         # TODO go back to main tag once this PR is merged
-        image: ghcr.io/open-forest-observatory/tree-detection-framework:pr-162
+        image: ghcr.io/open-forest-observatory/tree-detection-framework:main
         volumeMounts:
           - name: data
             mountPath: /data
