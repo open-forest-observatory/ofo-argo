@@ -1,4 +1,4 @@
-name: Publish photogrammetry-postprocessing image to Github Packages
+name: Publish cv-utils image to Github Packages
 
 on:
   push:
@@ -8,12 +8,12 @@ on:
       - main
     # Only build if this folder changes
     paths:
-      - 'docker-photogrammetry-postprocessing/**'
+      - 'docker-cv-utils/**'
   workflow_call:
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_NAME: open-forest-observatory/photogrammetry-postprocessing
+  IMAGE_NAME: open-forest-observatory/cv-utils
 
 jobs:
   build-and-push-image:
@@ -54,7 +54,7 @@ jobs:
         id: push
         uses: docker/build-push-action@f2a1d5e99d037542a71f64918e516c093c6f3fc4
         with:
-          context: ./docker-photogrammetry-postprocessing
+          context: ./docker-cv-utils
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
