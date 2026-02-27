@@ -234,13 +234,14 @@ def process_folder(
         IDs_to_labels = json.load(file_h)
         IDs_to_labels = {int(k): v for k, v in IDs_to_labels.items()}
 
-    output_folders = [Path(output_dir, image_stem) for image_stem in images_stems]
     # Rebuild the image file lists to ensure it matches the order of the render files, even if
     # there are images without renders
     image_files = [
-        Path(images_folder, image_stem).with_suffix(images_ext)
-        for image_stem in images_stems
+        Path(images_folder, render_stem).with_suffix(images_ext)
+        for render_stem in renders_stems
     ]
+    # Build the output folders list in the same order
+    output_folders = [Path(output_dir, render_stem) for render_stem in renders_stems]
 
     # Replicate IDs_to_labels the appropriate number of times
     inputs = list(
