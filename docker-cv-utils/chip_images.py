@@ -199,9 +199,10 @@ def process_folder(
     images_folder,
     renders_folder,
     output_dir,
-    images_ext="JPG",
-    renders_ext="tif",
+    images_ext=".JPG",
+    renders_ext=".tif",
     n_workers=1,
+    ensure_all_images_have_renders=False,
 ) -> tuple:
     """Create the per-tree chips for one dataset"""
     images_folder = Path(images_folder)
@@ -220,17 +221,26 @@ def process_folder(
         raise ValueError(
             f"{len(missing_images)} renders do not have a corresponding images. The first 10 are {list(missing_images)[:10]}"
         )
-    additional_images = set(images_stems) - set(renders_stems)
-    if len(additional_images) > 0:
-        raise ValueError(
-            f"{len(additional_images)} images do not have a corresponding renders. The first 10 are {list(additional_images)[:10]}"
-        )
+
+    # In some cases, only a subset of the views are rendered, for example with a spatial subset.
+    if ensure_all_images_have_renders:
+        additional_images = set(images_stems) - set(renders_stems)
+        if len(additional_images) > 0:
+            raise ValueError(
+                f"{len(additional_images)} images do not have a corresponding renders. The first 10 are {list(additional_images)[:10]}"
+            )
 
     with open(Path(renders_folder, "IDs_to_labels.json"), "r") as file_h:
         IDs_to_labels = json.load(file_h)
         IDs_to_labels = {int(k): v for k, v in IDs_to_labels.items()}
 
     output_folders = [Path(output_dir, image_stem) for image_stem in images_stems]
+    # Rebuild the image file lists to ensure it matches the order of the render files, even if
+    # there are images without renders
+    image_files = [
+        Path(images_folder, image_stem).with_suffix(images_ext)
+        for image_stem in images_stems
+    ]
 
     # Replicate IDs_to_labels the appropriate number of times
     inputs = list(
@@ -252,6 +262,7 @@ def parse_args():
     parser.add_argument("renders_folder")
     parser.add_argument("output_folder")
     parser.add_argument("--n-workers", type=int, default=1)
+    parser.add_argument("--ensure-all-images-have-renders", action="store_true")
 
     args = parser.parse_args()
     return args
@@ -267,4 +278,5 @@ if __name__ == "__main__":
         args.renders_folder,
         args.output_folder,
         n_workers=args.n_workers,
+        ensure_all_images_have_renders=args.ensure_all_images_have_renders,
     )
