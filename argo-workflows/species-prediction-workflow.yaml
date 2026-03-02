@@ -74,16 +74,6 @@ spec:
     # The 'main' template reads the datasets file and fans out to process each dataset in parallel.
     - name: main
       steps:
-        - - name: download-mission-composites
-            template: download-mission-composites
-            arguments:
-              parameters:
-                - name: mission-id
-                  value: "{{workflow.parameters.MISSION_ID}}"
-                - name: s3-bucket
-                  value: "{{workflow.parameters.S3_BUCKET_PUBLIC}}"
-                - name: s3-data-folder
-                  value: "{{workflow.parameters.S3_DATA_FOLDER}}"
         - - name: determine-datasets
             template: determine-datasets
         - - name: process-datasets
@@ -103,12 +93,23 @@ spec:
         # failFast=false ensures other datasets continue if this one fails
         failFast: false
         tasks:
+          - - name: download-input-data
+              template: download-input-data
+              arguments:
+                parameters:
+                  - name: mission-id
+                    value: "{{workflow.parameters.MISSION_ID}}"
+                  - name: s3-bucket
+                    value: "{{workflow.parameters.S3_BUCKET_PUBLIC}}"
+                  - name: s3-data-folder
+                    value: "{{workflow.parameters.S3_DATA_FOLDER}}"
           - - name: detect-trees
               template: detect-trees
+              dependencies: [download-input-data]
               arguments:
                 parameters:
                    - name: chm-file
-                     value: "{{workflow.parameters.CHM_FILE}}"
+                     value: '{{=jsonpath(tasks["download-input-data"].outputs.parameters["local-files"], "$.chm")}}'
                    - name: detected-tree-tops-file
                      value: "{{workflow.parameters.OUTPUT_FOLDER}}/detected_tree_tops.gpkg"
                    - name: detected-tree-crowns-file
@@ -119,14 +120,15 @@ spec:
                      value: "{{workflow.parameters.CHIP_STRIDE}}"
           - - name: render-instance-labels
               template: render-instance-labels
+              dependencies: [download-input-data]
               arguments:
                 parameters:
                    - name: mesh-file
-                     value: "{{workflow.parameters.MESH_FILE}}"
+                     value: '{{=jsonpath(tasks["download-input-data"].outputs.parameters["local-files"], "$.mesh")}}'
                    - name: cameras-file
-                     value: "{{workflow.parameters.CAMERAS_FILE}}"
+                     value: '{{=jsonpath(tasks["download-input-data"].outputs.parameters["local-files"], "$.camera")}}'
                    - name: dtm-file
-                     value: "{{workflow.parameters.DTM_FILE}}"
+                     value: '{{=jsonpath(tasks["download-input-data"].outputs.parameters["local-files"], "$.dtm")}}'
                    - name: trees-file
                      value: "{{workflow.parameters.OUTPUT_FOLDER}}/detected_tree_crowns.gpkg"
                    - name: mesh-crs
@@ -200,7 +202,7 @@ spec:
     # Returns a JSON dict of local file paths via outputs.parameters.local-files.
     # Keys: camera, chm, dtm, mesh, ortho. Fails if any expected file is missing.
     # S3 source path: <s3-bucket>/drone/mission-composites_01/<mission-id>/full/<mission-id>
-    - name: download-mission-composites
+    - name: download-input-data
       inputs:
         parameters:
           - name: mission-id
