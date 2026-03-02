@@ -144,9 +144,9 @@ spec:
                  - name: mesh-crs
                    value: "{{workflow.parameters.MESH_CRS}}"
                  - name: image-folder
-                   value: "{{workflow.parameters.IMAGE_FOLDER}}"
+                   value: "{{workflow.parameters.TEMP_FOLDER}}/imagery_downloads/{{inputs.parameters.project-name}}"
                  - name: original-image-folder
-                   value: "{{workflow.parameters.ORIGINAL_IMAGE_FOLDER}}"
+                   value: "/data/argo-input/datasets/{{inputs.parameters.dataset-name}}"
                  - name: render-savefolder
                    value: "{{workflow.parameters.OUTPUT_FOLDER}}/renders"
           - name: chip-images
@@ -154,7 +154,7 @@ spec:
             arguments:
               parameters:
                  - name: images-folder
-                   value: "{{workflow.parameters.IMAGE_FOLDER}}"
+                   value: "{{workflow.parameters.TEMP_FOLDER}}/imagery_downloads/{{inputs.parameters.project-name}}"
                  - name: renders-folder
                    value: "{{workflow.parameters.OUTPUT_FOLDER}}/renders"
                  - name: output-folder
@@ -319,7 +319,7 @@ spec:
           - name: DOWNLOAD_DIR
             value: "{{workflow.parameters.TEMP_FOLDER}}/imagery_downloads/{{inputs.parameters.project-name}}"
           - name: S3_IMAGERY_SUBSET_PATH
-            value: "{{workflow.parameters.S3_BUCKET}}/{{workflow.parameters.S3_DATA_FOLDER}}/{{inputs.parameters.project-name}}/{{inputs.parameters.project-name}}_images_subset.txt"
+            value: "{{workflow.parameters.S3_BUCKET_PUBLIC}}/{{workflow.parameters.S3_DATA_FOLDER}}/{{inputs.parameters.project-name}}/{{inputs.parameters.project-name}}_images_subset.txt"
           - name: S3_PROVIDER
             valueFrom:
               secretKeyRef:
