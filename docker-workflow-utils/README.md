@@ -87,6 +87,18 @@ python3 /app/determine_datasets.py /data/config_list.txt
 }
 ```
 
+### `download_imagery.py`
+
+Script to download zipped folders of images from S3. The images are then unzipped, and optionally filtered to a subset. It relies exclusively on environment variables to pass parameters to the script. These include the following variables.
+
+- `IMAGERY_ZIP_URLS`: JSON array of S3 paths to download (e.g., '["bucket/path/file.zip"]'). Paths should be in format 'bucket/path/to/file.zip' without remote prefix. The S3 connection is configured via the credentials below.
+- `DOWNLOAD_DIR`: Directory for downloads (e.g., '{TEMP_WORKING_DIR}/{workflow_name}/{iteration_id}/photogrammetry/downloaded-raw-imagery')
+- `S3_PROVIDER`: S3 provider for rclone (e.g., 'Ceph', 'AWS')
+- `S3_ENDPOINT`: S3 endpoint URL
+- `S3_ACCESS_KEY`: S3 access key ID
+- `S3_SECRET_KEY`: S3 secret access key
+- `S3_IMAGERY_SUBSET_PATH`: A path on the same S3 provider to a text file. This should contain one line per file that is to be included. If set, any files but these will be removed. If unset, all files will be retained.
+
 ### `generate_remaining_configs.py`
 
 Utility script to generate a new config list containing only projects that have not yet completed processing. Useful after a workflow is cancelled or fails partway through.
