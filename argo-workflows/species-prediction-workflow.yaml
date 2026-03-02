@@ -45,6 +45,8 @@ spec:
         value: "ofo-public"
       - name: S3_DATA_FOLDER
         value: "drone/mission-composites_01"
+      - name: S3_IMAGERY_FOLDER
+        value: "drone/missions_03"
       - name: TEMP_FOLDER
         value: "/data/ofo-argo/temp-dir/species-prediction"
       - name: SPECIES_MODEL_PATH
@@ -108,7 +110,7 @@ spec:
             arguments:
               parameters:
                 - name: imagery-zip-downloads
-                  value: "TODO"
+                  value: "[\"{{workflow.parameters.S3_BUCKET_PUBLIC}}/{{workflow.parameters.S3_IMAGERY_FOLDER}}/{{=inputs.parameters['dataset-name'][0:6]}}/images/{{=inputs.parameters['dataset-name'][0:6]}}_images.zip\",\"{{workflow.parameters.S3_BUCKET_PUBLIC}}/{{workflow.parameters.S3_IMAGERY_FOLDER}}/{{=inputs.parameters['dataset-name'][-6:]}}/images/{{=inputs.parameters['dataset-name'][-6:]}}_images.zip\"]"
                 - name: project-name
                   value: "{{inputs.parameters.dataset-name}}"
           - name: detect-trees
