@@ -3,5 +3,5 @@ This script generates config files to run photogrammetry on pairs of missions. M
 
 To run this script, the composite image- and mission-level metadata must be downloaded and pointed to by `COMPOSITE_IMAGES_GPKG_PATH` and `MISSION_METADATA_GPKG_PATH`, respectively. The path to the base config and output directory must be provided as well.
 
-During this process, the subset of images which match the mission polygon will be computed. The information about the subset is uploaded directly to S3 so it can be obtained at the same time that the raw imagery is downloaded.
+The composite images metadata should already have been subset to the images included within the paired mission polygons. Note, the low oblique polygon may be larger than that of the high nadir one to account for images looking inward to the central area. The information about the subset is uploaded directly to S3 so it can be obtained at the same time that the raw imagery is downloaded.
 The S3 upload is controlled by the following four environment variables: `S3_PROVIDER`, `S3_ENDPOINT`, `S3_ACCESS_KEY`, and `S3_SECRET_KEY`.
