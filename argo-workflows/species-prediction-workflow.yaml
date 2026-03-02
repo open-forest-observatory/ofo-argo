@@ -38,6 +38,12 @@ spec:
   # These parameters can be referenced throughout the workflow templates using {{workflow.parameters.<name>}}
   arguments:
     parameters:
+      - name: MISSION_ID
+      # S3 bucket for public/final outputs (mission composites, species predictions)
+      - name: S3_BUCKET_PUBLIC
+        value: "ofo-public"
+      - name: S3_DATA_FOLDER
+        value: "drone/mission-composites_01"
       - name: CAMERAS_FILE
       - name: MESH_FILE
       - name: DTM_FILE
@@ -68,6 +74,16 @@ spec:
     # The 'main' template reads the datasets file and fans out to process each dataset in parallel.
     - name: main
       steps:
+        - - name: download-mission-composites
+            template: download-mission-composites
+            arguments:
+              parameters:
+                - name: mission-id
+                  value: "{{workflow.parameters.MISSION_ID}}"
+                - name: s3-bucket
+                  value: "{{workflow.parameters.S3_BUCKET_PUBLIC}}"
+                - name: s3-data-folder
+                  value: "{{workflow.parameters.S3_DATA_FOLDER}}"
         - - name: determine-datasets
             template: determine-datasets
         - - name: process-datasets
@@ -180,6 +196,84 @@ spec:
                    - name: output-trees-file
                      value: "{{workflow.parameters.OUTPUT_FOLDER}}/detected_trees_w_species_and_live_dead.gpkg"
 ## Definitions of individual steps (templates)
+    # Download mission composite images from S3 to the shared volume.
+    # Returns a JSON array of local file paths via outputs.parameters.local-file-paths.
+    # S3 source path: <s3-bucket>/drone/mission-composites_01/<mission-id>/full/<mission-id>
+    - name: download-mission-composites
+      inputs:
+        parameters:
+          - name: mission-id
+          - name: s3-bucket
+            value: "ofo-public"
+          - name: s3-data-folder
+            value: "{{workflow.parameters.S3_DATA_FOLDER}}"
+          - name: local-dir
+            value: "/data/tmp/mission-composites"
+      outputs:
+        parameters:
+          - name: local-file-paths
+            valueFrom:
+              path: /tmp/file-paths.json
+      container:
+        image: rclone/rclone:latest
+        volumeMounts:
+          - name: data
+            mountPath: /data
+        command: ["/bin/sh", "-lc"]
+        args:
+          - |
+            set -euo pipefail
+            MISSION_ID="{{inputs.parameters.mission-id}}"
+            LOCAL_DIR="{{inputs.parameters.local-dir}}/${MISSION_ID}"
+            S3_SRC="s3:{{inputs.parameters.s3-bucket}}/{{inputs.parameters.s3-data-folder}}/${MISSION_ID}/full/"
+            INCLUDES="--include ${MISSION_ID}_cameras.xml --include ${MISSION_ID}_chm-ptcloud.tif --include ${MISSION_ID}_dtm-ptcloud.tif --include ${MISSION_ID}_mesh.ply --include ${MISSION_ID}_ortho-dsm-ptcloud.tif"
+
+            mkdir -p "$LOCAL_DIR"
+
+            echo "[rclone] Downloading $S3_SRC -> $LOCAL_DIR"
+            rclone copy "$S3_SRC" "$LOCAL_DIR" "$INCLUDES" \
+              --transfers 8 --checkers 8 --retries 5 --retries-sleep=15s \
+              --stats 15s --stats-log-level NOTICE
+
+            FILE_COUNT=$(find "$LOCAL_DIR" -type f | wc -l | tr -d ' ')
+            echo "[download] Downloaded ${FILE_COUNT} files to $LOCAL_DIR"
+
+            # Build JSON array of downloaded file paths
+            find "$LOCAL_DIR" -type f | sort > /tmp/file-list.txt
+            awk 'BEGIN{printf "["} NR>1{printf ","} {printf "\"%s\"", $0} END{printf "]"}' \
+              /tmp/file-list.txt > /tmp/file-paths.json
+
+            echo "[download] File list written to /tmp/file-paths.json"
+        resources:
+          requests:
+            cpu: "100m"
+            memory: "256Mi"
+          limits:
+            memory: "1Gi"
+        env:
+          - name: RCLONE_CONFIG_S3_TYPE
+            value: "s3"
+          - name: RCLONE_CONFIG_S3_PROVIDER
+            valueFrom:
+              secretKeyRef:
+                name: s3-credentials
+                key: provider
+          - name: RCLONE_CONFIG_S3_ENDPOINT
+            valueFrom:
+              secretKeyRef:
+                name: s3-credentials
+                key: endpoint
+          - name: RCLONE_CONFIG_S3_ACCESS_KEY_ID
+            valueFrom:
+              secretKeyRef:
+                name: s3-credentials
+                key: access_key
+          - name: RCLONE_CONFIG_S3_SECRET_ACCESS_KEY
+            valueFrom:
+              secretKeyRef:
+                name: s3-credentials
+                key: secret_key
+
     # Parse the newline-separated datasets file into a JSON array of dataset names
     - name: determine-datasets
       script:
@@ -190,7 +284,7 @@ spec:
         command: ["python3"]
         source: |
           import json, sys
-          with open("/data/{{workflow.parameters.DATASETS_FILE}}", "r") as f:
+          with open("{{workflow.parameters.DATASETS_FILE}}", "r") as f:
               datasets = [line.strip() for line in f if line.strip()]
           json.dump(datasets, sys.stdout)
 
