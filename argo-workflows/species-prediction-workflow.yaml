@@ -130,7 +130,9 @@ spec:
                   value: "{{workflow.parameters.CHIP_STRIDE}}"
           - name: render-instance-labels
             template: render-instance-labels
-            dependencies: [download-input-data]
+            dependencies:
+              - detect-trees
+              - download-imagery
             arguments:
               parameters:
                  - name: mesh-file
@@ -144,23 +146,25 @@ spec:
                  - name: mesh-crs
                    value: "{{workflow.parameters.MESH_CRS}}"
                  - name: image-folder
-                   value: "{{workflow.parameters.TEMP_FOLDER}}/imagery_downloads/{{inputs.parameters.project-name}}"
+                   value: "{{workflow.parameters.TEMP_FOLDER}}/imagery_downloads/{{inputs.parameters.dataset-name}}"
                  - name: original-image-folder
                    value: "/data/argo-input/datasets/{{inputs.parameters.dataset-name}}"
                  - name: render-savefolder
                    value: "{{workflow.parameters.OUTPUT_FOLDER}}/renders"
           - name: chip-images
             template: chip-images
+            dependencies: [render-instance-labels]
             arguments:
               parameters:
                  - name: images-folder
-                   value: "{{workflow.parameters.TEMP_FOLDER}}/imagery_downloads/{{inputs.parameters.project-name}}"
+                   value: "{{workflow.parameters.TEMP_FOLDER}}/imagery_downloads/{{inputs.parameters.dataset-name}}"
                  - name: renders-folder
                    value: "{{workflow.parameters.OUTPUT_FOLDER}}/renders"
                  - name: output-folder
                    value: "{{workflow.parameters.OUTPUT_FOLDER}}/chips"
           - name: classify-chips-species
             template: classify-chips
+            dependencies: [chip-images]
             arguments:
               parameters:
                  - name: chips-folder
@@ -173,6 +177,7 @@ spec:
                    value: "{{workflow.parameters.OUTPUT_FOLDER}}/classified-chips-species.json"
           - name: classify-chips-live-dead
             template: classify-chips
+            dependencies: [chip-images]
             arguments:
               parameters:
                  - name: chips-folder
@@ -185,6 +190,7 @@ spec:
                    value: "{{workflow.parameters.OUTPUT_FOLDER}}/classified-chips-LD.json"
           - name: assign-species-predictions-to-trees
             template: assign-predictions-to-trees
+            dependencies: [classify-chips-species]
             arguments:
               parameters:
                  - name: input-trees-file
@@ -197,6 +203,9 @@ spec:
                    value: "{{workflow.parameters.OUTPUT_FOLDER}}/detected_trees_w_species.gpkg"
           - name: assign-live-dead-predictions-to-trees
             template: assign-predictions-to-trees
+            dependencies:
+              - classify-chips-live-dead
+              - assign-species-predictions-to-trees
             arguments:
               parameters:
                  - name: input-trees-file
