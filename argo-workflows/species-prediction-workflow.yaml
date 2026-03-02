@@ -197,7 +197,8 @@ spec:
                      value: "{{workflow.parameters.OUTPUT_FOLDER}}/detected_trees_w_species_and_live_dead.gpkg"
 ## Definitions of individual steps (templates)
     # Download mission composite images from S3 to the shared volume.
-    # Returns a JSON array of local file paths via outputs.parameters.local-file-paths.
+    # Returns a JSON dict of local file paths via outputs.parameters.local-files.
+    # Keys: camera, chm, dtm, mesh, ortho. Fails if any expected file is missing.
     # S3 source path: <s3-bucket>/drone/mission-composites_01/<mission-id>/full/<mission-id>
     - name: download-mission-composites
       inputs:
@@ -211,7 +212,7 @@ spec:
             value: "/data/tmp/mission-composites"
       outputs:
         parameters:
-          - name: local-file-paths
+          - name: local-files
             valueFrom:
               path: /tmp/file-paths.json
       container:
@@ -231,25 +232,37 @@ spec:
             mkdir -p "$LOCAL_DIR"
 
             echo "[rclone] Downloading $S3_SRC -> $LOCAL_DIR"
-            rclone copy "$S3_SRC" "$LOCAL_DIR" "$INCLUDES" \
+            rclone copy "$S3_SRC" "$LOCAL_DIR" $INCLUDES \
               --transfers 8 --checkers 8 --retries 5 --retries-sleep=15s \
               --stats 15s --stats-log-level NOTICE
 
-            FILE_COUNT=$(find "$LOCAL_DIR" -type f | wc -l | tr -d ' ')
-            echo "[download] Downloaded ${FILE_COUNT} files to $LOCAL_DIR"
+            CAMERA_FILE="${LOCAL_DIR}/${MISSION_ID}_cameras.xml"
+            CHM_FILE="${LOCAL_DIR}/${MISSION_ID}_chm-ptcloud.tif"
+            DTM_FILE="${LOCAL_DIR}/${MISSION_ID}_dtm-ptcloud.tif"
+            MESH_FILE="${LOCAL_DIR}/${MISSION_ID}_mesh.ply"
+            ORTHO_FILE="${LOCAL_DIR}/${MISSION_ID}_ortho-dsm-ptcloud.tif"
 
-            # Build JSON array of downloaded file paths
-            find "$LOCAL_DIR" -type f | sort > /tmp/file-list.txt
-            awk 'BEGIN{printf "["} NR>1{printf ","} {printf "\"%s\"", $0} END{printf "]"}' \
-              /tmp/file-list.txt > /tmp/file-paths.json
+            # Verify all expected files were downloaded
+            for f in "$CAMERA_FILE" "$CHM_FILE" "$DTM_FILE" "$MESH_FILE" "$ORTHO_FILE"; do
+              if [ ! -f "$f" ]; then
+                echo "[download] ERROR: Expected file not found: $f"
+                exit 1
+              fi
+            done
+            echo "[download] All 5 expected files verified."
 
-            echo "[download] File list written to /tmp/file-paths.json"
+            # Build JSON dict of downloaded file paths
+            printf '{"camera":"%s","chm":"%s","dtm":"%s","mesh":"%s","ortho":"%s"}' \
+              "$CAMERA_FILE" "$CHM_FILE" "$DTM_FILE" "$MESH_FILE" "$ORTHO_FILE" \
+              > /tmp/file-paths.json
+
+            echo "[download] File paths written to /tmp/file-paths.json"
         resources:
           requests:
-            cpu: "100m"
-            memory: "256Mi"
+            cpu: 1
+            memory: "2Gi"
           limits:
-            memory: "1Gi"
+            memory: "4Gi"
         env:
           - name: RCLONE_CONFIG_S3_TYPE
             value: "s3"
