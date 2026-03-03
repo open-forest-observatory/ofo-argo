@@ -49,6 +49,12 @@ spec:
         value: "drone/missions_03"
       - name: TEMP_FOLDER
         value: "/data/ofo-argo/temp-dir/species-prediction"
+        # The leading path to where the images were located when photogrammetry was run. The overall
+        # path to the images is expected to be the following:
+        # "{{PHOTOGRAMMETRY_IMAGERY_FOLDER}}/{{dataset-name}}/photogrammetry/downloaded-raw-imagery"
+        # TODO, this would not be sufficient if photogrammetry was run multiple times with differnt
+        # argo run IDs
+      - name: PHOTOGRAMMETRY_IMAGERY_FOLDER
       - name: SPECIES_MODEL_PATH
       - name: SPECIES_CONFIG_PATH
       - name: LD_MODEL_PATH
@@ -148,7 +154,7 @@ spec:
                  - name: image-folder
                    value: "{{workflow.parameters.TEMP_FOLDER}}/imagery_downloads/{{inputs.parameters.dataset-name}}"
                  - name: original-image-folder
-                   value: "/data/argo-input/datasets/{{inputs.parameters.dataset-name}}"
+                   value: "{{workflow.parameters.PHOTOGRAMMETRY_IMAGERY_FOLDER}}/{{inputs.parameters.dataset-name}}/photogrammetry/downloaded-raw-imagery"
                  - name: render-savefolder
                    value: "{{workflow.parameters.OUTPUT_FOLDER}}/renders"
           - name: chip-images
