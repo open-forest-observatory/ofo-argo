@@ -110,7 +110,7 @@ spec:
                 - name: s3-data-folder
                   value: "{{workflow.parameters.S3_DATA_FOLDER}}"
                 - name: local-dir
-                  value: "{{workflow.parameters.TEMP_FOLDER}}/{{inputs.parameters.dataset-name}}"
+                  value: "{{workflow.parameters.TEMP_FOLDER}}/photogrammetry-products/{{inputs.parameters.dataset-name}}"
           - name: download-imagery
             template: download-imagery
             arguments:
