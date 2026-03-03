@@ -225,7 +225,7 @@ spec:
 ## Definitions of individual steps (templates)
     # Download mission composite images from S3 to the shared volume.
     # Returns a JSON dict of local file paths via outputs.parameters.local-files.
-    # Keys: camera, chm, dtm, mesh, ortho. Fails if any expected file is missing.
+    # Keys: camera, chm, dtm, mesh. Fails if any expected file is missing.
     # S3 source path: <s3-bucket>/drone/mission-composites_01/<mission-id>/full/<mission-id>
     - name: download-input-data
       inputs:
@@ -254,7 +254,7 @@ spec:
             MISSION_ID="{{inputs.parameters.mission-id}}"
             LOCAL_DIR="{{inputs.parameters.local-dir}}"
             S3_SRC="s3:{{inputs.parameters.s3-bucket}}/{{inputs.parameters.s3-data-folder}}/${MISSION_ID}/full/"
-            INCLUDES="--include ${MISSION_ID}_cameras.xml --include ${MISSION_ID}_chm-ptcloud.tif --include ${MISSION_ID}_dtm-ptcloud.tif --include ${MISSION_ID}_mesh.ply --include ${MISSION_ID}_ortho-dsm-ptcloud.tif"
+            INCLUDES="--include ${MISSION_ID}_cameras.xml --include ${MISSION_ID}_chm-ptcloud.tif --include ${MISSION_ID}_dtm-ptcloud.tif --include ${MISSION_ID}_mesh.ply"
 
             mkdir -p "$LOCAL_DIR"
 
@@ -267,20 +267,19 @@ spec:
             CHM_FILE="${LOCAL_DIR}/${MISSION_ID}_chm-ptcloud.tif"
             DTM_FILE="${LOCAL_DIR}/${MISSION_ID}_dtm-ptcloud.tif"
             MESH_FILE="${LOCAL_DIR}/${MISSION_ID}_mesh.ply"
-            ORTHO_FILE="${LOCAL_DIR}/${MISSION_ID}_ortho-dsm-ptcloud.tif"
 
             # Verify all expected files were downloaded
-            for f in "$CAMERA_FILE" "$CHM_FILE" "$DTM_FILE" "$MESH_FILE" "$ORTHO_FILE"; do
+            for f in "$CAMERA_FILE" "$CHM_FILE" "$DTM_FILE" "$MESH_FILE"; do
               if [ ! -f "$f" ]; then
                 echo "[download] ERROR: Expected file not found: $f"
                 exit 1
               fi
             done
-            echo "[download] All 5 expected files verified."
+            echo "[download] All 4 expected files verified."
 
             # Build JSON dict of downloaded file paths
-            printf '{"camera":"%s","chm":"%s","dtm":"%s","mesh":"%s","ortho":"%s"}' \
-              "$CAMERA_FILE" "$CHM_FILE" "$DTM_FILE" "$MESH_FILE" "$ORTHO_FILE" \
+            printf '{"camera":"%s","chm":"%s","dtm":"%s","mesh":"%s"}' \
+              "$CAMERA_FILE" "$CHM_FILE" "$DTM_FILE" "$MESH_FILE" \
               > /tmp/file-paths.json
 
             echo "[download] File paths written to /tmp/file-paths.json"
