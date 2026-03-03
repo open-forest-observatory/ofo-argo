@@ -66,7 +66,7 @@ spec:
       - name: CHIP_STRIDE
         value: 3600
       - name: N_WORKERS
-        value: 4
+        value: 12
       - name: OFO_ARGO_IMAGES_TAG
         value: "main"
 
@@ -416,6 +416,12 @@ spec:
         volumeMounts:
           - name: data
             mountPath: /data
+        resources:
+          requests:
+            cpu: 2
+            memory: "8Gi"
+          limits:
+            memory: "8Gi"
         command: ["python",
             "-m", "geograypher.entrypoints.render_labels",
             "--mesh-file", "{{inputs.parameters.mesh-file}}",
@@ -442,10 +448,10 @@ spec:
             mountPath: /data
         resources:
           requests:
-            cpu: 4
-            memory: "8Gi"
+            cpu: 8
+            memory: "16Gi"
           limits:
-            memory: "8Gi"
+            memory: "16Gi"
         command: ["python", "/app/chip_images.py",
                   "{{inputs.parameters.images-folder}}",
                   "{{inputs.parameters.renders-folder}}",
