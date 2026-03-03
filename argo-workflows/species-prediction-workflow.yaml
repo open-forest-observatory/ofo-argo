@@ -138,7 +138,6 @@ spec:
             template: render-instance-labels
             dependencies:
               - detect-trees
-              - download-imagery
             arguments:
               parameters:
                  - name: mesh-file
@@ -151,8 +150,6 @@ spec:
                    value: "{{workflow.parameters.OUTPUT_FOLDER}}/{{inputs.parameters.dataset-name}}/detected_tree_crowns.gpkg"
                  - name: mesh-crs
                    value: "{{workflow.parameters.MESH_CRS}}"
-                 - name: image-folder
-                   value: "{{workflow.parameters.TEMP_FOLDER}}/imagery_downloads/{{inputs.parameters.dataset-name}}"
                  - name: original-image-folder
                    value: "{{workflow.parameters.PHOTOGRAMMETRY_IMAGERY_FOLDER}}/{{inputs.parameters.dataset-name}}/photogrammetry/downloaded-raw-imagery"
                  - name: render-savefolder
@@ -412,11 +409,10 @@ spec:
           - name: dtm-file
           - name: trees-file
           - name: mesh-crs
-          - name: image-folder
           - name: original-image-folder
           - name: render-savefolder
       container:
-        image: ghcr.io/open-forest-observatory/geograypher:main
+        image: ghcr.io/open-forest-observatory/geograypher:pr-219
         volumeMounts:
           - name: data
             mountPath: /data
@@ -427,11 +423,12 @@ spec:
             "--cameras-file", "{{inputs.parameters.cameras-file}}",
             "--texture", "{{inputs.parameters.trees-file}}",
             "--DTM-file", "{{inputs.parameters.dtm-file}}",
-            "--image-folder", "{{inputs.parameters.image-folder}}",
+            "--image-folder", "\"\"",
             "--render-savefolder", "{{inputs.parameters.render-savefolder}}",
             "--texture-column-name", "unique_ID",
             "--ground-height-threshold", "2.0",
-            "--original-image-folder", "{{inputs.parameters.original-image-folder}}"]
+            "--original-image-folder", "{{inputs.parameters.original-image-folder}}",
+            "--n-cameras-per-chunk", "50"]
     - name: chip-images
       inputs:
         parameters:
