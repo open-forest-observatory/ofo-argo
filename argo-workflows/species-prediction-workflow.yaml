@@ -48,7 +48,7 @@ spec:
       - name: S3_IMAGERY_FOLDER
         value: "drone/missions_03"
       - name: TEMP_FOLDER
-        value: "/data/ofo-argo/temp-dir/species-prediction"
+        value: "/data/argo-output/temp-dir/species-prediction"
         # The leading path to where the images were located when photogrammetry was run. The overall
         # path to the images is expected to be the following:
         # "{{PHOTOGRAMMETRY_IMAGERY_FOLDER}}/{{dataset-name}}/photogrammetry/downloaded-raw-imagery"
