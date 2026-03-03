@@ -127,9 +127,9 @@ spec:
                 - name: chm-file
                   value: '{{=jsonpath(tasks["download-input-data"].outputs.parameters["local-files"], "$.chm")}}'
                 - name: detected-tree-tops-file
-                  value: "{{workflow.parameters.OUTPUT_FOLDER}}/detected_tree_tops.gpkg"
+                  value: "{{workflow.parameters.OUTPUT_FOLDER}}/{{inputs.parameters.dataset-name}}/detected_tree_tops.gpkg"
                 - name: detected-tree-crowns-file
-                  value: "{{workflow.parameters.OUTPUT_FOLDER}}/detected_tree_crowns.gpkg"
+                  value: "{{workflow.parameters.OUTPUT_FOLDER}}/{{inputs.parameters.dataset-name}}/detected_tree_crowns.gpkg"
                 - name: chip-size
                   value: "{{workflow.parameters.CHIP_SIZE}}"
                 - name: chip-stride
@@ -148,7 +148,7 @@ spec:
                  - name: dtm-file
                    value: '{{=jsonpath(tasks["download-input-data"].outputs.parameters["local-files"], "$.dtm")}}'
                  - name: trees-file
-                   value: "{{workflow.parameters.OUTPUT_FOLDER}}/detected_tree_crowns.gpkg"
+                   value: "{{workflow.parameters.OUTPUT_FOLDER}}/{{inputs.parameters.dataset-name}}/detected_tree_crowns.gpkg"
                  - name: mesh-crs
                    value: "{{workflow.parameters.MESH_CRS}}"
                  - name: image-folder
@@ -156,7 +156,7 @@ spec:
                  - name: original-image-folder
                    value: "{{workflow.parameters.PHOTOGRAMMETRY_IMAGERY_FOLDER}}/{{inputs.parameters.dataset-name}}/photogrammetry/downloaded-raw-imagery"
                  - name: render-savefolder
-                   value: "{{workflow.parameters.OUTPUT_FOLDER}}/renders"
+                   value: "{{workflow.parameters.OUTPUT_FOLDER}}/{{inputs.parameters.dataset-name}}/renders"
           - name: chip-images
             template: chip-images
             dependencies: [render-instance-labels]
@@ -165,48 +165,48 @@ spec:
                  - name: images-folder
                    value: "{{workflow.parameters.TEMP_FOLDER}}/imagery_downloads/{{inputs.parameters.dataset-name}}"
                  - name: renders-folder
-                   value: "{{workflow.parameters.OUTPUT_FOLDER}}/renders"
+                   value: "{{workflow.parameters.OUTPUT_FOLDER}}/{{inputs.parameters.dataset-name}}/renders"
                  - name: output-folder
-                   value: "{{workflow.parameters.OUTPUT_FOLDER}}/chips"
+                   value: "{{workflow.parameters.OUTPUT_FOLDER}}/{{inputs.parameters.dataset-name}}/chips"
           - name: classify-chips-species
             template: classify-chips
             dependencies: [chip-images]
             arguments:
               parameters:
                  - name: chips-folder
-                   value: "{{workflow.parameters.OUTPUT_FOLDER}}/chips"
+                   value: "{{workflow.parameters.OUTPUT_FOLDER}}/{{inputs.parameters.dataset-name}}/chips"
                  - name: model-path
                    value: "{{workflow.parameters.SPECIES_MODEL_PATH}}"
                  - name: config-path
                    value: "{{workflow.parameters.SPECIES_CONFIG_PATH}}"
                  - name: output-path
-                   value: "{{workflow.parameters.OUTPUT_FOLDER}}/classified-chips-species.json"
+                   value: "{{workflow.parameters.OUTPUT_FOLDER}}/{{inputs.parameters.dataset-name}}/classified-chips-species.json"
           - name: classify-chips-live-dead
             template: classify-chips
             dependencies: [chip-images]
             arguments:
               parameters:
                  - name: chips-folder
-                   value: "{{workflow.parameters.OUTPUT_FOLDER}}/chips"
+                   value: "{{workflow.parameters.OUTPUT_FOLDER}}/{{inputs.parameters.dataset-name}}/chips"
                  - name: model-path
                    value: "{{workflow.parameters.LD_MODEL_PATH}}"
                  - name: config-path
                    value: "{{workflow.parameters.LD_CONFIG_PATH}}"
                  - name: output-path
-                   value: "{{workflow.parameters.OUTPUT_FOLDER}}/classified-chips-LD.json"
+                   value: "{{workflow.parameters.OUTPUT_FOLDER}}/{{inputs.parameters.dataset-name}}/classified-chips-LD.json"
           - name: assign-species-predictions-to-trees
             template: assign-predictions-to-trees
             dependencies: [classify-chips-species]
             arguments:
               parameters:
                  - name: input-trees-file
-                   value: "{{workflow.parameters.OUTPUT_FOLDER}}/detected_tree_crowns.gpkg"
+                   value: "{{workflow.parameters.OUTPUT_FOLDER}}/{{inputs.parameters.dataset-name}}/detected_tree_crowns.gpkg"
                  - name: image-level-predictions-file
-                   value: "{{workflow.parameters.OUTPUT_FOLDER}}/classified-chips-species.json"
+                   value: "{{workflow.parameters.OUTPUT_FOLDER}}/{{inputs.parameters.dataset-name}}/classified-chips-species.json"
                  - name: column-name
                    value: "species_prediction"
                  - name: output-trees-file
-                   value: "{{workflow.parameters.OUTPUT_FOLDER}}/detected_trees_w_species.gpkg"
+                   value: "{{workflow.parameters.OUTPUT_FOLDER}}/{{inputs.parameters.dataset-name}}/detected_trees_w_species.gpkg"
           - name: assign-live-dead-predictions-to-trees
             template: assign-predictions-to-trees
             dependencies:
@@ -215,13 +215,13 @@ spec:
             arguments:
               parameters:
                  - name: input-trees-file
-                   value: "{{workflow.parameters.OUTPUT_FOLDER}}/detected_trees_w_species.gpkg"
+                   value: "{{workflow.parameters.OUTPUT_FOLDER}}/{{inputs.parameters.dataset-name}}/detected_trees_w_species.gpkg"
                  - name: image-level-predictions-file
-                   value: "{{workflow.parameters.OUTPUT_FOLDER}}/classified-chips-LD.json"
+                   value: "{{workflow.parameters.OUTPUT_FOLDER}}/{{inputs.parameters.dataset-name}}/classified-chips-LD.json"
                  - name: column-name
                    value: "live_dead_prediction"
                  - name: output-trees-file
-                   value: "{{workflow.parameters.OUTPUT_FOLDER}}/detected_trees_w_species_and_live_dead.gpkg"
+                   value: "{{workflow.parameters.OUTPUT_FOLDER}}/{{inputs.parameters.dataset-name}}/detected_trees_w_species_and_live_dead.gpkg"
 ## Definitions of individual steps (templates)
     # Download mission composite images from S3 to the shared volume.
     # Returns a JSON dict of local file paths via outputs.parameters.local-files.
