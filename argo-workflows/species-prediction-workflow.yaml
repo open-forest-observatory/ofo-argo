@@ -1,7 +1,7 @@
 apiVersion: argoproj.io/v1alpha1
 kind: Workflow
 metadata:
-  generateName: detect-trees-workflow-
+  generateName: detect-trees-and-predict-workflow-
 spec:
   serviceAccountName: argo
   entrypoint: main
@@ -39,7 +39,6 @@ spec:
   arguments:
     parameters:
       - name: DATASETS_FILE
-      - name: OUTPUT_FOLDER
       # S3 bucket for public/final outputs (mission composites, species predictions)
       - name: S3_BUCKET_PUBLIC
         value: "ofo-public"
@@ -47,6 +46,8 @@ spec:
         value: "drone/mission-composites_01"
       - name: S3_IMAGERY_FOLDER
         value: "drone/missions_03"
+      # All per-dataset temp products and outputs are saved under:
+      # TEMP_FOLDER/{{workflow.name}}/{{dataset-name}}/
       - name: TEMP_FOLDER
         value: "/data/argo-output/temp-dir/species-prediction"
         # The leading path to where the images were located when photogrammetry was run. The overall
@@ -110,7 +111,7 @@ spec:
                 - name: s3-data-folder
                   value: "{{workflow.parameters.S3_DATA_FOLDER}}"
                 - name: local-dir
-                  value: "{{workflow.parameters.TEMP_FOLDER}}/photogrammetry-products/{{inputs.parameters.dataset-name}}"
+                  value: "{{workflow.parameters.TEMP_FOLDER}}/{{workflow.name}}/{{inputs.parameters.dataset-name}}/photogrammetry-products"
           - name: download-imagery
             template: download-imagery
             arguments:
@@ -127,9 +128,9 @@ spec:
                 - name: chm-file
                   value: '{{=jsonpath(tasks["download-input-data"].outputs.parameters["local-files"], "$.chm")}}'
                 - name: detected-tree-tops-file
-                  value: "{{workflow.parameters.OUTPUT_FOLDER}}/{{inputs.parameters.dataset-name}}/detected_tree_tops.gpkg"
+                  value: "{{workflow.parameters.TEMP_FOLDER}}/{{workflow.name}}/{{inputs.parameters.dataset-name}}/detected_tree_tops.gpkg"
                 - name: detected-tree-crowns-file
-                  value: "{{workflow.parameters.OUTPUT_FOLDER}}/{{inputs.parameters.dataset-name}}/detected_tree_crowns.gpkg"
+                  value: "{{workflow.parameters.TEMP_FOLDER}}/{{workflow.name}}/{{inputs.parameters.dataset-name}}/detected_tree_crowns.gpkg"
                 - name: chip-size
                   value: "{{workflow.parameters.CHIP_SIZE}}"
                 - name: chip-stride
@@ -146,76 +147,76 @@ spec:
                  - name: dtm-file
                    value: '{{=jsonpath(tasks["download-input-data"].outputs.parameters["local-files"], "$.dtm")}}'
                  - name: trees-file
-                   value: "{{workflow.parameters.OUTPUT_FOLDER}}/{{inputs.parameters.dataset-name}}/detected_tree_crowns.gpkg"
+                   value: "{{workflow.parameters.TEMP_FOLDER}}/{{workflow.name}}/{{inputs.parameters.dataset-name}}/detected_tree_crowns.gpkg"
                  - name: mesh-crs
                    value: "{{workflow.parameters.MESH_CRS}}"
                  - name: original-image-folder
                    value: "{{workflow.parameters.PHOTOGRAMMETRY_IMAGERY_FOLDER}}/{{inputs.parameters.dataset-name}}/photogrammetry/downloaded-raw-imagery"
                  - name: render-savefolder
-                   value: "{{workflow.parameters.OUTPUT_FOLDER}}/{{inputs.parameters.dataset-name}}/renders"
+                   value: "{{workflow.parameters.TEMP_FOLDER}}/{{workflow.name}}/{{inputs.parameters.dataset-name}}/renders"
           - name: chip-images
             template: chip-images
             depends: "(render-instance-labels.Succeeded || render-instance-labels.Skipped) && (download-imagery.Succeeded || download-imagery.Skipped)"
             arguments:
               parameters:
                  - name: images-folder
-                   value: "{{workflow.parameters.TEMP_FOLDER}}/imagery_downloads/{{inputs.parameters.dataset-name}}"
+                   value: "{{workflow.parameters.TEMP_FOLDER}}/{{workflow.name}}/{{inputs.parameters.dataset-name}}/imagery-downloads"
                  - name: renders-folder
-                   value: "{{workflow.parameters.OUTPUT_FOLDER}}/{{inputs.parameters.dataset-name}}/renders"
+                   value: "{{workflow.parameters.TEMP_FOLDER}}/{{workflow.name}}/{{inputs.parameters.dataset-name}}/renders"
                  - name: output-folder
-                   value: "{{workflow.parameters.OUTPUT_FOLDER}}/{{inputs.parameters.dataset-name}}/chips"
+                   value: "{{workflow.parameters.TEMP_FOLDER}}/{{workflow.name}}/{{inputs.parameters.dataset-name}}/chips"
           - name: classify-chips-species
             template: classify-chips
             depends: "chip-images.Succeeded || chip-images.Skipped"
             arguments:
               parameters:
                  - name: chips-folder
-                   value: "{{workflow.parameters.OUTPUT_FOLDER}}/{{inputs.parameters.dataset-name}}/chips"
+                   value: "{{workflow.parameters.TEMP_FOLDER}}/{{workflow.name}}/{{inputs.parameters.dataset-name}}/chips"
                  - name: model-path
                    value: "{{workflow.parameters.SPECIES_MODEL_PATH}}"
                  - name: config-path
                    value: "{{workflow.parameters.SPECIES_CONFIG_PATH}}"
                  - name: output-path
-                   value: "{{workflow.parameters.OUTPUT_FOLDER}}/{{inputs.parameters.dataset-name}}/classified-chips-species.json"
+                   value: "{{workflow.parameters.TEMP_FOLDER}}/{{workflow.name}}/{{inputs.parameters.dataset-name}}/classified-chips-species.json"
           - name: classify-chips-live-dead
             template: classify-chips
             depends: "chip-images.Succeeded || chip-images.Skipped"
             arguments:
               parameters:
                  - name: chips-folder
-                   value: "{{workflow.parameters.OUTPUT_FOLDER}}/{{inputs.parameters.dataset-name}}/chips"
+                   value: "{{workflow.parameters.TEMP_FOLDER}}/{{workflow.name}}/{{inputs.parameters.dataset-name}}/chips"
                  - name: model-path
                    value: "{{workflow.parameters.LD_MODEL_PATH}}"
                  - name: config-path
                    value: "{{workflow.parameters.LD_CONFIG_PATH}}"
                  - name: output-path
-                   value: "{{workflow.parameters.OUTPUT_FOLDER}}/{{inputs.parameters.dataset-name}}/classified-chips-LD.json"
+                   value: "{{workflow.parameters.TEMP_FOLDER}}/{{workflow.name}}/{{inputs.parameters.dataset-name}}/classified-chips-LD.json"
           - name: assign-species-predictions-to-trees
             template: assign-predictions-to-trees
             depends: "classify-chips-species.Succeeded || classify-chips-species.Skipped"
             arguments:
               parameters:
                  - name: input-trees-file
-                   value: "{{workflow.parameters.OUTPUT_FOLDER}}/{{inputs.parameters.dataset-name}}/detected_tree_crowns.gpkg"
+                   value: "{{workflow.parameters.TEMP_FOLDER}}/{{workflow.name}}/{{inputs.parameters.dataset-name}}/detected_tree_crowns.gpkg"
                  - name: image-level-predictions-file
-                   value: "{{workflow.parameters.OUTPUT_FOLDER}}/{{inputs.parameters.dataset-name}}/classified-chips-species.json"
+                   value: "{{workflow.parameters.TEMP_FOLDER}}/{{workflow.name}}/{{inputs.parameters.dataset-name}}/classified-chips-species.json"
                  - name: column-name
                    value: "species_prediction"
                  - name: output-trees-file
-                   value: "{{workflow.parameters.OUTPUT_FOLDER}}/{{inputs.parameters.dataset-name}}/detected_trees_w_species.gpkg"
+                   value: "{{workflow.parameters.TEMP_FOLDER}}/{{workflow.name}}/{{inputs.parameters.dataset-name}}/detected_trees_w_species.gpkg"
           - name: assign-live-dead-predictions-to-trees
             template: assign-predictions-to-trees
             depends: "(classify-chips-live-dead.Succeeded || classify-chips-live-dead.Skipped) && (assign-species-predictions-to-trees.Succeeded || assign-species-predictions-to-trees.Skipped)"
             arguments:
               parameters:
                  - name: input-trees-file
-                   value: "{{workflow.parameters.OUTPUT_FOLDER}}/{{inputs.parameters.dataset-name}}/detected_trees_w_species.gpkg"
+                   value: "{{workflow.parameters.TEMP_FOLDER}}/{{workflow.name}}/{{inputs.parameters.dataset-name}}/detected_trees_w_species.gpkg"
                  - name: image-level-predictions-file
-                   value: "{{workflow.parameters.OUTPUT_FOLDER}}/{{inputs.parameters.dataset-name}}/classified-chips-LD.json"
+                   value: "{{workflow.parameters.TEMP_FOLDER}}/{{workflow.name}}/{{inputs.parameters.dataset-name}}/classified-chips-LD.json"
                  - name: column-name
                    value: "live_dead_prediction"
                  - name: output-trees-file
-                   value: "{{workflow.parameters.OUTPUT_FOLDER}}/{{inputs.parameters.dataset-name}}/detected_trees_w_species_and_live_dead.gpkg"
+                   value: "{{workflow.parameters.TEMP_FOLDER}}/{{workflow.name}}/{{inputs.parameters.dataset-name}}/detected_trees_w_species_and_live_dead.gpkg"
 ## Definitions of individual steps (templates)
     # Download mission composite images from S3 to the shared volume.
     # Returns a JSON dict of local file paths via outputs.parameters.local-files.
@@ -230,7 +231,7 @@ spec:
           - name: s3-data-folder
             value: "{{workflow.parameters.S3_DATA_FOLDER}}"
           - name: local-dir
-            value: "{{workflow.parameters.TEMP_FOLDER}}"
+            value: "{{workflow.parameters.TEMP_FOLDER}}/{{workflow.name}}/{{inputs.parameters.mission-id}}/photogrammetry-products"
       outputs:
         parameters:
           - name: local-files
@@ -325,7 +326,7 @@ spec:
           - name: IMAGERY_ZIP_URLS
             value: "{{inputs.parameters.imagery-zip-downloads}}"
           - name: DOWNLOAD_DIR
-            value: "{{workflow.parameters.TEMP_FOLDER}}/imagery_downloads/{{inputs.parameters.project-name}}"
+            value: "{{workflow.parameters.TEMP_FOLDER}}/{{workflow.name}}/{{inputs.parameters.project-name}}/imagery-downloads"
           - name: S3_IMAGERY_SUBSET_PATH
             value: "{{workflow.parameters.S3_BUCKET_PUBLIC}}/{{workflow.parameters.S3_DATA_FOLDER}}/{{inputs.parameters.project-name}}/{{inputs.parameters.project-name}}_images_subset.txt"
           - name: S3_PROVIDER
@@ -409,16 +410,16 @@ spec:
           - name: original-image-folder
           - name: render-savefolder
       container:
-        image: ghcr.io/open-forest-observatory/geograypher:pr-219
+        image: ghcr.io/open-forest-observatory/geograypher:main
         volumeMounts:
           - name: data
             mountPath: /data
         resources:
           requests:
             cpu: 2
-            memory: "8Gi"
+            memory: "16Gi"
           limits:
-            memory: "8Gi"
+            memory: "16Gi"
         command: ["python",
             "-m", "geograypher.entrypoints.render_labels",
             "--mesh-file", "{{inputs.parameters.mesh-file}}",
