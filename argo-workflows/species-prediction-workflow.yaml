@@ -70,6 +70,10 @@ spec:
         value: 12
       - name: OFO_ARGO_IMAGES_TAG
         value: "main"
+      - name: S3_PHOTOGRAMMETRY_SUBFOLDER
+        value: "photogrammetry_01"
+      - name: S3_DETECTED_TREES_SUBFOLDER
+        value: "detected_trees_0001"
 
   # Defining where to read raw drone imagery data and write out imagery products to `/ofo-share`
   volumes:
@@ -217,6 +221,13 @@ spec:
                    value: "live_dead_prediction"
                  - name: output-trees-file
                    value: "{{workflow.parameters.TEMP_FOLDER}}/{{workflow.name}}/{{inputs.parameters.dataset-name}}/detected_trees_w_species_and_live_dead.gpkg"
+          - name: rclone-upload-task
+            depends: "assign-live-dead-predictions-to-trees.Succeeded || assign-live-dead-predictions-to-trees.Skipped"
+            template: rclone-upload-template
+            arguments:
+              parameters:
+                - name: dataset-name
+                  value: "{{inputs.parameters.dataset-name}}"
 ## Definitions of individual steps (templates)
     # Download mission composite images from S3 to the shared volume.
     # Returns a JSON dict of local file paths via outputs.parameters.local-files.
@@ -576,3 +587,67 @@ spec:
           output_trees_path.parent.mkdir(parents=True, exist_ok=True)
 
           detected_trees.to_file(output_trees_path)
+
+    # --------- RCLONE UPLOAD ---------
+    # Uploads the two final output files to S3, then cleans up the local dataset directory.
+    - name: rclone-upload-template
+      inputs:
+        parameters:
+          - name: dataset-name
+      nodeSelector:
+        feature.node.kubernetes.io/workload-type: cpu
+      container:
+        image: rclone/rclone:latest
+        volumeMounts:
+          - name: data
+            mountPath: /data
+        command: ["/bin/sh", "-lc"]
+        args:
+          - |
+            set -euo pipefail
+            DATASET_DIR="{{workflow.parameters.TEMP_FOLDER}}/{{workflow.name}}/{{inputs.parameters.dataset-name}}"
+            SRC="$DATASET_DIR/"
+            DST="s3:{{workflow.parameters.S3_BUCKET_PUBLIC}}/{{workflow.parameters.S3_DATA_FOLDER}}/{{inputs.parameters.dataset-name}}/{{workflow.parameters.S3_PHOTOGRAMMETRY_SUBFOLDER}}/{{workflow.parameters.S3_DETECTED_TREES_SUBFOLDER}}"
+
+            echo "[rclone] Uploading selected files from $SRC -> $DST"
+            rclone copy "$SRC" "$DST" \
+              --include "detected_tree_tops.gpkg" \
+              --include "detected_trees_w_species_and_live_dead.gpkg" \
+              --transfers 8 --checkers 8 --retries 5 --retries-sleep=15s \
+              --s3-upload-cutoff 200Mi --s3-chunk-size 100Mi --s3-upload-concurrency 4 \
+              --stats 15s --stats-log-level NOTICE
+
+            echo "[rclone] Upload successful for {{inputs.parameters.dataset-name}}"
+
+            echo "[cleanup] Removing local dataset directory: $DATASET_DIR"
+            rm -rf "$DATASET_DIR"
+            echo "[cleanup] Done"
+        resources:
+          requests:
+            cpu: 500m
+            memory: "256Mi"
+          limits:
+            memory: "1Gi"
+        env:
+          - name: RCLONE_CONFIG_S3_TYPE
+            value: "s3"
+          - name: RCLONE_CONFIG_S3_PROVIDER
+            valueFrom:
+              secretKeyRef:
+                name: s3-credentials
+                key: provider
+          - name: RCLONE_CONFIG_S3_ENDPOINT
+            valueFrom:
+              secretKeyRef:
+                name: s3-credentials
+                key: endpoint
+          - name: RCLONE_CONFIG_S3_ACCESS_KEY_ID
+            valueFrom:
+              secretKeyRef:
+                name: s3-credentials
+                key: access_key
+          - name: RCLONE_CONFIG_S3_SECRET_ACCESS_KEY
+            valueFrom:
+              secretKeyRef:
+                name: s3-credentials
+                key: secret_key
