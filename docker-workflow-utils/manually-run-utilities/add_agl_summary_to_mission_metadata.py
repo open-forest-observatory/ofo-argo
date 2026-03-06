@@ -190,7 +190,7 @@ def process_mission(
         local_image_metadata = os.path.join(tmpdir, f"{mission_id}_image-metadata.gpkg")
         local_camera = os.path.join(tmpdir, f"{mission_id}_camera-locations.gpkg")
 
-        # Download both files
+        # Download all metadata files
         download_s3_file(client, bucket, mission_key, local_mission_metadata)
         download_s3_file(client, bucket, image_key, local_image_metadata)
         download_s3_file(client, bucket, camera_key, local_camera)
@@ -210,6 +210,8 @@ def process_mission(
         camera_gdf["photogrammetry_lon"] = camera_gdf.geometry.x
         camera_gdf["photogrammetry_lat"] = camera_gdf.geometry.y
         camera_gdf["photogrammetry_asl"] = camera_gdf.geometry.z
+        # Rename the altitude column to make it explicit it's from photogrammetry
+        camera_gdf.rename(columns={"altitude_agl": "photogrammetry_altitude_agl"})
         # Remove the geometry to avoid having two geometry columns
         camera_gdf = camera_gdf.drop(columns="geometry")
 
