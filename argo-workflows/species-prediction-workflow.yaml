@@ -1,0 +1,653 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Workflow
+metadata:
+  generateName: detect-trees-and-predict-workflow-
+spec:
+  serviceAccountName: argo
+  entrypoint: main
+
+  # Set imagePullPolicy for all containers in the workflow
+  podSpecPatch: |
+    containers:
+      - name: main
+        imagePullPolicy: Always
+
+  # Affinity rules for workflow pods:
+  # 1. nodeAffinity: Schedule on non-GPU nodes by default (GPU tasks override with affinity: {})
+  # 2. podAffinity: Prefer nodes with other running workflow pods to minimize autoscaler evictions
+  affinity:
+    nodeAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        nodeSelectorTerms:
+          - matchExpressions:
+              - key: nvidia.com/gpu.present
+                operator: DoesNotExist
+    podAffinity:
+      preferredDuringSchedulingIgnoredDuringExecution:
+        - weight: 100
+          podAffinityTerm:
+            labelSelector:
+              matchExpressions:
+                - key: workflows.argoproj.io/completed
+                  operator: In
+                  values:
+                    - "false"
+            topologyKey: kubernetes.io/hostname
+
+  # A list of input parameters available to the workflow at runtime.
+  # These parameters can be referenced throughout the workflow templates using {{workflow.parameters.<name>}}
+  arguments:
+    parameters:
+      - name: DATASETS_FILE
+      # S3 bucket for public/final outputs (mission composites, species predictions)
+      - name: S3_BUCKET_PUBLIC
+        value: "ofo-public"
+      - name: S3_DATA_FOLDER
+        value: "drone/mission-composites_01"
+      - name: S3_IMAGERY_FOLDER
+        value: "drone/missions_03"
+      # All per-dataset temp products and outputs are saved under:
+      # TEMP_FOLDER/{{workflow.name}}/{{dataset-name}}/
+      - name: TEMP_FOLDER
+        value: "/data/argo-output/temp-dir/species-prediction"
+        # The leading path to where the images were located when photogrammetry was run. The overall
+        # path to the images is expected to be the following:
+        # "{{PHOTOGRAMMETRY_IMAGERY_FOLDER}}/{{dataset-name}}/photogrammetry/downloaded-raw-imagery"
+        # TODO, this would not be sufficient if photogrammetry was run multiple times with differnt
+        # argo run IDs
+      - name: PHOTOGRAMMETRY_IMAGERY_FOLDER
+      - name: SPECIES_MODEL_PATH
+      - name: SPECIES_CONFIG_PATH
+      - name: LD_MODEL_PATH
+      - name: LD_CONFIG_PATH
+      - name: MESH_CRS
+        value: 26910
+      - name: CHIP_SIZE
+        value: 4000
+      - name: CHIP_STRIDE
+        value: 3600
+      - name: N_WORKERS
+        value: 12
+      - name: OFO_ARGO_IMAGES_TAG
+        value: "main"
+      - name: S3_PHOTOGRAMMETRY_SUBFOLDER
+        value: "photogrammetry_01"
+      - name: S3_DETECTED_TREES_SUBFOLDER
+        value: "detected_trees_0001"
+
+  # Defining where to read raw drone imagery data and write out imagery products to `/ofo-share`
+  volumes:
+    - name: data
+      persistentVolumeClaim:
+        claimName: ceph-share-rw-pvc2
+
+  templates:
+    # The 'main' template reads the datasets file and fans out to process each dataset in parallel.
+    - name: main
+      steps:
+        - - name: determine-datasets
+            template: determine-datasets
+        - - name: process-datasets
+            template: process-dataset-workflow
+            arguments:
+              parameters:
+                - name: dataset-name
+                  value: "{{item}}"
+            # Continue processing remaining datasets even if one fails
+            withParam: "{{steps.determine-datasets.outputs.result}}"
+
+    - name: process-dataset-workflow
+      inputs:
+        parameters:
+          - name: dataset-name
+      dag:
+        # failFast=false ensures other datasets continue if this one fails
+        failFast: false
+        tasks:
+          - name: download-input-data
+            template: download-input-data
+            arguments:
+              parameters:
+                - name: mission-id
+                  value: "{{inputs.parameters.dataset-name}}"
+                - name: s3-bucket
+                  value: "{{workflow.parameters.S3_BUCKET_PUBLIC}}"
+                - name: s3-data-folder
+                  value: "{{workflow.parameters.S3_DATA_FOLDER}}"
+                - name: local-dir
+                  value: "{{workflow.parameters.TEMP_FOLDER}}/{{workflow.name}}/{{inputs.parameters.dataset-name}}/photogrammetry-products"
+          - name: download-imagery
+            template: download-imagery
+            arguments:
+              parameters:
+                - name: imagery-zip-downloads
+                  value: "[\"{{workflow.parameters.S3_BUCKET_PUBLIC}}/{{workflow.parameters.S3_IMAGERY_FOLDER}}/{{=inputs.parameters['dataset-name'][0:6]}}/images/{{=inputs.parameters['dataset-name'][0:6]}}_images.zip\",\"{{workflow.parameters.S3_BUCKET_PUBLIC}}/{{workflow.parameters.S3_IMAGERY_FOLDER}}/{{=inputs.parameters['dataset-name'][-6:]}}/images/{{=inputs.parameters['dataset-name'][-6:]}}_images.zip\"]"
+                - name: project-name
+                  value: "{{inputs.parameters.dataset-name}}"
+          - name: detect-trees
+            template: detect-trees
+            depends: "download-input-data.Succeeded || download-input-data.Skipped"
+            arguments:
+              parameters:
+                - name: chm-file
+                  value: '{{=jsonpath(tasks["download-input-data"].outputs.parameters["local-files"], "$.chm")}}'
+                - name: detected-tree-tops-file
+                  value: "{{workflow.parameters.TEMP_FOLDER}}/{{workflow.name}}/{{inputs.parameters.dataset-name}}/detected_tree_tops.gpkg"
+                - name: detected-tree-crowns-file
+                  value: "{{workflow.parameters.TEMP_FOLDER}}/{{workflow.name}}/{{inputs.parameters.dataset-name}}/detected_tree_crowns.gpkg"
+                - name: chip-size
+                  value: "{{workflow.parameters.CHIP_SIZE}}"
+                - name: chip-stride
+                  value: "{{workflow.parameters.CHIP_STRIDE}}"
+          - name: render-instance-labels
+            template: render-instance-labels
+            depends: "detect-trees.Succeeded || detect-trees.Skipped"
+            arguments:
+              parameters:
+                 - name: mesh-file
+                   value: '{{=jsonpath(tasks["download-input-data"].outputs.parameters["local-files"], "$.mesh")}}'
+                 - name: cameras-file
+                   value: '{{=jsonpath(tasks["download-input-data"].outputs.parameters["local-files"], "$.camera")}}'
+                 - name: dtm-file
+                   value: '{{=jsonpath(tasks["download-input-data"].outputs.parameters["local-files"], "$.dtm")}}'
+                 - name: trees-file
+                   value: "{{workflow.parameters.TEMP_FOLDER}}/{{workflow.name}}/{{inputs.parameters.dataset-name}}/detected_tree_crowns.gpkg"
+                 - name: mesh-crs
+                   value: "{{workflow.parameters.MESH_CRS}}"
+                 - name: original-image-folder
+                   value: "{{workflow.parameters.PHOTOGRAMMETRY_IMAGERY_FOLDER}}/{{inputs.parameters.dataset-name}}/photogrammetry/downloaded-raw-imagery"
+                 - name: render-savefolder
+                   value: "{{workflow.parameters.TEMP_FOLDER}}/{{workflow.name}}/{{inputs.parameters.dataset-name}}/renders"
+          - name: chip-images
+            template: chip-images
+            depends: "(render-instance-labels.Succeeded || render-instance-labels.Skipped) && (download-imagery.Succeeded || download-imagery.Skipped)"
+            arguments:
+              parameters:
+                 - name: images-folder
+                   value: "{{workflow.parameters.TEMP_FOLDER}}/{{workflow.name}}/{{inputs.parameters.dataset-name}}/imagery-downloads"
+                 - name: renders-folder
+                   value: "{{workflow.parameters.TEMP_FOLDER}}/{{workflow.name}}/{{inputs.parameters.dataset-name}}/renders"
+                 - name: output-folder
+                   value: "{{workflow.parameters.TEMP_FOLDER}}/{{workflow.name}}/{{inputs.parameters.dataset-name}}/chips"
+          - name: classify-chips-species
+            template: classify-chips
+            depends: "chip-images.Succeeded || chip-images.Skipped"
+            arguments:
+              parameters:
+                 - name: chips-folder
+                   value: "{{workflow.parameters.TEMP_FOLDER}}/{{workflow.name}}/{{inputs.parameters.dataset-name}}/chips"
+                 - name: model-path
+                   value: "{{workflow.parameters.SPECIES_MODEL_PATH}}"
+                 - name: config-path
+                   value: "{{workflow.parameters.SPECIES_CONFIG_PATH}}"
+                 - name: output-path
+                   value: "{{workflow.parameters.TEMP_FOLDER}}/{{workflow.name}}/{{inputs.parameters.dataset-name}}/classified-chips-species.json"
+          - name: classify-chips-live-dead
+            template: classify-chips
+            depends: "chip-images.Succeeded || chip-images.Skipped"
+            arguments:
+              parameters:
+                 - name: chips-folder
+                   value: "{{workflow.parameters.TEMP_FOLDER}}/{{workflow.name}}/{{inputs.parameters.dataset-name}}/chips"
+                 - name: model-path
+                   value: "{{workflow.parameters.LD_MODEL_PATH}}"
+                 - name: config-path
+                   value: "{{workflow.parameters.LD_CONFIG_PATH}}"
+                 - name: output-path
+                   value: "{{workflow.parameters.TEMP_FOLDER}}/{{workflow.name}}/{{inputs.parameters.dataset-name}}/classified-chips-LD.json"
+          - name: assign-species-predictions-to-trees
+            template: assign-predictions-to-trees
+            depends: "classify-chips-species.Succeeded || classify-chips-species.Skipped"
+            arguments:
+              parameters:
+                 - name: input-trees-file
+                   value: "{{workflow.parameters.TEMP_FOLDER}}/{{workflow.name}}/{{inputs.parameters.dataset-name}}/detected_tree_crowns.gpkg"
+                 - name: image-level-predictions-file
+                   value: "{{workflow.parameters.TEMP_FOLDER}}/{{workflow.name}}/{{inputs.parameters.dataset-name}}/classified-chips-species.json"
+                 - name: column-name
+                   value: "species_prediction"
+                 - name: output-trees-file
+                   value: "{{workflow.parameters.TEMP_FOLDER}}/{{workflow.name}}/{{inputs.parameters.dataset-name}}/detected_trees_w_species.gpkg"
+          - name: assign-live-dead-predictions-to-trees
+            template: assign-predictions-to-trees
+            depends: "(classify-chips-live-dead.Succeeded || classify-chips-live-dead.Skipped) && (assign-species-predictions-to-trees.Succeeded || assign-species-predictions-to-trees.Skipped)"
+            arguments:
+              parameters:
+                 - name: input-trees-file
+                   value: "{{workflow.parameters.TEMP_FOLDER}}/{{workflow.name}}/{{inputs.parameters.dataset-name}}/detected_trees_w_species.gpkg"
+                 - name: image-level-predictions-file
+                   value: "{{workflow.parameters.TEMP_FOLDER}}/{{workflow.name}}/{{inputs.parameters.dataset-name}}/classified-chips-LD.json"
+                 - name: column-name
+                   value: "live_dead_prediction"
+                 - name: output-trees-file
+                   value: "{{workflow.parameters.TEMP_FOLDER}}/{{workflow.name}}/{{inputs.parameters.dataset-name}}/detected_trees_w_species_and_live_dead.gpkg"
+          - name: rclone-upload-task
+            depends: "assign-live-dead-predictions-to-trees.Succeeded || assign-live-dead-predictions-to-trees.Skipped"
+            template: rclone-upload-template
+            arguments:
+              parameters:
+                - name: dataset-name
+                  value: "{{inputs.parameters.dataset-name}}"
+## Definitions of individual steps (templates)
+    # Download mission composite images from S3 to the shared volume.
+    # Returns a JSON dict of local file paths via outputs.parameters.local-files.
+    # Keys: camera, chm, dtm, mesh. Fails if any expected file is missing.
+    # S3 source path: <s3-bucket>/drone/mission-composites_01/<mission-id>/full/<mission-id>
+    - name: download-input-data
+      inputs:
+        parameters:
+          - name: mission-id
+          - name: s3-bucket
+            value: "ofo-public"
+          - name: s3-data-folder
+            value: "{{workflow.parameters.S3_DATA_FOLDER}}"
+          - name: local-dir
+            value: "{{workflow.parameters.TEMP_FOLDER}}/{{workflow.name}}/{{inputs.parameters.mission-id}}/photogrammetry-products"
+      outputs:
+        parameters:
+          - name: local-files
+            valueFrom:
+              path: /tmp/file-paths.json
+      container:
+        image: rclone/rclone:latest
+        volumeMounts:
+          - name: data
+            mountPath: /data
+        command: ["/bin/sh", "-lc"]
+        args:
+          - |
+            set -euo pipefail
+            MISSION_ID="{{inputs.parameters.mission-id}}"
+            LOCAL_DIR="{{inputs.parameters.local-dir}}"
+            S3_SRC="s3:{{inputs.parameters.s3-bucket}}/{{inputs.parameters.s3-data-folder}}/${MISSION_ID}/full/"
+            INCLUDES="--include ${MISSION_ID}_cameras.xml --include ${MISSION_ID}_chm-ptcloud.tif --include ${MISSION_ID}_dtm-ptcloud.tif --include ${MISSION_ID}_mesh.ply"
+
+            mkdir -p "$LOCAL_DIR"
+
+            echo "[rclone] Downloading $S3_SRC -> $LOCAL_DIR"
+            rclone copy "$S3_SRC" "$LOCAL_DIR" $INCLUDES \
+              --transfers 8 --checkers 8 --retries 5 --retries-sleep=15s \
+              --stats 15s --stats-log-level NOTICE
+
+            CAMERA_FILE="${LOCAL_DIR}/${MISSION_ID}_cameras.xml"
+            CHM_FILE="${LOCAL_DIR}/${MISSION_ID}_chm-ptcloud.tif"
+            DTM_FILE="${LOCAL_DIR}/${MISSION_ID}_dtm-ptcloud.tif"
+            MESH_FILE="${LOCAL_DIR}/${MISSION_ID}_mesh.ply"
+
+            # Verify all expected files were downloaded
+            for f in "$CAMERA_FILE" "$CHM_FILE" "$DTM_FILE" "$MESH_FILE"; do
+              if [ ! -f "$f" ]; then
+                echo "[download] ERROR: Expected file not found: $f"
+                exit 1
+              fi
+            done
+            echo "[download] All 4 expected files verified."
+
+            # Build JSON dict of downloaded file paths
+            printf '{"camera":"%s","chm":"%s","dtm":"%s","mesh":"%s"}' \
+              "$CAMERA_FILE" "$CHM_FILE" "$DTM_FILE" "$MESH_FILE" \
+              > /tmp/file-paths.json
+
+            echo "[download] File paths written to /tmp/file-paths.json"
+        resources:
+          requests:
+            cpu: 1
+            memory: "2Gi"
+          limits:
+            memory: "4Gi"
+        env:
+          - name: RCLONE_CONFIG_S3_TYPE
+            value: "s3"
+          - name: RCLONE_CONFIG_S3_PROVIDER
+            valueFrom:
+              secretKeyRef:
+                name: s3-credentials
+                key: provider
+          - name: RCLONE_CONFIG_S3_ENDPOINT
+            valueFrom:
+              secretKeyRef:
+                name: s3-credentials
+                key: endpoint
+          - name: RCLONE_CONFIG_S3_ACCESS_KEY_ID
+            valueFrom:
+              secretKeyRef:
+                name: s3-credentials
+                key: access_key
+          - name: RCLONE_CONFIG_S3_SECRET_ACCESS_KEY
+            valueFrom:
+              secretKeyRef:
+                name: s3-credentials
+                key: secret_key
+
+    - name: download-imagery
+      inputs:
+        parameters:
+          - name: imagery-zip-downloads
+          - name: project-name
+      # Ensure CPU pods only schedule on CPU nodes (labeled by NFD based on nodegroup name)
+      nodeSelector:
+        feature.node.kubernetes.io/workload-type: cpu
+      container:
+        image: ghcr.io/open-forest-observatory/argo-workflow-utils:{{workflow.parameters.OFO_ARGO_IMAGES_TAG}}
+        volumeMounts:
+          - name: data
+            mountPath: /data
+        command: ["python3", "/app/download_imagery.py"]
+        env:
+          - name: IMAGERY_ZIP_URLS
+            value: "{{inputs.parameters.imagery-zip-downloads}}"
+          - name: DOWNLOAD_DIR
+            value: "{{workflow.parameters.TEMP_FOLDER}}/{{workflow.name}}/{{inputs.parameters.project-name}}/imagery-downloads"
+          - name: S3_IMAGERY_SUBSET_PATH
+            value: "{{workflow.parameters.S3_BUCKET_PUBLIC}}/{{workflow.parameters.S3_DATA_FOLDER}}/{{inputs.parameters.project-name}}/{{inputs.parameters.project-name}}_images_subset.txt"
+          - name: S3_PROVIDER
+            valueFrom:
+              secretKeyRef:
+                name: s3-credentials
+                key: provider
+          - name: S3_ENDPOINT
+            valueFrom:
+              secretKeyRef:
+                name: s3-credentials
+                key: endpoint
+          - name: S3_ACCESS_KEY
+            valueFrom:
+              secretKeyRef:
+                name: s3-credentials
+                key: access_key
+          - name: S3_SECRET_KEY
+            valueFrom:
+              secretKeyRef:
+                name: s3-credentials
+                key: secret_key
+        resources:
+          requests:
+            cpu: "2"
+            memory: "2Gi"
+
+    # Parse the newline-separated datasets file into a JSON array of dataset names
+    - name: determine-datasets
+      script:
+        image: python:3.9
+        volumeMounts:
+          - name: data
+            mountPath: /data
+        command: ["python3"]
+        source: |
+          import json, sys
+          with open("{{workflow.parameters.DATASETS_FILE}}", "r") as f:
+              datasets = [line.strip() for line in f if line.strip()]
+          json.dump(datasets, sys.stdout)
+
+    - name: detect-trees
+      inputs:
+        parameters:
+          - name: chm-file
+          - name: detected-tree-tops-file
+          - name: detected-tree-crowns-file
+          - name: resolution
+            value: "0.2"
+          - name: chip-size
+            value: "4000"
+          - name: chip-stride
+            value: "3600"
+      container:
+        image: ghcr.io/open-forest-observatory/tree-detection-framework:main
+        volumeMounts:
+          - name: data
+            mountPath: /data
+        command: [
+                  "python",
+                  "-m",
+                  "tree_detection_framework.entrypoints.detect_geometric_two_stage",
+                  "{{inputs.parameters.chm-file}}",
+                  "{{inputs.parameters.detected-tree-tops-file}}",
+                  "{{inputs.parameters.detected-tree-crowns-file}}",
+                  "--chip-size",
+                  "{{inputs.parameters.chip-size}}",
+                  "--chip-stride",
+                  "{{inputs.parameters.chip-stride}}",
+                  "--resolution",
+                  "{{inputs.parameters.resolution}}",
+                ]
+    - name: render-instance-labels
+      inputs:
+        parameters:
+          - name: mesh-file
+          - name: cameras-file
+          - name: dtm-file
+          - name: trees-file
+          - name: mesh-crs
+          - name: original-image-folder
+          - name: render-savefolder
+      container:
+        image: ghcr.io/open-forest-observatory/geograypher:main
+        volumeMounts:
+          - name: data
+            mountPath: /data
+        resources:
+          requests:
+            cpu: 2
+            memory: "16Gi"
+          limits:
+            memory: "16Gi"
+        command: ["python",
+            "-m", "geograypher.entrypoints.render_labels",
+            "--mesh-file", "{{inputs.parameters.mesh-file}}",
+            "--mesh-CRS", "{{inputs.parameters.mesh-crs}}",
+            "--cameras-file", "{{inputs.parameters.cameras-file}}",
+            "--texture", "{{inputs.parameters.trees-file}}",
+            "--DTM-file", "{{inputs.parameters.dtm-file}}",
+            "--image-folder", "\"\"",
+            "--render-savefolder", "{{inputs.parameters.render-savefolder}}",
+            "--texture-column-name", "unique_ID",
+            "--ground-height-threshold", "2.0",
+            "--original-image-folder", "{{inputs.parameters.original-image-folder}}",
+            "--n-cameras-per-chunk", "50"]
+    - name: chip-images
+      inputs:
+        parameters:
+          - name: images-folder
+          - name: renders-folder
+          - name: output-folder
+      container:
+        image: ghcr.io/open-forest-observatory/cv-utils:feature-dr-species-inference-pipeline
+        volumeMounts:
+          - name: data
+            mountPath: /data
+        resources:
+          requests:
+            cpu: 8
+            memory: "16Gi"
+          limits:
+            memory: "16Gi"
+        command: ["python", "/app/chip_images.py",
+                  "{{inputs.parameters.images-folder}}",
+                  "{{inputs.parameters.renders-folder}}",
+                  "{{inputs.parameters.output-folder}}",
+                  "--n-workers", "{{workflow.parameters.N_WORKERS}}"
+                  ]
+
+    - name: classify-chips
+      inputs:
+        parameters:
+          - name: chips-folder
+          - name: model-path
+          - name: config-path
+          - name: output-path
+      # Disable workflow-level non-GPU affinity; let GPU resource request handle node selection
+      affinity: {}
+      script:
+        image: waikatodatamining/mmpretrain:1.2.0_cuda11.1
+        volumeMounts:
+          - name: data
+            mountPath: /data
+        resources:
+          requests:
+            nvidia.com/mig-1g.5gb: 1
+          limits:
+            nvidia.com/mig-1g.5gb: 1
+        command: ["python"]
+        source: |
+          import json
+          from pathlib import Path
+
+          from mmpretrain.apis import ImageClassificationInferencer
+
+          input_folder = Path("{{inputs.parameters.chips-folder}}")
+          config_path = "{{inputs.parameters.config-path}}"
+          model_path = "{{inputs.parameters.model-path}}"
+          output_path = Path("{{inputs.parameters.output-path}}")
+
+          # Listing input files
+          input_files = [
+              str(f)
+              for f in Path(input_folder).rglob("*")
+              if f.suffix.lower() in [".jpg", ".jpeg", ".png"]
+          ]
+          print(f"Running on {len(input_files)} files")
+
+          # Setting up the model
+          inferencer = ImageClassificationInferencer(model=config_path, pretrained=model_path, device="cuda")
+
+          # Run inference. This is the slow step.
+          results = inferencer(input_files, batch_size=4)
+
+          # Extract predicted classes
+          pred_labels = [r["pred_class"] for r in results]
+
+          # Build a dict from filename to predicted class
+          results_per_file = {str(k): v for k, v in zip(input_files, pred_labels)}
+
+          # Write out results
+          output_path.parent.mkdir(exist_ok=True, parents=True)
+          with open(output_path, "w") as file_h:
+              json.dump(results_per_file, file_h)
+
+    - name: assign-predictions-to-trees
+      inputs:
+        parameters:
+          - name: input-trees-file
+          - name: image-level-predictions-file
+          - name: column-name
+          - name: output-trees-file
+      script:
+        image: uhoosborne/geopandas:latest
+        volumeMounts:
+          - name: data
+            mountPath: /data
+        resources:
+          requests:
+            cpu: 1
+            memory: "2Gi"
+          limits:
+            memory: "4Gi"
+        command: ["python"]
+        source: |
+          import json
+          import geopandas as gpd
+          import pandas as pd
+          import numpy as np
+          from pathlib import Path
+
+          column_name = "{{inputs.parameters.column-name}}"
+          image_level_predictions_file = "{{inputs.parameters.image-level-predictions-file}}"
+          input_trees_path = Path("{{inputs.parameters.input-trees-file}}")
+          output_trees_path = Path("{{inputs.parameters.output-trees-file}}")
+
+          with open(image_level_predictions_file, "r") as f:
+              preds = json.load(f)
+
+          input_files = list(preds.keys())
+          labels = list(preds.values())
+
+          tree_IDs = [Path(f).stem for f in input_files]
+
+          preds_df = pd.DataFrame({"tree_ID": tree_IDs, column_name: labels})
+
+
+          def fair_mode(series):
+              """Tie break if there two or more options"""
+              modes = series.mode()
+              mode = np.random.choice(modes)
+              return mode
+
+
+          grouped = preds_df.groupby(["tree_ID"]).apply(lambda x: fair_mode(x[column_name]))
+          grouped = pd.DataFrame({"unique_ID": grouped.index, column_name: grouped.values})
+          grouped["unique_ID"] = grouped["unique_ID"].astype(str)
+          grouped["unique_ID"] = grouped["unique_ID"].str.pad(5, fillchar="0")
+          grouped["unique_ID"] = grouped["unique_ID"].astype(str)
+
+          detected_trees = gpd.read_file(input_trees_path)
+          detected_trees["unique_ID"] = detected_trees["unique_ID"].astype(str)
+          detected_trees = detected_trees.merge(grouped, on="unique_ID", how="left")
+
+          # create output folder
+          output_trees_path.parent.mkdir(parents=True, exist_ok=True)
+
+          detected_trees.to_file(output_trees_path)
+
+    # --------- RCLONE UPLOAD ---------
+    # Uploads the two final output files to S3, then cleans up the local dataset directory.
+    - name: rclone-upload-template
+      inputs:
+        parameters:
+          - name: dataset-name
+      nodeSelector:
+        feature.node.kubernetes.io/workload-type: cpu
+      container:
+        image: rclone/rclone:latest
+        volumeMounts:
+          - name: data
+            mountPath: /data
+        command: ["/bin/sh", "-lc"]
+        args:
+          - |
+            set -euo pipefail
+            DATASET_DIR="{{workflow.parameters.TEMP_FOLDER}}/{{workflow.name}}/{{inputs.parameters.dataset-name}}"
+            SRC="$DATASET_DIR/"
+            DST="s3:{{workflow.parameters.S3_BUCKET_PUBLIC}}/{{workflow.parameters.S3_DATA_FOLDER}}/{{inputs.parameters.dataset-name}}/{{workflow.parameters.S3_PHOTOGRAMMETRY_SUBFOLDER}}/{{workflow.parameters.S3_DETECTED_TREES_SUBFOLDER}}"
+
+            echo "[rclone] Uploading selected files from $SRC -> $DST"
+            rclone copy "$SRC" "$DST" \
+              --include "detected_tree_tops.gpkg" \
+              --include "detected_trees_w_species_and_live_dead.gpkg" \
+              --transfers 8 --checkers 8 --retries 5 --retries-sleep=15s \
+              --s3-upload-cutoff 200Mi --s3-chunk-size 100Mi --s3-upload-concurrency 4 \
+              --stats 15s --stats-log-level NOTICE
+
+            echo "[rclone] Upload successful for {{inputs.parameters.dataset-name}}"
+
+            echo "[cleanup] Removing local dataset directory: $DATASET_DIR"
+            rm -rf "$DATASET_DIR"
+            echo "[cleanup] Done"
+        resources:
+          requests:
+            cpu: 500m
+            memory: "256Mi"
+          limits:
+            memory: "1Gi"
+        env:
+          - name: RCLONE_CONFIG_S3_TYPE
+            value: "s3"
+          - name: RCLONE_CONFIG_S3_PROVIDER
+            valueFrom:
+              secretKeyRef:
+                name: s3-credentials
+                key: provider
+          - name: RCLONE_CONFIG_S3_ENDPOINT
+            valueFrom:
+              secretKeyRef:
+                name: s3-credentials
+                key: endpoint
+          - name: RCLONE_CONFIG_S3_ACCESS_KEY_ID
+            valueFrom:
+              secretKeyRef:
+                name: s3-credentials
+                key: access_key
+          - name: RCLONE_CONFIG_S3_SECRET_ACCESS_KEY
+            valueFrom:
+              secretKeyRef:
+                name: s3-credentials
+                key: secret_key
