@@ -134,14 +134,16 @@ def chip_images(
     valid_dims = (height > IMAGE_RES_CONSTRAINT) & (width > IMAGE_RES_CONSTRAINT)
     shapes_gdf = shapes_gdf[valid_dims]
 
-    print(f"Unique values prior to remap: {shapes_gdf.IDs.unique()}")
     # Remove any zero area polygons
     shapes_gdf = shapes_gdf[shapes_gdf.area > 0]
-    shapes_gdf.IDs.replace(IDs_to_labels, inplace=True)
+    # This cannot be done inplace in modern versions of pandas
+    shapes_gdf.IDs = shapes_gdf.IDs.replace(IDs_to_labels)
     # Check that all items were remapped
     if not (shapes_gdf.IDs.isin(IDs_to_labels.values())).all():
-        raise ValueError(IDs_to_labels.values())
-    print(f"Unique values after remap: {shapes_gdf.IDs.unique()}")
+        un_mapped_values = list(
+            set(list(shapes_gdf.IDs.unique())) - set(list(IDs_to_labels.values()))
+        )
+        raise ValueError(f"Not all values were remapped: {un_mapped_values}")
 
     # Make the output folder
     Path(output_folder).mkdir(exist_ok=True, parents=True)
@@ -257,7 +259,6 @@ def process_folder(
             [IDs_to_labels] * len(image_files),
         )
     )
-
     with Pool(n_workers) as p:
         p.starmap(chip_images, inputs)
 
