@@ -23,7 +23,7 @@ Validation:
     - Fails if this script is called but no __DOWNLOADED__ paths found in photo_path
       (indicates configuration mismatch - downloads specified but paths not using them)
 """
-
+import copy
 import os
 import sys
 from typing import Any, Dict, List, Union
@@ -126,6 +126,33 @@ def has_download_prefix(paths: List[str]) -> bool:
     return any(path.startswith(DOWNLOAD_PREFIX) for path in paths)
 
 
+def transform_attribute(block: Dict[str, str], attribute_name: str, download_path: str):
+    """
+    Transform config project by replacing __DOWNLOADED__ prefix in photo_path entries.
+
+    Args:
+        block: Original config dictionary for the corresponding block (e.g., project)
+        attribute_name: The name of the attribute to transform (e.g., "photo_path")
+        download_path: Actual path to downloaded imagery
+
+    Returns:
+        Transformed config dictionary (modified in place as well)
+    """
+    # Transform photo_path
+    photo_path = block.get(attribute_name)
+    if photo_path is not None:
+        paths = normalize_photo_path(photo_path)
+        transformed_paths = [transform_path(p, download_path) for p in paths]
+
+        # Preserve original format (string vs list)
+        if isinstance(photo_path, str):
+            block[attribute_name] = transformed_paths[0] if transformed_paths else ""
+        else:
+            block[attribute_name] = transformed_paths
+
+    return block
+
+
 def transform_config(config: Dict[str, Any], download_path: str) -> Dict[str, Any]:
     """
     Transform config by replacing __DOWNLOADED__ prefix in photo_path entries.
@@ -138,41 +165,26 @@ def transform_config(config: Dict[str, Any], download_path: str) -> Dict[str, An
         Transformed config dictionary (original is not modified)
     """
     # Deep copy to avoid modifying original
-    import copy
-
     transformed = copy.deepcopy(config)
 
     # Get project section
     project = transformed.get("project", {})
 
-    # Transform photo_path
-    photo_path = project.get("photo_path")
-    if photo_path is not None:
-        paths = normalize_photo_path(photo_path)
-        transformed_paths = [transform_path(p, download_path) for p in paths]
-
-        # Preserve original format (string vs list)
-        if isinstance(photo_path, str):
-            project["photo_path"] = transformed_paths[0] if transformed_paths else ""
-        else:
-            project["photo_path"] = transformed_paths
-
-    # Also transform photo_path_secondary if it exists and uses the prefix
-    photo_path_secondary = project.get("photo_path_secondary")
-    if photo_path_secondary is not None:
-        paths = normalize_photo_path(photo_path_secondary)
-        if has_download_prefix(paths):
-            transformed_paths = [transform_path(p, download_path) for p in paths]
-
-            # Preserve original format
-            if isinstance(photo_path_secondary, str):
-                project["photo_path_secondary"] = (
-                    transformed_paths[0] if transformed_paths else ""
-                )
-            else:
-                project["photo_path_secondary"] = transformed_paths
+    # Replace __DOWNLOADED__ prefix in relevant attributes
+    project = transform_attribute(project, "photo_path", download_path)
+    project = transform_attribute(project, "photo_path_secondary", download_path)
 
     transformed["project"] = project
+
+    # Get the add_photos section
+    add_photos = transformed.get("add_photos", {})
+
+    # Replace __DOWNLOADED__ prefix in relevant attributes
+    add_photos = transform_attribute(add_photos, "lower_offset_folders", download_path)
+    add_photos = transform_attribute(add_photos, "upper_offset_folders", download_path)
+
+    transformed["add_photos"] = add_photos
+
     return transformed
 
 

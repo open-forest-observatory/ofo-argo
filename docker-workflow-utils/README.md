@@ -87,6 +87,18 @@ python3 /app/determine_datasets.py /data/config_list.txt
 }
 ```
 
+### `download_imagery.py`
+
+Script to download zipped folders of images from S3. The images are then unzipped, and optionally filtered to a subset. It relies exclusively on environment variables to pass parameters to the script. These include the following variables.
+
+- `IMAGERY_ZIP_URLS`: JSON array of S3 paths to download (e.g., '["bucket/path/file.zip"]'). Paths should be in format 'bucket/path/to/file.zip' without remote prefix. The S3 connection is configured via the credentials below.
+- `DOWNLOAD_DIR`: Directory for downloads (e.g., '{TEMP_WORKING_DIR}/{workflow_name}/{iteration_id}/photogrammetry/downloaded-raw-imagery')
+- `S3_PROVIDER`: S3 provider for rclone (e.g., 'Ceph', 'AWS')
+- `S3_ENDPOINT`: S3 endpoint URL
+- `S3_ACCESS_KEY`: S3 access key ID
+- `S3_SECRET_KEY`: S3 secret access key
+- `S3_IMAGERY_SUBSET_PATH`: A path on the same S3 provider to a text file. This should contain one line per file that is to be included. If set, any files but these will be removed. If unset, all files will be retained.
+
 ### `generate_remaining_configs.py`
 
 Utility script to generate a new config list containing only projects that have not yet completed processing. Useful after a workflow is cancelled or fails partway through.
@@ -227,6 +239,13 @@ This container is used by:
 - `metashape-workflow.yaml` - Preprocessing step for mission parameters
 - `postprocessing-workflow.yaml` - Preprocessing step for project filtering
 
+## Manual Utilities
+The `manually-run-utilities` folder contains a variety of scripts that are run on the command line. For the case of paired photogrammetry missions, run the following steps:
+- `add_agl_summary_to_mission_metadata.py` looks up the postprocessing-derived image altitude_agl from S3, summarizes it at the mission level, and saves the summary values (agl_mean and terrain follow fidelity) back to the mission-level meatadata for each mission
+- `compile_metadata.py` takes all mission-level polygons and image points metadata gpkgs and compiles them into a single polygons and single points gpkg.
+- `pair_missions.py` Uses this compiled metadata (spatial and non) to determine which missions to pair. I had it save its outputs to a new S3 folder which will contain the photogrammetry products per "mission composite" at: ofo-public/drone/mission-composites_01/selected-composites-(images)(polygons).gpkg
+- `create_paired_metadata.py` Creates metadata files for each paired mission. This is done by subsetting the image-level metadata to the elements matching either of the composite mission IDs. And selecting the high-nadir as the mission polygon. This data is saved to disk and must be manually uploaded.
+
 ## File Structure
 
 ```
@@ -239,6 +258,10 @@ docker-workflow-utils/
 ├── db_logger.py                    # Database logging (disabled)
 ├── README.md                       # This file
 └── manually-run-utilities/
-    ├── generate_remaining_configs.py   # Generate list of uncompleted projects
-    └── generate_retroactive_log.py     # Bootstrap completion log from S3
+    ├── add_agl_summary_to_mission_metadata.py   # Merge photogrammetry-derived altitude into metadata
+    ├── compile_metadata.py                      # Concatenate metadata across multiple missions
+    ├── create_paired_metadata.py                # Create per-mission metadata for paired missions
+    ├── generate_remaining_configs.py            # Generate list of uncompleted projects
+    ├── generate_retroactive_log.py              # Bootstrap completion log from S3
+    └── pair_missions.py                         # Determine which HN and LO missions overlap
 ```
