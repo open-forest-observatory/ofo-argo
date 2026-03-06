@@ -134,9 +134,14 @@ def chip_images(
     valid_dims = (height > IMAGE_RES_CONSTRAINT) & (width > IMAGE_RES_CONSTRAINT)
     shapes_gdf = shapes_gdf[valid_dims]
 
+    print(f"Unique values prior to remap: {shapes_gdf.IDs.unique()}")
     # Remove any zero area polygons
     shapes_gdf = shapes_gdf[shapes_gdf.area > 0]
     shapes_gdf.IDs.replace(IDs_to_labels, inplace=True)
+    # Check that all items were remapped
+    if not (shapes_gdf.IDs.isin(IDs_to_labels.values())).all():
+        raise ValueError(IDs_to_labels.values())
+    print(f"Unique values after remap: {shapes_gdf.IDs.unique()}")
 
     # Make the output folder
     Path(output_folder).mkdir(exist_ok=True, parents=True)
