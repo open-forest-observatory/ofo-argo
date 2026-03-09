@@ -511,7 +511,7 @@ spec:
           inferencer = ImageClassificationInferencer(model=config_path, pretrained=model_path, device="cuda")
 
           # Run inference. This is the slow step.
-          results = inferencer(input_files, batch_size=4)
+          results = inferencer(input_files, batch_size=128)
 
           # Extract predicted classes
           pred_labels = [r["pred_class"] for r in results]
