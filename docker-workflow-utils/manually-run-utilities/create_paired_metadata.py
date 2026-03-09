@@ -39,9 +39,6 @@ for composite_id in boundary_metadata["composite_id"].unique():
         f"{composite_id}_mission-metadata.gpkg",
     )
 
-    if len(hn_boundaries) == 0 or len(mission_images) == 0:
-        breakpoint()
-
     output_images_file.parent.mkdir(parents=True, exist_ok=True)
     output_boundaries_file.parent.mkdir(parents=True, exist_ok=True)
 

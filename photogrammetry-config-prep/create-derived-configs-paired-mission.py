@@ -1,11 +1,23 @@
 #!/usr/bin/env python3
 """
-Generate derived Metashape configuration files from a base config and drone mission metadata.
+Generate derived Metashape configuration files from a base config and drone mission metadata from
+two paired drone mssions.
 
-For each mission in the input GeoPackage, creates a YAML config file that overrides
-the base config with mission-specific values (photo paths, CRS, S3 download path).
+For each pair of mission in the input GeoPackage, creates a YAML config file that overrides
+the base config with mission-specific values. These include attributes which are the same as the
+single mission case (photo paths, CRS, S3 download path) as well as attributes which correct for
+variation in recorded altitudes between the two missions in the pair (apply_paired_altitude_offset,
+paired_altitude_offset, lower_offset_folders, upper_offset_folders). This script also creates a file
+listing all the images which should be used for this photogrammetry run, and uploads this file to S3.
+The path of this file is included as the "s3_imagery_subset_path" attribute.
 
 Dependencies: geopandas, pyyaml
+
+Note that the following credentials must be configured to access S3:
+* S3_PROVIDER: S3 provider for rclone (e.g., 'Ceph', 'AWS')
+* S3_ENDPOINT: S3 endpoint URL
+* S3_ACCESS_KEY: S3 access key ID
+* S3_SECRET_KEY: S3 secret access key
 """
 
 import os
@@ -51,12 +63,6 @@ S3_COMPOSITE_MISSIONS_PATH = "ofo-public/drone/mission-composites_01"
 # cluster's s3-credentials Kubernetes secret.
 S3_DRONE_MISSIONS_PATH = "ofo-public/drone/missions_03"
 
-# For uploading, the following environment variables must be set
-# S3_PROVIDER: S3 provider for rclone (e.g., 'Ceph', 'AWS')
-# S3_ENDPOINT: S3 endpoint URL
-# S3_ACCESS_KEY: S3 access key ID
-# S3_SECRET_KEY: S3 secret access key
-
 
 # =============================================================================
 # Helper Functions
@@ -75,16 +81,13 @@ def get_s3_flags() -> List[str]:
     ]
 
 
-def upload_subset_file(local_path: str, s3_path: str) -> str:
+def upload_subset_file(image_ids: list[str], s3_path: str) -> None:
     """
-    Download a zip file from S3 using rclone.
+    Write a list of image IDs to a temporary file and upload it to S3.
 
     Args:
-        local_path: Where the file currently is
-        s3_path: S3 path to download (format: 'bucket/path/to/file.zip')
-
-    Returns:
-        Local path to the downloaded zip file
+        image_ids: List of image IDs to include in the subset file
+        s3_path: S3 destination path (format: 'bucket/path/to/file.txt')
 
     Raises:
         subprocess.CalledProcessError: If upload fails
@@ -94,29 +97,33 @@ def upload_subset_file(local_path: str, s3_path: str) -> str:
     # This avoids needing a pre-configured remote like "js2s3:".
     rclone_url = f":s3:{s3_path}"
 
-    print(f"Uploading: {local_path}")
-    print(f"  -> {s3_path}")
+    with tempfile.NamedTemporaryFile(mode="w") as tmp_subset_file:
+        for image_id in image_ids:
+            tmp_subset_file.write(f"{image_id}\n")
+        tmp_subset_file.flush()
 
-    # Note that this will create containing folders if needed
-    cmd = [
-        "rclone",
-        "copyto",
-        local_path,
-        rclone_url,
-        "--progress",
-        "--transfers",
-        "1",
-        "--checkers",
-        "1",
-        "--retries",
-        "5",
-        "--retries-sleep",
-        "15s",
-        "--stats",
-        "30s",
-    ] + get_s3_flags()
-    # TODO consider checking for a successful value
-    subprocess.run(cmd, check=True)
+        print(f"Uploading: {tmp_subset_file.name}")
+        print(f"  -> {s3_path}")
+
+        # Note that this will create containing folders if needed
+        cmd = [
+            "rclone",
+            "copyto",
+            tmp_subset_file.name,
+            rclone_url,
+            "--progress",
+            "--transfers",
+            "1",
+            "--checkers",
+            "1",
+            "--retries",
+            "5",
+            "--retries-sleep",
+            "15s",
+            "--stats",
+            "30s",
+        ] + get_s3_flags()
+        subprocess.run(cmd, check=True)
 
 
 def compute_utm_epsg(longitude: float, latitude: float) -> str:
@@ -152,7 +159,6 @@ def parse_sub_mission_ids(sub_mission_ids_str: str, mission_id: str) -> list[str
     sub_ids = [s.strip() for s in sub_mission_ids_str.split(",")]
     return [f"__DOWNLOADED__/{mission_id}_images/{sub_id}" for sub_id in sub_ids]
 
-
 def create_derived_config(
     base_config: dict,
     mission_id: str,
@@ -173,6 +179,10 @@ def create_derived_config(
         photo_paths: List of photo directory paths
         project_crs: UTM EPSG code string
         s3_download_path: S3 rclone path for imagery download
+        altitude_offset: The difference in meters requested between the upper and lower image sets
+        lower_offset_folders: Include the images in this list of folders in the lower offset group
+        upper_offset_folders: Include the images in this list of folders in the upper offset group
+        s3_imagery_subset_path: Path to a file on S3 which contains a subset of images to include
 
     Returns:
         New config dictionary with overrides applied
@@ -218,7 +228,23 @@ def main():
     standard_config_filenames = []
 
     for paired_missions_id, included_images in images_by_pair:
-        # TODO determine if this needs to be a nanmean
+        ## Subset file generation steps
+
+        # The path on S3 where the file defining which images to use will be uploaded to
+        s3_imagery_subset_path = f"{S3_COMPOSITE_MISSIONS_PATH}/{paired_missions_id}/{paired_missions_id}_images_subset.txt"
+
+        # Get image IDs which are included
+        images_subset = included_images["image_id"].tolist()
+
+        # Create the subset file and upload to S3
+        upload_subset_file(images_subset, s3_imagery_subset_path)
+
+        ## Config file generation steps
+
+        # Determine the mean altitude for the high and low mission sets. Note that Groupby.mean
+        # works similarly to nanmean in that it excludes missing values. It is highly unlikely that
+        # all values would be NaN, since that only occurs when all cameras for that gorup are not
+        # aligned or do not have a valid DTM. In practice, ~1% are missing altitide.
         mean_altitudes = (
             included_images[["altitude_agl", "mission_type"]]
             .groupby("mission_type")
@@ -233,8 +259,7 @@ def main():
         # The paired_mission_id is just the two mission IDs concatenated
         mission_id_hn, mission_id_lo = paired_missions_id.split("_")
 
-        # TODO either load these from the metadata-missions-compiled file or add them to the
-        # composites metadata.
+        # Determine the sub-mission IDs
         sub_mission_ids_lo = mission_metadata_gdf.query("mission_id == @mission_id_lo")[
             "sub_mission_ids"
         ].values[0]
@@ -247,14 +272,14 @@ def main():
         project_crs = compute_utm_epsg(centroid.x.values[0], centroid.y.values[0])
 
         # Generate photo paths from sub-mission IDs
-        # This needs to be updated to handle the fact that this is paired. So we'll compute one
-        # set of LO and HN photo paths and then this will be the concatanation of them.
+        # Compute independent LO and HN photo paths for use in the altitude offset step.
         photo_paths_lo = parse_sub_mission_ids(
             str(sub_mission_ids_lo), str(mission_id_lo)
         )
         photo_paths_hn = parse_sub_mission_ids(
             str(sub_mission_ids_hn), str(mission_id_hn)
         )
+        # The total photo paths is just the concatenation of the LO and HN ones
         photo_paths = photo_paths_lo + photo_paths_hn
 
         # Generate S3 download path
@@ -262,12 +287,6 @@ def main():
             f"{S3_DRONE_MISSIONS_PATH}/{mission_id}/images/{mission_id}_images.zip"
             for mission_id in [mission_id_lo, mission_id_hn]
         ]
-
-        # Get image paths
-        images_subset = included_images["image_id"].tolist()
-
-        # The path on S3 where the file will be uploaded to
-        s3_imagery_subset_path = f"{S3_COMPOSITE_MISSIONS_PATH}/{paired_missions_id}/{paired_missions_id}_images_subset.txt"
 
         # Create derived config
         derived_config = create_derived_config(
@@ -282,23 +301,13 @@ def main():
             s3_imagery_subset_path=s3_imagery_subset_path,
         )
 
-        # Write to output file
+        # Write the config file
         output_config_filename = f"{paired_missions_id}.yml"
         output_config_path = OUTPUT_DIR_CONFIGS / output_config_filename
         with open(output_config_path, "w") as f:
             yaml.dump(derived_config, f, default_flow_style=False, sort_keys=False)
 
         standard_config_filenames.append(output_config_filename)
-
-        # Output subset to a temp file and then upload to S3
-        with tempfile.NamedTemporaryFile(mode="w") as tmp_subset_file:
-            for image_id in images_subset:
-                tmp_subset_file.write(f"{image_id}\n")
-            tmp_subset_file.flush()
-
-            # Upload the subset file to S3 (images_subsets_path_remote)
-            # This will create the needed folder
-            upload_subset_file(tmp_subset_file.name, s3_imagery_subset_path)
 
         success_count += 1
 

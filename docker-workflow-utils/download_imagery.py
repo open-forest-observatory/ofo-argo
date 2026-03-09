@@ -236,17 +236,16 @@ def main() -> None:
             print(f"ERROR: Unexpected error for {s3_path}: {e}")
             failed_paths.append(s3_path)
 
-    # Attempt to download the file listing a subset of images to retain
     s3_imagery_subset_path = os.environ.get("S3_IMAGERY_SUBSET_PATH", "").strip('"')
 
-    # If present, apply the filtering process
+    # Remove downloaded images not explicitly marked for inclusion if requested
     if s3_imagery_subset_path != "":
+        # If a path to a file on S3 is provided, attempt to download the corresponding file.
+        # This file is a list of images IDs which are the filename, minus the extension. The image
+        # ID contains the mission ID and is assumed to be unique across all files.
         images_subset_file = download_s3(s3_imagery_subset_path, download_dir)
 
-        # Remove extra quotes if present
-        images_subset_file = images_subset_file.strip('"')
         print(f"Trying to read from {images_subset_file}")
-
         # Read which image_ids to retain
         with open(images_subset_file, "r") as f:
             images_subset = [line.strip() for line in f if line.strip()]
