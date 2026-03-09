@@ -1,0 +1,133 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Workflow
+metadata:
+  generateName: detect-trees-and-predict-workflow-
+spec:
+  serviceAccountName: argo
+  entrypoint: main
+
+  # Set imagePullPolicy for all containers in the workflow
+  podSpecPatch: |
+    containers:
+      - name: main
+        imagePullPolicy: Always
+
+  # Affinity rules for workflow pods:
+  # 1. nodeAffinity: Schedule on non-GPU nodes by default (GPU tasks override with affinity: {})
+  # 2. podAffinity: Prefer nodes with other running workflow pods to minimize autoscaler evictions
+  affinity:
+    nodeAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        nodeSelectorTerms:
+          - matchExpressions:
+              - key: nvidia.com/gpu.present
+                operator: DoesNotExist
+    podAffinity:
+      preferredDuringSchedulingIgnoredDuringExecution:
+        - weight: 100
+          podAffinityTerm:
+            labelSelector:
+              matchExpressions:
+                - key: workflows.argoproj.io/completed
+                  operator: In
+                  values:
+                    - "false"
+            topologyKey: kubernetes.io/hostname
+
+  # A list of input parameters available to the workflow at runtime.
+  # These parameters can be referenced throughout the workflow templates using {{workflow.parameters.<name>}}
+  arguments:
+    parameters:
+      - name: INPUT_FOLDER
+      - name: SPECIES_MODEL_PATH
+      - name: SPECIES_CONFIG_PATH
+      - name: BATCH_SIZE
+
+  # Defining where to read raw drone imagery data and write out imagery products to `/ofo-share`
+  volumes:
+    - name: data
+      persistentVolumeClaim:
+        claimName: ceph-share-rw-pvc2
+
+  templates:
+    # The 'main' template reads the datasets file and fans out to process each dataset in parallel.
+    - name: main
+      steps:
+        - - name: classify-chips-species
+            template: classify-chips
+            arguments:
+              parameters:
+                 - name: chips-folder
+                   value: "{{workflow.parameters.INPUT_FOLDER}}"
+                 - name: model-path
+                   value: "{{workflow.parameters.SPECIES_MODEL_PATH}}"
+                 - name: config-path
+                   value: "{{workflow.parameters.SPECIES_CONFIG_PATH}}"
+                 - name: output-path
+                   value: "/tmp/classified-chips-species.json"
+                 - name: batch-size
+                   value: "{{workflow.parameters.BATCH_SIZE}}"
+
+## Definitions of individual steps (templates)
+    - name: classify-chips
+      inputs:
+        parameters:
+          - name: chips-folder
+          - name: model-path
+          - name: config-path
+          - name: output-path
+          - name: batch-size
+      # Disable workflow-level non-GPU affinity; let GPU resource request handle node selection
+      affinity: {}
+      script:
+        image: waikatodatamining/mmpretrain:1.2.0_cuda11.1
+        volumeMounts:
+          - name: data
+            mountPath: /data
+        resources:
+          requests:
+            nvidia.com/gpu: 1 # Request 1 GPU
+          limits:
+            nvidia.com/gpu: 1 # Request 1 GPU
+        command: ["python"]
+        source: |
+          import json
+          import time
+          from pathlib import Path
+
+          from mmpretrain.apis import ImageClassificationInferencer
+
+          input_folder = Path("{{inputs.parameters.chips-folder}}")
+          config_path = "{{inputs.parameters.config-path}}"
+          model_path = "{{inputs.parameters.model-path}}"
+          output_path = Path("{{inputs.parameters.output-path}}")
+          batch_size = int({{inputs.parameters.batch-size}})
+
+          # Listing input files
+          input_files = [
+              str(f)
+              for f in Path(input_folder).rglob("*")
+              if f.suffix.lower() in [".jpg", ".jpeg", ".png"]
+          ]
+          print(f"Running on {len(input_files)} files")
+
+          # Setting up the model
+          inferencer = ImageClassificationInferencer(model=config_path, pretrained=model_path, device="cuda")
+
+          start = time.time()
+          # Run inference. This is the slow step.
+          results = inferencer(input_files, batch_size=batch_size)
+          end = time.time()
+
+          print(f"Inference took {end - start} seconds with a batch size of {batch_size}")
+
+          # Extract predicted classes
+          pred_labels = [r["pred_class"] for r in results]
+
+          # Build a dict from filename to predicted class
+          results_per_file = {str(k): v for k, v in zip(input_files, pred_labels)}
+
+          # Write out results
+          output_path.parent.mkdir(exist_ok=True, parents=True)
+          with open(output_path, "w") as file_h:
+              json.dump(results_per_file, file_h)
