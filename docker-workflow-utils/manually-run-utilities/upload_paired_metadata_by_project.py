@@ -1,3 +1,6 @@
+import subprocess
+import sys
+
 import geopandas as gpd
 from pathlib import Path
 
@@ -6,6 +9,16 @@ BOUNDARY_METADATA_FILE = "/ofo-share/repos/david/ofo-argo/scratch/paired-photogr
 OUTPUT_FOLDER = (
     "/ofo-share/repos/david/ofo-argo/scratch/paired-photogrammetry/per-mission-metadata"
 )
+
+RCLONE_REMOTE = "js2s3"
+S3_COMPOSITE_MISSIONS_PATH = "ofo-public/drone/mission-composites_01"
+
+
+def rclone_copy(src, dst):
+    """Run an rclone copy command."""
+    cmd = ["rclone", "copy", src, dst, "--transfers", "8", "--checkers", "8"]
+    print(f"  rclone copy {src} -> {dst}", file=sys.stderr)
+    subprocess.run(cmd, check=True)
 
 imagery_metadata = gpd.read_file(IMAGERY_METADATA_FILE)
 boundary_metadata = gpd.read_file(BOUNDARY_METADATA_FILE)
@@ -24,14 +37,12 @@ for composite_id in boundary_metadata["composite_id"].unique():
     hn_boundaries = mission_boundaries[mission_boundaries["mission_type"] == "hn"]
 
     # Save the subsetted images and boundaries to new GeoPackages
-    # ofo-public/drone/missions_03/000001/metadata-images/000001_image-metadata.gpkg
     output_images_file = Path(
         OUTPUT_FOLDER,
         composite_id,
         "metadata-images",
         f"{composite_id}_image-metadata.gpkg",
     )
-    # js2s3:ofo-public/drone/missions_03/000001/metadata-mission/000001_mission-metadata.gpkg
     output_boundaries_file = Path(
         OUTPUT_FOLDER,
         composite_id,
@@ -48,3 +59,8 @@ for composite_id in boundary_metadata["composite_id"].unique():
     print(
         f"Saved {len(mission_images)} images and {len(hn_boundaries)} boundaries for composite {composite_id}"
     )
+
+    # Upload the composite's metadata folder to S3
+    local_composite_dir = str(Path(OUTPUT_FOLDER, composite_id))
+    remote_composite_path = f"{RCLONE_REMOTE}:{S3_COMPOSITE_MISSIONS_PATH}/{composite_id}"
+    rclone_copy(local_composite_dir, remote_composite_path)
