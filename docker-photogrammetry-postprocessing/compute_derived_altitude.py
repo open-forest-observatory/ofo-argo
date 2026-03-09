@@ -151,11 +151,10 @@ def compute_height_above_ground(camera_file: str, dtm_file: str) -> gpd.GeoDataF
     Returns:
         gpd.GeoDataFrame:
             GeoDataFrame with camera locations as Point geometries in EPSG:4326.
-            * 'label' the image path
-            * 'altitude_agl' the image altitude above ground level in meters
-            * 'valid_dtm' was the camera above a valid DTM pixel
-            * 'camera_aligned' was the camera aligned by photogrammetry
-            * 'ground_elevation' the height of the ground in meters
+            * 'photogrammetry_altitude_agl' the image altitude above ground level in meters
+            * 'photogrammetry_valid_dtm' was the camera above a valid DTM pixel
+            * 'photogrammetry_camera_aligned' was the camera aligned by photogrammetry
+            * 'photogrammetry_ground_elevation' the height of the ground in meters
             * 'image_id' the image filename
 
     """
@@ -216,6 +215,20 @@ def compute_height_above_ground(camera_file: str, dtm_file: str) -> gpd.GeoDataF
     # Add an image_id field representing the filename (without path) to correspond with the OFO
     # convention
     cameras_gdf["image_id"] = cameras_gdf.label.apply(lambda x: Path(x).stem)
+
+    # Drop the `label` field, since it's redundant with the `image_id`
+    cameras_gdf.drop(columns="label")
+
+    # Prefix all other columns with "photogrammetry_" to provide more context in downstream tasks
+    cameras_gdf.rename(
+        {
+            "camera_aligned": "photogrammetry_camera_aligned",
+            "valid_dtm": "photogrammetry_valid_dtm",
+            "ground_elevation": "photogrammetry_ground_elevation",
+            "altitude_agl": "photogrammetry_altitude_agl",
+        }
+    )
+
     # Convert to lat lon
     cameras_gdf.to_crs(4326, inplace=True)
 

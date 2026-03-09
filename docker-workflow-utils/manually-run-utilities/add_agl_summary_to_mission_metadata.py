@@ -3,7 +3,7 @@
 Backfill AGL summary columns onto mission image-metadata GeoPackages.
 
 For each mission in S3, downloads the camera-locations file (which has per-image
-altitude_agl), computes summary statistics, and writes them as new columns
+photogrammetry_altitude_agl), computes summary statistics, and writes them as new columns
 (agl_mean, agl_fidelity) onto the image-metadata file, then re-uploads it.
 
 Usage:
@@ -135,7 +135,7 @@ def compute_agl_summary(camera_locations_gdf):
 
     Returns (agl_mean, agl_fidelity) or (None, None) if insufficient data.
     """
-    agl = camera_locations_gdf["altitude_agl"].dropna()
+    agl = camera_locations_gdf["photogrammetry_altitude_agl"].dropna()
 
     if len(agl) < 5:
         return None, None
@@ -198,8 +198,8 @@ def process_mission(
         # Read camera locations and compute summary
         camera_gdf = gpd.read_file(local_camera)
 
-        if "altitude_agl" not in camera_gdf.columns:
-            return False, "SKIP: no altitude_agl column in camera-locations"
+        if "photogrammetry_altitude_agl" not in camera_gdf.columns:
+            return False, "SKIP: no photogrammetry_altitude_agl column in camera-locations"
 
         agl_mean, agl_fidelity = compute_agl_summary(camera_gdf)
 
@@ -210,8 +210,6 @@ def process_mission(
         camera_gdf["photogrammetry_lon"] = camera_gdf.geometry.x
         camera_gdf["photogrammetry_lat"] = camera_gdf.geometry.y
         camera_gdf["photogrammetry_asl"] = camera_gdf.geometry.z
-        # Rename the altitude column to make it explicit it's from photogrammetry
-        camera_gdf.rename(columns={"altitude_agl": "photogrammetry_altitude_agl"})
         # Remove the geometry to avoid having two geometry columns
         camera_gdf = camera_gdf.drop(columns="geometry")
 

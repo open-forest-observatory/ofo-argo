@@ -241,7 +241,7 @@ This container is used by:
 
 ## Manual Utilities
 The `manually-run-utilities` folder contains a variety of scripts that are run on the command line. For the case of paired photogrammetry missions, run the following steps:
-- `add_agl_summary_to_mission_metadata.py` looks up the postprocessing-derived image altitude_agl from S3, summarizes it at the mission level, and saves the summary values (agl_mean and terrain follow fidelity) back to the mission-level meatadata for each mission
+- `add_agl_summary_to_mission_metadata.py` looks up the postprocessing-derived image photogrammetry_altitude_agl from S3, summarizes it at the mission level, and saves the summary values (agl_mean and terrain follow fidelity) back to the mission-level meatadata for each mission
 - `compile_metadata.py` takes all mission-level polygons and image points metadata gpkgs and compiles them into a single polygons and single points gpkg.
 - `pair_missions.py` Uses this compiled metadata (spatial and non) to determine which missions to pair. I had it save its outputs to a new S3 folder which will contain the photogrammetry products per "mission composite" at: ofo-public/drone/mission-composites_01/selected-composites-(images)(polygons).gpkg
 - `create_paired_metadata.py` Creates metadata files for each paired mission. This is done by subsetting the image-level metadata to the elements matching either of the composite mission IDs. And selecting the high-nadir as the mission polygon. This data is saved to disk and must be manually uploaded.
