@@ -246,14 +246,14 @@ def main():
         # all values would be NaN, since that only occurs when all cameras for that gorup are not
         # aligned or do not have a valid DTM. In practice, ~1% are missing altitide.
         mean_altitudes = (
-            included_images[["altitude_agl", "mission_type"]]
+            included_images[["photogrammetry_altitude_agl", "mission_type"]]
             .groupby("mission_type")
             .mean()
         )
 
         altitude_difference = float(
-            mean_altitudes.loc["hn", "altitude_agl"]
-            - mean_altitudes.loc["lo", "altitude_agl"]
+            mean_altitudes.loc["hn", "photogrammetry_altitude_agl"]
+            - mean_altitudes.loc["lo", "photogrammetry_altitude_agl"]
         )
 
         # The paired_mission_id is just the two mission IDs concatenated
