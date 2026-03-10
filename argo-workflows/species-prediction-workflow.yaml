@@ -575,9 +575,6 @@ spec:
 
           grouped = preds_df.groupby(["tree_ID"]).apply(lambda x: fair_mode(x[column_name]))
           grouped = pd.DataFrame({"unique_ID": grouped.index, column_name: grouped.values})
-          grouped["unique_ID"] = grouped["unique_ID"].astype(str)
-          grouped["unique_ID"] = grouped["unique_ID"].str.pad(5, fillchar="0")
-          grouped["unique_ID"] = grouped["unique_ID"].astype(str)
 
           detected_trees = gpd.read_file(input_trees_path)
           detected_trees["unique_ID"] = detected_trees["unique_ID"].astype(str)
