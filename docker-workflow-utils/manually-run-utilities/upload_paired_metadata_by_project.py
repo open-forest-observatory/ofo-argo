@@ -1,8 +1,8 @@
 import subprocess
 import sys
+from pathlib import Path
 
 import geopandas as gpd
-from pathlib import Path
 
 IMAGERY_METADATA_FILE = "/ofo-share/repos/david/ofo-argo/scratch/paired-photogrammetry/selected-composites-images.gpkg"
 BOUNDARY_METADATA_FILE = "/ofo-share/repos/david/ofo-argo/scratch/paired-photogrammetry/selected-composites-polygons.gpkg"

@@ -20,13 +20,13 @@ Note that the following credentials must be configured to access S3:
 * S3_SECRET_KEY: S3 secret access key
 """
 
-import os
 import copy
 import math
-from pathlib import Path
-import tempfile
-from typing import List
+import os
 import subprocess
+import tempfile
+from pathlib import Path
+from typing import List
 
 import geopandas as gpd
 import yaml
