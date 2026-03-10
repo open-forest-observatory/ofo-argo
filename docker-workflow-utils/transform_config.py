@@ -23,6 +23,7 @@ Validation:
     - Fails if this script is called but no __DOWNLOADED__ paths found in photo_path
       (indicates configuration mismatch - downloads specified but paths not using them)
 """
+
 import copy
 import os
 import sys
@@ -126,7 +127,9 @@ def has_download_prefix(paths: List[str]) -> bool:
     return any(path.startswith(DOWNLOAD_PREFIX) for path in paths)
 
 
-def replace_downloaded_placeholder_in_attribute(block: Dict[str, str], attribute_name: str, download_path: str):
+def replace_downloaded_placeholder_in_attribute(
+    block: Dict[str, str], attribute_name: str, download_path: str
+):
     """
     Modify specified config attribute by replacing __DOWNLOADED__ prefix with the provided string.
     TODO allow this to take a list of attribute names to specify an arbitrarily-nested attribute.
@@ -155,7 +158,9 @@ def replace_downloaded_placeholder_in_attribute(block: Dict[str, str], attribute
     return block
 
 
-def replace_downloaded_placeholder_in_config(config: Dict[str, Any], download_path: str) -> Dict[str, Any]:
+def replace_downloaded_placeholder_in_config(
+    config: Dict[str, Any], download_path: str
+) -> Dict[str, Any]:
     """
     Modify config by replacing __DOWNLOADED__ prefix in the photo paths and upper/lower offset folders.
 
@@ -173,8 +178,12 @@ def replace_downloaded_placeholder_in_config(config: Dict[str, Any], download_pa
     project = transformed.get("project", {})
 
     # Replace __DOWNLOADED__ prefix in relevant attributes
-    project = replace_downloaded_placeholder_in_attribute(project, "photo_path", download_path)
-    project = replace_downloaded_placeholder_in_attribute(project, "photo_path_secondary", download_path)
+    project = replace_downloaded_placeholder_in_attribute(
+        project, "photo_path", download_path
+    )
+    project = replace_downloaded_placeholder_in_attribute(
+        project, "photo_path_secondary", download_path
+    )
 
     transformed["project"] = project
 
@@ -182,8 +191,12 @@ def replace_downloaded_placeholder_in_config(config: Dict[str, Any], download_pa
     add_photos = transformed.get("add_photos", {})
 
     # Replace __DOWNLOADED__ prefix in relevant attributes
-    add_photos = replace_downloaded_placeholder_in_attribute(add_photos, "lower_offset_folders", download_path)
-    add_photos = replace_downloaded_placeholder_in_attribute(add_photos, "upper_offset_folders", download_path)
+    add_photos = replace_downloaded_placeholder_in_attribute(
+        add_photos, "lower_offset_folders", download_path
+    )
+    add_photos = replace_downloaded_placeholder_in_attribute(
+        add_photos, "upper_offset_folders", download_path
+    )
 
     transformed["add_photos"] = add_photos
 

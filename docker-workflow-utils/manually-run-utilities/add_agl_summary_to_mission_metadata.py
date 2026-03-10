@@ -199,7 +199,10 @@ def process_mission(
         camera_gdf = gpd.read_file(local_camera)
 
         if "photogrammetry_altitude_agl" not in camera_gdf.columns:
-            return False, "SKIP: no photogrammetry_altitude_agl column in camera-locations"
+            return (
+                False,
+                "SKIP: no photogrammetry_altitude_agl column in camera-locations",
+            )
 
         agl_mean, agl_fidelity = compute_agl_summary(camera_gdf)
 

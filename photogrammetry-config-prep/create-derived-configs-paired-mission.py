@@ -159,6 +159,7 @@ def parse_sub_mission_ids(sub_mission_ids_str: str, mission_id: str) -> list[str
     sub_ids = [s.strip() for s in sub_mission_ids_str.split(",")]
     return [f"__DOWNLOADED__/{mission_id}_images/{sub_id}" for sub_id in sub_ids]
 
+
 def create_derived_config(
     base_config: dict,
     mission_id: str,
