@@ -20,21 +20,18 @@ def rclone_copy(src, dst):
     print(f"  rclone copy {src} -> {dst}", file=sys.stderr)
     subprocess.run(cmd, check=True)
 
+
 imagery_metadata = gpd.read_file(IMAGERY_METADATA_FILE)
 boundary_metadata = gpd.read_file(BOUNDARY_METADATA_FILE)
 
 # Iterate over the unique mission IDs
 # Subset the images and boundaries for each mission
-# * Extract the hn polygon for the boundary
 for composite_id in boundary_metadata["composite_id"].unique():
 
     mission_images = imagery_metadata[imagery_metadata["composite_id"] == composite_id]
     mission_boundaries = boundary_metadata[
         boundary_metadata["composite_id"] == composite_id
     ]
-
-    # Extract the hn polygon for the boundary
-    hn_boundaries = mission_boundaries[mission_boundaries["mission_type"] == "hn"]
 
     # Save the subsetted images and boundaries to new GeoPackages
     output_images_file = Path(
@@ -54,13 +51,15 @@ for composite_id in boundary_metadata["composite_id"].unique():
     output_boundaries_file.parent.mkdir(parents=True, exist_ok=True)
 
     mission_images.to_file(output_images_file, driver="GPKG")
-    hn_boundaries.to_file(output_boundaries_file, driver="GPKG")
+    mission_boundaries.to_file(output_boundaries_file, driver="GPKG")
 
     print(
-        f"Saved {len(mission_images)} images and {len(hn_boundaries)} boundaries for composite {composite_id}"
+        f"Saved {len(mission_images)} images and {len(mission_boundaries)} boundaries for composite {composite_id}"
     )
 
     # Upload the composite's metadata folder to S3
     local_composite_dir = str(Path(OUTPUT_FOLDER, composite_id))
-    remote_composite_path = f"{RCLONE_REMOTE}:{S3_COMPOSITE_MISSIONS_PATH}/{composite_id}"
+    remote_composite_path = (
+        f"{RCLONE_REMOTE}:{S3_COMPOSITE_MISSIONS_PATH}/{composite_id}"
+    )
     rclone_copy(local_composite_dir, remote_composite_path)
