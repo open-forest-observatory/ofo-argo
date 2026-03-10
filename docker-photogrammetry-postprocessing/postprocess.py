@@ -197,7 +197,9 @@ def crop_raster_save_cog(
         mission_polygon_matched = mission_polygon.to_crs(src.crs)
 
         # Get geometries for masking
-        geometries = mission_polygon_matched.geometry.values
+        # Note, if there are multiple rows in the boundaries geodataframe, this takes only the area
+        # in the interesction of all of them.
+        geometries = [mission_polygon_matched.geometry.intersection_all()]
 
         # Handle RGB orthomosaics specially (3 or 4 band uint8)
         colorinterp = None

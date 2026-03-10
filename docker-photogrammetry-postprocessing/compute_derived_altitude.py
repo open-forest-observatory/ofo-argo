@@ -151,11 +151,10 @@ def compute_height_above_ground(camera_file: str, dtm_file: str) -> gpd.GeoDataF
     Returns:
         gpd.GeoDataFrame:
             GeoDataFrame with camera locations as Point geometries in EPSG:4326.
-            * 'label' the image path
-            * 'altitude_agl' the image altitude above ground level in meters
-            * 'valid_dtm' was the camera above a valid DTM pixel
-            * 'camera_aligned' was the camera aligned by photogrammetry
-            * 'ground_elevation' the height of the ground in meters
+            * 'photogrammetry_altitude_agl' the image altitude above ground level in meters
+            * 'photogrammetry_valid_dtm' was the camera above a valid DTM pixel
+            * 'photogrammetry_camera_aligned' was the camera aligned by photogrammetry
+            * 'photogrammetry_ground_elevation' the height of the ground in meters
             * 'image_id' the image filename
 
     """
@@ -177,19 +176,23 @@ def compute_height_above_ground(camera_file: str, dtm_file: str) -> gpd.GeoDataF
         elevations = list(dtm.sample(sample_coords, masked=True))
 
     # Record which cameras had a corresponding non-null DTM value
-    cameras_gdf["valid_dtm"] = [not elev.mask[0] for elev in elevations]
+    cameras_gdf["photogrammetry_valid_dtm"] = [not elev.mask[0] for elev in elevations]
     # Record sampled ground elevation
-    cameras_gdf["ground_elevation"] = [elev.data[0] for elev in elevations]
+    cameras_gdf["photogrammetry_ground_elevation"] = [
+        elev.data[0] for elev in elevations
+    ]
     # Set all ground elevations to nan if the corresponding dtm was not valid
-    cameras_gdf.loc[~cameras_gdf.valid_dtm, "ground_elevation"] = np.nan
+    cameras_gdf.loc[
+        ~cameras_gdf.photogrammetry_valid_dtm, "photogrammetry_ground_elevation"
+    ] = np.nan
 
     # Compute the difference between the ground elevation and the camera elevation.
-    cameras_gdf["altitude_agl"] = (
-        cameras_gdf.geometry.z - cameras_gdf["ground_elevation"]
+    cameras_gdf["photogrammetry_altitude_agl"] = (
+        cameras_gdf.geometry.z - cameras_gdf["photogrammetry_ground_elevation"]
     )
 
     # Note that these cameras aligned properly
-    cameras_gdf["camera_aligned"] = True
+    cameras_gdf["photogrammetry_camera_aligned"] = True
 
     # Create a geodataframe with the label and marking that the cameras are unaligned. All other
     # fields are set to the default null value.
@@ -197,10 +200,10 @@ def compute_height_above_ground(camera_file: str, dtm_file: str) -> gpd.GeoDataF
     unaligned_cameras_gdf = gpd.GeoDataFrame(
         {
             "label": unaligned_cameras,
-            "camera_aligned": [False] * n_unaligned_cameras,
-            "valid_dtm": [False] * n_unaligned_cameras,
-            "ground_elevation": [np.nan] * n_unaligned_cameras,
-            "altitude_agl": [np.nan] * n_unaligned_cameras,
+            "photogrammetry_camera_aligned": [False] * n_unaligned_cameras,
+            "photogrammetry_valid_dtm": [False] * n_unaligned_cameras,
+            "photogrammetry_ground_elevation": [np.nan] * n_unaligned_cameras,
+            "photogrammetry_altitude_agl": [np.nan] * n_unaligned_cameras,
             "geometry": [None] * n_unaligned_cameras,
         },
         crs=cameras_gdf.crs,
@@ -211,11 +214,19 @@ def compute_height_above_ground(camera_file: str, dtm_file: str) -> gpd.GeoDataF
         pd.concat((cameras_gdf, unaligned_cameras_gdf)), crs=cameras_gdf.crs
     )
     # Use nullable boolean dtype to prevent coercion to float during concat
-    cameras_gdf["camera_aligned"] = cameras_gdf["camera_aligned"].astype("boolean")
-    cameras_gdf["valid_dtm"] = cameras_gdf["valid_dtm"].astype("boolean")
+    cameras_gdf["photogrammetry_camera_aligned"] = cameras_gdf[
+        "photogrammetry_camera_aligned"
+    ].astype("boolean")
+    cameras_gdf["photogrammetry_valid_dtm"] = cameras_gdf[
+        "photogrammetry_valid_dtm"
+    ].astype("boolean")
     # Add an image_id field representing the filename (without path) to correspond with the OFO
     # convention
     cameras_gdf["image_id"] = cameras_gdf.label.apply(lambda x: Path(x).stem)
+
+    # Drop the `label` field, since it's redundant with the `image_id`
+    cameras_gdf.drop(columns="label")
+
     # Convert to lat lon
     cameras_gdf.to_crs(4326, inplace=True)
 
