@@ -16,7 +16,12 @@ add_agl_summary_to_mission_metadata.py
       pair_missions.py
             |
             v
-  create_paired_metadata.py
+  upload_paired_metadata_by_project.py
+```
+
+### Dependencies
+```
+pip install boto3 numpy geopandas
 ```
 
 ### 1. `add_agl_summary_to_mission_metadata.py`
