@@ -5,6 +5,9 @@ metadata:
 spec:
   serviceAccountName: argo
   entrypoint: main
+  # Max concurrent projects to process in parallel. Edit this value directly to change.
+  # (Argo doesn't support parameter substitution for integer fields like parallelism)
+  parallelism: 18
 
   # Set imagePullPolicy for all containers in the workflow
   podSpecPatch: |
@@ -68,7 +71,13 @@ spec:
         value: 3600
       - name: N_WORKERS
         value: 12
-      - name: OFO_ARGO_IMAGES_TAG
+      - name: OFO_ARGO_UTILS_IMAGE_TAG
+        value: "main"
+      - name: TREE_DETECTION_FRAMEWORK_IMAGE_TAG
+        value: "main"
+      - name: GEOGRAYPHER_IMAGE_TAG
+        value: "main"
+      - name: CV_UTILS_IMAGE_TAG
         value: "main"
       - name: S3_PHOTOGRAMMETRY_SUBFOLDER
         value: "photogrammetry_01"
@@ -99,6 +108,8 @@ spec:
     - name: process-dataset-workflow
       inputs:
         parameters:
+          # The dataset name represents the composite of two individual mission IDs, represented as
+          # two six-digit strings separated by an underscore (e.g. 000001_000002).
           - name: dataset-name
       dag:
         # failFast=false ensures other datasets continue if this one fails
@@ -120,13 +131,16 @@ spec:
             template: download-imagery
             arguments:
               parameters:
+                # The imagery from each constituent dataset is stored in a zip file with the structure
+                # {s3 bucket}/{s3 imagery folder}/{mission_ID}/images/{mission_ID}_images.zip
+                # This list contains the paths to the two consitituent image zip folders.
                 - name: imagery-zip-downloads
                   value: "[\"{{workflow.parameters.S3_BUCKET_PUBLIC}}/{{workflow.parameters.S3_IMAGERY_FOLDER}}/{{=inputs.parameters['dataset-name'][0:6]}}/images/{{=inputs.parameters['dataset-name'][0:6]}}_images.zip\",\"{{workflow.parameters.S3_BUCKET_PUBLIC}}/{{workflow.parameters.S3_IMAGERY_FOLDER}}/{{=inputs.parameters['dataset-name'][-6:]}}/images/{{=inputs.parameters['dataset-name'][-6:]}}_images.zip\"]"
                 - name: project-name
                   value: "{{inputs.parameters.dataset-name}}"
           - name: detect-trees
             template: detect-trees
-            depends: "download-input-data.Succeeded || download-input-data.Skipped"
+            depends: "download-input-data.Succeeded"
             arguments:
               parameters:
                 - name: chm-file
@@ -141,7 +155,7 @@ spec:
                   value: "{{workflow.parameters.CHIP_STRIDE}}"
           - name: render-instance-labels
             template: render-instance-labels
-            depends: "detect-trees.Succeeded || detect-trees.Skipped"
+            depends: "detect-trees.Succeeded"
             arguments:
               parameters:
                  - name: mesh-file
@@ -160,7 +174,7 @@ spec:
                    value: "{{workflow.parameters.TEMP_FOLDER}}/{{workflow.name}}/{{inputs.parameters.dataset-name}}/renders"
           - name: chip-images
             template: chip-images
-            depends: "(render-instance-labels.Succeeded || render-instance-labels.Skipped) && (download-imagery.Succeeded || download-imagery.Skipped)"
+            depends: "render-instance-labels.Succeeded && download-imagery.Succeeded"
             arguments:
               parameters:
                  - name: images-folder
@@ -171,7 +185,7 @@ spec:
                    value: "{{workflow.parameters.TEMP_FOLDER}}/{{workflow.name}}/{{inputs.parameters.dataset-name}}/chips"
           - name: classify-chips-species
             template: classify-chips
-            depends: "chip-images.Succeeded || chip-images.Skipped"
+            depends: "chip-images.Succeeded"
             arguments:
               parameters:
                  - name: chips-folder
@@ -184,7 +198,7 @@ spec:
                    value: "{{workflow.parameters.TEMP_FOLDER}}/{{workflow.name}}/{{inputs.parameters.dataset-name}}/classified-chips-species.json"
           - name: classify-chips-live-dead
             template: classify-chips
-            depends: "chip-images.Succeeded || chip-images.Skipped"
+            depends: "chip-images.Succeeded"
             arguments:
               parameters:
                  - name: chips-folder
@@ -197,7 +211,7 @@ spec:
                    value: "{{workflow.parameters.TEMP_FOLDER}}/{{workflow.name}}/{{inputs.parameters.dataset-name}}/classified-chips-LD.json"
           - name: assign-species-predictions-to-trees
             template: assign-predictions-to-trees
-            depends: "classify-chips-species.Succeeded || classify-chips-species.Skipped"
+            depends: "classify-chips-species.Succeeded"
             arguments:
               parameters:
                  - name: input-trees-file
@@ -210,7 +224,7 @@ spec:
                    value: "{{workflow.parameters.TEMP_FOLDER}}/{{workflow.name}}/{{inputs.parameters.dataset-name}}/detected_trees_w_species.gpkg"
           - name: assign-live-dead-predictions-to-trees
             template: assign-predictions-to-trees
-            depends: "(classify-chips-live-dead.Succeeded || classify-chips-live-dead.Skipped) && (assign-species-predictions-to-trees.Succeeded || assign-species-predictions-to-trees.Skipped)"
+            depends: "classify-chips-live-dead.Succeeded && assign-species-predictions-to-trees.Succeeded"
             arguments:
               parameters:
                  - name: input-trees-file
@@ -222,14 +236,14 @@ spec:
                  - name: output-trees-file
                    value: "{{workflow.parameters.TEMP_FOLDER}}/{{workflow.name}}/{{inputs.parameters.dataset-name}}/detected_trees_w_species_and_live_dead.gpkg"
           - name: rclone-upload-task
-            depends: "assign-live-dead-predictions-to-trees.Succeeded || assign-live-dead-predictions-to-trees.Skipped"
+            depends: "assign-live-dead-predictions-to-trees.Succeeded"
             template: rclone-upload-template
             arguments:
               parameters:
                 - name: dataset-name
                   value: "{{inputs.parameters.dataset-name}}"
 ## Definitions of individual steps (templates)
-    # Download mission composite images from S3 to the shared volume.
+    # Download mission composite photogrammetry products from S3 to the shared volume.
     # Returns a JSON dict of local file paths via outputs.parameters.local-files.
     # Keys: camera, chm, dtm, mesh. Fails if any expected file is missing.
     # S3 source path: <s3-bucket>/drone/mission-composites_01/<mission-id>/full/<mission-id>
@@ -249,7 +263,7 @@ spec:
             valueFrom:
               path: /tmp/file-paths.json
       container:
-        image: rclone/rclone:latest
+        image: rclone/rclone:sha-7a53f24
         volumeMounts:
           - name: data
             mountPath: /data
@@ -328,7 +342,7 @@ spec:
       nodeSelector:
         feature.node.kubernetes.io/workload-type: cpu
       container:
-        image: ghcr.io/open-forest-observatory/argo-workflow-utils:{{workflow.parameters.OFO_ARGO_IMAGES_TAG}}
+        image: ghcr.io/open-forest-observatory/argo-workflow-utils:{{workflow.parameters.OFO_ARGO_UTILS_IMAGE_TAG}}
         volumeMounts:
           - name: data
             mountPath: /data
@@ -392,10 +406,14 @@ spec:
           - name: chip-stride
             value: "3600"
       container:
-        image: ghcr.io/open-forest-observatory/tree-detection-framework:main
+        image: ghcr.io/open-forest-observatory/tree-detection-framework:{{workflow.parameters.TREE_DETECTION_FRAMEWORK_IMAGE_TAG}}
         volumeMounts:
           - name: data
             mountPath: /data
+        resources:
+          requests:
+            cpu: "2"
+            memory: "8Gi"
         command: [
                   "python",
                   "-m",
@@ -421,7 +439,7 @@ spec:
           - name: original-image-folder
           - name: render-savefolder
       container:
-        image: ghcr.io/open-forest-observatory/geograypher:main
+        image: ghcr.io/open-forest-observatory/geograypher:{{workflow.parameters.GEOGRAYPHER_IMAGE_TAG}}
         volumeMounts:
           - name: data
             mountPath: /data
@@ -451,7 +469,7 @@ spec:
           - name: renders-folder
           - name: output-folder
       container:
-        image: ghcr.io/open-forest-observatory/cv-utils:feature-dr-species-inference-pipeline
+        image: ghcr.io/open-forest-observatory/cv-utils:{{workflow.parameters.CV_UTILS_IMAGE_TAG}}
         volumeMounts:
           - name: data
             mountPath: /data

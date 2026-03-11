@@ -1,8 +1,9 @@
 import json
 from math import ceil, floor
+from functools import partial
 from multiprocessing import Pool
 from pathlib import Path
-from argparse import ArgumentParser
+from argparse import ArgumentParser, BooleanOptionalAction
 
 import geopandas as gpd
 import numpy as np
@@ -67,15 +68,37 @@ def filter_contours_by_area(binary_mask, area_threshold=0.5):
 
 
 def chip_images(
-    image_path,
-    mask_path,
-    output_folder,
-    IDs_to_labels,
-    render_null_ID=RENDER_NULL_ID,
+    image_path: str,
+    mask_path: str,
+    output_folder: str,
+    IDs_to_labels: dict,
+    render_null_ID: int = RENDER_NULL_ID,
+    mask_background: bool = MASK_BACKGROUND,
+    mask_buffer_pixels: int = MASK_BUFFER_PIXELS,
+    background_value: tuple = BACKGROUND_VALUE,
+    image_res_constraint: int = IMAGE_RES_CONSTRAINT,
 ):
+    """
+    Take an image and a one-channel mask and create a chip corresponding to each unique ID in the
+    mask. The content outside of the geometry can be masked to a background value.
+
+    Args:
+        image_path (str): Path to an RGB image, which will be chipped
+        mask_path (str): Path to a one-channel integer image, where unique IDs define the chips
+        output_folder (str): Where to write all chips
+        IDs_to_labels (dict): Mapping from integer values in the mask image to the filenames used for the output chips
+        render_null_ID (int, optional): The ID of the background content in the mask, which is not chipped. Defaults to RENDER_NULL_ID.
+        mask_background (bool, optional): Should the content outside of the geometry be set to a background value. Defaults to MASK_BACKGROUND.
+        mask_buffer_pixels (int, optional): How many pixels to expand the geometry. Defaults to MASK_BUFFER_PIXELS.
+        background_value (tuple, optional): The RGB color to use for the background if masking is applied. Defaults to BACKGROUND_VALUE.
+        image_res_constraint (int, optional): Only save out chips that are at least this size in both dimensions. Defaults to IMAGE_RES_CONSTRAINT.
+
+    Raises:
+        ValueError: If values in the mask image are not included in the IDs_to_labels keys, meaning they cannot be remapped
+    """
     img = Image.open(image_path)  # load image
     img_array = (
-        np.array(img) if MASK_BACKGROUND else None
+        np.array(img) if mask_background else None
     )  # Convert to numpy array for masking
 
     mask_ids = imread(mask_path)  # load tif tree id mask
@@ -101,8 +124,9 @@ def chip_images(
     ]
     # Split into geometries and IDs and build a geodataframe
     geometry, ids = list(zip(*polys))
-    # Create a GDF using an arbitrary CRS
-    shapes_gdf = gpd.GeoDataFrame({"geometry": geometry, "IDs": ids}, crs=3310)
+    # Create a geodataframe. Note, this data is not geospatial, but this is the easiest way to work
+    # abstract working with vector data.
+    shapes_gdf = gpd.GeoDataFrame({"geometry": geometry, "IDs": ids})
 
     # Store the area as an attribute for future use
     shapes_gdf["polygon_area"] = shapes_gdf.area
@@ -131,7 +155,7 @@ def chip_images(
     height = shapes_gdf.bounds.maxy - shapes_gdf.bounds.miny
 
     # Remove IDs that are too small
-    valid_dims = (height > IMAGE_RES_CONSTRAINT) & (width > IMAGE_RES_CONSTRAINT)
+    valid_dims = (height > image_res_constraint) & (width > image_res_constraint)
     shapes_gdf = shapes_gdf[valid_dims]
 
     # Remove any zero area polygons
@@ -177,12 +201,12 @@ def chip_images(
         crop = img_array[crop_miny:crop_maxy, crop_minx:crop_maxx].copy()
 
         # Apply background masking if enabled
-        if MASK_BACKGROUND:
+        if mask_background:
             # shift geometry into crop-local coordinates (use integer crop offsets)
             shifted_geometry = translate(row.geometry, xoff=-crop_minx, yoff=-crop_miny)
 
             # Expand the mask
-            buffered_geometry = shifted_geometry.buffer(MASK_BUFFER_PIXELS)
+            buffered_geometry = shifted_geometry.buffer(mask_buffer_pixels)
 
             # rasterize the shifted geometry to a mask (0 inside geometry, 1 outside)
             mask = features.rasterize(
@@ -192,7 +216,7 @@ def chip_images(
                 dtype="uint8",
             ).astype(bool)
 
-            bg = np.array(BACKGROUND_VALUE, dtype=crop.dtype)
+            bg = np.array(background_value, dtype=crop.dtype)
             crop[mask] = bg
 
         # Create the output path
@@ -210,8 +234,16 @@ def process_folder(
     renders_ext=".tif",
     n_workers=1,
     ensure_all_images_have_renders=False,
+    mask_background: bool = MASK_BACKGROUND,
+    mask_buffer_pixels: int = MASK_BUFFER_PIXELS,
+    background_value: tuple = BACKGROUND_VALUE,
+    image_res_constraint: int = IMAGE_RES_CONSTRAINT,
 ) -> tuple:
-    """Create the per-tree chips for one dataset"""
+    """
+    Chip every image in a folder based on a folder of mask images with a parellel structure, writing
+    out the results in a parellel structure as the inputs. For more information, inspect the docstring
+    of `chip_images`.
+    """
     images_folder = Path(images_folder)
     renders_folder = Path(renders_folder)
 
@@ -250,17 +282,18 @@ def process_folder(
     # Build the output folders list in the same order
     output_folders = [Path(output_dir, render_stem) for render_stem in renders_stems]
 
-    # Replicate IDs_to_labels the appropriate number of times
-    inputs = list(
-        zip(
-            image_files,
-            render_files,
-            output_folders,
-            [IDs_to_labels] * len(image_files),
-        )
+    # Create a partial function with arguments that remain unchanged across iterations
+    chip_images_partial = partial(
+        chip_images,
+        IDs_to_labels=IDs_to_labels,
+        mask_background=mask_background,
+        mask_buffer_pixels=mask_buffer_pixels,
+        background_value=background_value,
+        image_res_constraint=image_res_constraint,
     )
+    inputs = list(zip(image_files, render_files, output_folders))
     with Pool(n_workers) as p:
-        p.starmap(chip_images, inputs)
+        p.starmap(chip_images_partial, inputs)
 
 
 def parse_args():
@@ -270,6 +303,32 @@ def parse_args():
     parser.add_argument("output_folder")
     parser.add_argument("--n-workers", type=int, default=1)
     parser.add_argument("--ensure-all-images-have-renders", action="store_true")
+    parser.add_argument(
+        "--mask-background",
+        default=MASK_BACKGROUND,
+        action=BooleanOptionalAction,
+        help="Whether to mask out background pixels (default: %(default)s).",
+    )
+    parser.add_argument(
+        "--mask-buffer-pixels",
+        type=int,
+        default=MASK_BUFFER_PIXELS,
+        help="Buffer zone around mask in pixels to retain (default: %(default)s).",
+    )
+    parser.add_argument(
+        "--background-value",
+        type=int,
+        nargs=3,
+        default=list(BACKGROUND_VALUE),
+        metavar=("R", "G", "B"),
+        help="RGB value for background pixels, 0-255 (default: %(default)s).",
+    )
+    parser.add_argument(
+        "--image-res-constraint",
+        type=int,
+        default=IMAGE_RES_CONSTRAINT,
+        help="Minimum edge length (height and width) in pixels to save a chip (default: %(default)s).",
+    )
 
     args = parser.parse_args()
     return args
@@ -286,4 +345,8 @@ if __name__ == "__main__":
         args.output_folder,
         n_workers=args.n_workers,
         ensure_all_images_have_renders=args.ensure_all_images_have_renders,
+        mask_background=args.mask_background,
+        mask_buffer_pixels=args.mask_buffer_pixels,
+        background_value=tuple(args.background_value),
+        image_res_constraint=args.image_res_constraint,
     )
