@@ -52,7 +52,7 @@ spec:
       # All per-dataset temp products and outputs are saved under:
       # TEMP_FOLDER/{{workflow.name}}/{{dataset-name}}/
       - name: TEMP_FOLDER
-        value: "/data/argo-output/temp-dir/species-prediction"
+        value: "/data/argo-output/temp-dir"
         # The leading path to where the images were located when photogrammetry was run. The overall
         # path to the images is expected to be the following:
         # "{{PHOTOGRAMMETRY_IMAGERY_FOLDER}}/{{dataset-name}}/photogrammetry/downloaded-raw-imagery"
@@ -550,7 +550,7 @@ spec:
           - name: column-name
           - name: output-trees-file
       script:
-        image: uhoosborne/geopandas:latest
+        image: uhoosborne/geopandas@sha256:42bdd13882321a2647668446dae9ee1a8d76f2ac95aa8c3cb4e8eacadd5070d9
         volumeMounts:
           - name: data
             mountPath: /data
