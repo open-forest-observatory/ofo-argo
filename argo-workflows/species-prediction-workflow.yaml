@@ -49,6 +49,8 @@ spec:
         value: "drone/mission-composites_01"
       - name: S3_IMAGERY_FOLDER
         value: "drone/missions_03"
+      - name: PHOTOGRAMMETRY_ID
+        value: "photogrammetry_01"
       # All per-dataset temp products and outputs are saved under:
       # TEMP_FOLDER/{{workflow.name}}/{{dataset-name}}/
       - name: TEMP_FOLDER
@@ -273,7 +275,7 @@ spec:
             set -euo pipefail
             MISSION_ID="{{inputs.parameters.mission-id}}"
             LOCAL_DIR="{{inputs.parameters.local-dir}}"
-            S3_SRC="s3:{{inputs.parameters.s3-bucket}}/{{inputs.parameters.s3-data-folder}}/${MISSION_ID}/full/"
+            S3_SRC="s3:{{inputs.parameters.s3-bucket}}/{{inputs.parameters.s3-data-folder}}/${MISSION_ID}/{{workflow.parameters.PHOTOGRAMMETRY_ID}}/full/"
             INCLUDES="--include ${MISSION_ID}_cameras.xml --include ${MISSION_ID}_chm-ptcloud.tif --include ${MISSION_ID}_dtm-ptcloud.tif --include ${MISSION_ID}_mesh.ply"
 
             mkdir -p "$LOCAL_DIR"
@@ -500,11 +502,13 @@ spec:
         volumeMounts:
           - name: data
             mountPath: /data
+        # Even though this step only needs 1 mig-1 slice, I found that sharing the GPU between
+        # multiple processes actually diminishes overall throughput.
         resources:
           requests:
-            nvidia.com/mig-1g.5gb: 1
+            nvidia.com/mig-1g.5gb: 7
           limits:
-            nvidia.com/mig-1g.5gb: 1
+            nvidia.com/mig-1g.5gb: 7
         command: ["python"]
         source: |
           import json
