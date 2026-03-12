@@ -1,9 +1,9 @@
 import json
-from math import ceil, floor
+from argparse import ArgumentParser, BooleanOptionalAction
 from functools import partial
+from math import ceil, floor
 from multiprocessing import Pool
 from pathlib import Path
-from argparse import ArgumentParser, BooleanOptionalAction
 
 import geopandas as gpd
 import numpy as np
@@ -14,7 +14,6 @@ from rasterio import features
 from rasterio.features import shapes
 from scipy.ndimage import label
 from shapely.affinity import translate
-
 
 # Background masking configuration
 MASK_BACKGROUND = True  # Whether to mask out background trees
