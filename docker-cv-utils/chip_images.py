@@ -4,15 +4,17 @@ from functools import partial
 from math import ceil, floor
 from multiprocessing import Pool
 from pathlib import Path
+import time
+import warnings
+import pandas as pd
 
 import geopandas as gpd
 import numpy as np
 import shapely
-from imageio import imread, imwrite
+from imageio.v2 import imread, imwrite
 from PIL import Image
 from rasterio import features
 from rasterio.features import shapes
-from scipy.ndimage import label
 from shapely.affinity import translate
 
 # Background masking configuration
@@ -35,47 +37,18 @@ IMAGE_RES_CONSTRAINT = 50  # min edge length (height and width) to save
 # The number of processes to use for chipping.
 
 
-def filter_contours_by_area(binary_mask, area_threshold=0.5):
-    """
-    Filter contours in a binary mask, keeping only the largest contour and
-    any contours with area >= area_threshold * largest_contour_area.
-    """
-    # Label connected regions (contours) in the binary mask
-    labeled_mask, num_features = label(binary_mask)
+def find_nth_element(df):
+    breakpoint()
+    sorted_values = df.sort_values("min_dim")
+    index = min(len(sorted_values), 20) - 1
 
-    # If only one contour, return the original mask
-    if num_features <= 1:
-        return binary_mask
-
-    # Calculate area (pixel count) for each contour
-    # TODO: Find a more efficient way to compute areas
-    contour_areas = [(i, np.sum(labeled_mask == i)) for i in range(1, num_features + 1)]
-    contour_areas.sort(key=lambda x: x[1], reverse=True)
-
-    # Find largest contour area and set minimum area threshold
-    largest_area = contour_areas[0][1]
-    min_area = largest_area * area_threshold
-
-    # Build mask with only contours meeting the area threshold (ideally should be only one)
-    filtered_mask = np.zeros_like(binary_mask, dtype=bool)
-    for contour_id, area in contour_areas:
-        if area >= min_area:
-            # Set elements to True wherever either filtered_mask is already True or (labeled_mask == contour_id)
-            filtered_mask |= labeled_mask == contour_id
-
-    return filtered_mask
+    return sorted_values.iloc[index]["min_dim"]
 
 
-def chip_images(
-    image_path: str,
+def extract_shapes_from_mask(
     mask_path: str,
-    output_folder: str,
-    IDs_to_labels: dict,
     render_null_ID: int = RENDER_NULL_ID,
     mask_background: bool = MASK_BACKGROUND,
-    mask_buffer_pixels: int = MASK_BUFFER_PIXELS,
-    background_value: tuple = BACKGROUND_VALUE,
-    image_res_constraint: int = IMAGE_RES_CONSTRAINT,
 ):
     """
     Take an image and a one-channel mask and create a chip corresponding to each unique ID in the
@@ -95,11 +68,6 @@ def chip_images(
     Raises:
         ValueError: If values in the mask image are not included in the IDs_to_labels keys, meaning they cannot be remapped
     """
-    img = Image.open(image_path)  # load image
-    img_array = (
-        np.array(img) if mask_background else None
-    )  # Convert to numpy array for masking
-
     mask_ids = imread(mask_path)  # load tif tree id mask
     mask_ids = np.squeeze(mask_ids)  # (H, W, 1) -> (H, W)
 
@@ -126,103 +94,108 @@ def chip_images(
     # Create a geodataframe. Note, this data is not geospatial, but this is the easiest way to work
     # abstract working with vector data.
     shapes_gdf = gpd.GeoDataFrame({"geometry": geometry, "IDs": ids})
+    shapes_gdf["filename"] = mask_path
+    return shapes_gdf
 
-    # Store the area as an attribute for future use
-    shapes_gdf["polygon_area"] = shapes_gdf.area
-    # Find the max area per ID
-    max_area_per_class = shapes_gdf[["polygon_area", "IDs"]].groupby("IDs").max()
+    ## Store the area as an attribute for future use
+    # shapes_gdf["polygon_area"] = shapes_gdf.area
+    ## Find the max area per ID
+    # max_area_per_class = shapes_gdf[["polygon_area", "IDs"]].groupby("IDs").max()
 
-    # Merge the area and max area by IDs
-    shapes_gdf = shapes_gdf.join(max_area_per_class, on="IDs", rsuffix="_max")
+    ## Merge the area and max area by IDs
+    # shapes_gdf = shapes_gdf.join(max_area_per_class, on="IDs", rsuffix="_max")
 
-    # Compute for each polygon what fraction of the max area for that ID it is
-    shapes_gdf["frac_of_max"] = (
-        shapes_gdf["polygon_area"] / shapes_gdf["polygon_area_max"]
-    )
-    # Remove the polygons which are less than the threshold fraction of the max for that ID
-    shapes_gdf = shapes_gdf[shapes_gdf["frac_of_max"] > 0.5]
-    # Remove the columns we no longer need
-    shapes_gdf.drop(
-        ["frac_of_max", "polygon_area", "polygon_area_max"], axis=1, inplace=True
-    )
+    ## Compute for each polygon what fraction of the max area for that ID it is
+    # shapes_gdf["frac_of_max"] = (
+    #    shapes_gdf["polygon_area"] / shapes_gdf["polygon_area_max"]
+    # )
+    ## Remove the polygons which are less than the threshold fraction of the max for that ID
+    # shapes_gdf = shapes_gdf[shapes_gdf["frac_of_max"] > 0.5]
+    ## Remove the columns we no longer need
+    # shapes_gdf.drop(
+    #    ["frac_of_max", "polygon_area", "polygon_area_max"], axis=1, inplace=True
+    # )
 
-    # Merge by ID, forming multipolygons as needed
-    shapes_gdf = shapes_gdf.dissolve("IDs", as_index=False)
+    ## Merge by ID, forming multipolygons as needed
+    # shapes_gdf = shapes_gdf.dissolve("IDs", as_index=False)
 
-    # Compute the axis-aligned height and width of each ID
-    width = shapes_gdf.bounds.maxx - shapes_gdf.bounds.minx
-    height = shapes_gdf.bounds.maxy - shapes_gdf.bounds.miny
+    ## Compute the axis-aligned height and width of each ID
+    # width = shapes_gdf.bounds.maxx - shapes_gdf.bounds.minx
+    # height = shapes_gdf.bounds.maxy - shapes_gdf.bounds.miny
 
-    # Remove IDs that are too small
-    valid_dims = (height > image_res_constraint) & (width > image_res_constraint)
-    shapes_gdf = shapes_gdf[valid_dims]
+    ## Remove IDs that are too small
+    # valid_dims = (height > image_res_constraint) & (width > image_res_constraint)
+    # shapes_gdf = shapes_gdf[valid_dims]
 
-    # Remove any zero area polygons
-    shapes_gdf = shapes_gdf[shapes_gdf.area > 0]
-    # This cannot be done inplace in modern versions of pandas
-    shapes_gdf.IDs = shapes_gdf.IDs.replace(IDs_to_labels)
-    # Check that all items were remapped
-    if not (shapes_gdf.IDs.isin(IDs_to_labels.values())).all():
-        un_mapped_values = list(
-            set(list(shapes_gdf.IDs.unique())) - set(list(IDs_to_labels.values()))
-        )
-        raise ValueError(f"Not all values were remapped: {un_mapped_values}")
+    ## Remove any zero area polygons
+    # shapes_gdf = shapes_gdf[shapes_gdf.area > 0]
+    ## This cannot be done inplace in modern versions of pandas
+    # shapes_gdf.IDs = shapes_gdf.IDs.replace(IDs_to_labels)
+    ## Check that all items were remapped
+    # if not (shapes_gdf.IDs.isin(IDs_to_labels.values())).all():
+    #    un_mapped_values = list(
+    #        set(list(shapes_gdf.IDs.unique())) - set(list(IDs_to_labels.values()))
+    #    )
+    #    raise ValueError(f"Not all values were remapped: {un_mapped_values}")
 
-    # Make the output folder
-    Path(output_folder).mkdir(exist_ok=True, parents=True)
-    # iterate over ids
-    for _, row in shapes_gdf.iterrows():
-        tree_unique_id = row.IDs
-        # Create the mask
-        minx, miny, maxx, maxy = row.geometry.bounds
-        width = maxx - minx
-        height = maxy - miny
+    ## Make the output folder
+    # Path(output_folder).mkdir(exist_ok=True, parents=True)
+    ## iterate over ids
+    # for _, row in shapes_gdf.iterrows():
+    #    tree_unique_id = row.IDs
+    #    # Create the mask
+    #    minx, miny, maxx, maxy = row.geometry.bounds
+    #    width = maxx - minx
+    #    height = maxy - miny
 
-        pad_width = width * BBOX_PADDING_RATIO
-        pad_height = height * BBOX_PADDING_RATIO
+    #    pad_width = width * BBOX_PADDING_RATIO
+    #    pad_height = height * BBOX_PADDING_RATIO
 
-        # padded floating coords
-        left = minx - pad_width
-        top = miny - pad_height
-        right = maxx + pad_width
-        bottom = maxy + pad_height
+    #    # padded floating coords
+    #    left = minx - pad_width
+    #    top = miny - pad_height
+    #    right = maxx + pad_width
+    #    bottom = maxy + pad_height
 
-        # image shape (rows=height, cols=width)
-        img_h, img_w = img_array.shape[:2]
+    #    # image shape (rows=height, cols=width)
+    #    img_h, img_w = img_array.shape[:2]
 
-        # integer pixel coordinates, clamped to image bounds
-        crop_minx = max(0, int(floor(left)))
-        crop_miny = max(0, int(floor(top)))
-        crop_maxx = min(img_w, int(ceil(right)))
-        crop_maxy = min(img_h, int(ceil(bottom)))
+    #    # integer pixel coordinates, clamped to image bounds
+    #    crop_minx = max(0, int(floor(left)))
+    #    crop_miny = max(0, int(floor(top)))
+    #    crop_maxx = min(img_w, int(ceil(right)))
+    #    crop_maxy = min(img_h, int(ceil(bottom)))
 
-        # extract crop
-        crop = img_array[crop_miny:crop_maxy, crop_minx:crop_maxx].copy()
+    #    # extract crop
+    #    crop = img_array[crop_miny:crop_maxy, crop_minx:crop_maxx].copy()
 
-        # Apply background masking if enabled
-        if mask_background:
-            # shift geometry into crop-local coordinates (use integer crop offsets)
-            shifted_geometry = translate(row.geometry, xoff=-crop_minx, yoff=-crop_miny)
+    #    # Apply background masking if enabled
+    #    if mask_background:
+    #        # shift geometry into crop-local coordinates (use integer crop offsets)
+    #        shifted_geometry = translate(row.geometry, xoff=-crop_minx, yoff=-crop_miny)
 
-            # Expand the mask
-            buffered_geometry = shifted_geometry.buffer(mask_buffer_pixels)
+    #        # Catch warnings about invalid geometries
+    #        with warnings.catch_warnings():
+    #            warnings.simplefilter("ignore", category=RuntimeWarning)
+    #            # Expand the mask
+    #            buffered_geometry = shifted_geometry.buffer(mask_buffer_pixels)
 
-            # rasterize the shifted geometry to a mask (0 inside geometry, 1 outside)
-            mask = features.rasterize(
-                [(buffered_geometry, 0)],
-                out_shape=(crop.shape[0], crop.shape[1]),
-                fill=1,
-                dtype="uint8",
-            ).astype(bool)
+    #        # rasterize the shifted geometry to a mask (0 inside geometry, 1 outside)
+    #        mask = features.rasterize(
+    #            [(buffered_geometry, 0)],
+    #            out_shape=(crop.shape[0], crop.shape[1]),
+    #            fill=1,
+    #            dtype="uint8",
+    #        ).astype(bool)
 
-            bg = np.array(background_value, dtype=crop.dtype)
-            crop[mask] = bg
+    #        bg = np.array(background_value, dtype=crop.dtype)
+    #        crop[mask] = bg
 
-        # Create the output path
-        output_path = Path(output_folder, f"{tree_unique_id}.png")
+    #    # Create the output path
+    #    output_path = Path(output_folder, f"{tree_unique_id}.png")
 
-        # save cropped img
-        imwrite(output_path, crop)
+    #    # save cropped img
+    #    imwrite(output_path, crop)
 
 
 def process_folder(
@@ -282,17 +255,32 @@ def process_folder(
     output_folders = [Path(output_dir, render_stem) for render_stem in renders_stems]
 
     # Create a partial function with arguments that remain unchanged across iterations
-    chip_images_partial = partial(
-        chip_images,
-        IDs_to_labels=IDs_to_labels,
-        mask_background=mask_background,
-        mask_buffer_pixels=mask_buffer_pixels,
-        background_value=background_value,
-        image_res_constraint=image_res_constraint,
-    )
-    inputs = list(zip(image_files, render_files, output_folders))
+    # chip_images_partial = partial(
+    #    extract_shapes_from_mask,
+    #    IDs_to_labels=IDs_to_labels,
+    #    mask_background=mask_background,
+    #    mask_buffer_pixels=mask_buffer_pixels,
+    #    background_value=background_value,
+    #    image_res_constraint=image_res_constraint,
+    # )
     with Pool(n_workers) as p:
-        p.starmap(chip_images_partial, inputs)
+        shapes = p.map(extract_shapes_from_mask, render_files[:10])
+    all_shapes = pd.concat(shapes, ignore_index=True)
+
+    width = all_shapes.bounds.maxx - all_shapes.bounds.minx
+    height = all_shapes.bounds.maxy - all_shapes.bounds.miny
+    min_dim = np.minimum(width, height)
+
+    all_shapes["min_dim"] = min_dim
+    # all_shapes = all_shapes[min_dim >= IMAGE_RES_CONSTRAINT]
+
+    # Does there need to be some filtering here to get rid of multi-part goems
+
+    n_to_take = 20
+    min_size = all_shapes.groupby("IDs").apply(
+        lambda x: x.nlargest(n_to_take, "min_dim").iloc[-1]["min_dim"]
+    )
+    breakpoint()
 
 
 def parse_args():
