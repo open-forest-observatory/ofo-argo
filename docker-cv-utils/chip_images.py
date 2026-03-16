@@ -33,16 +33,12 @@ RENDER_NULL_ID = 0
 
 # Other parameters
 BBOX_PADDING_RATIO = 0.02
-IMAGE_RES_CONSTRAINT = 50  # min edge length (height and width) to save
-# The number of processes to use for chipping.
-
-
-def find_nth_element(df):
-    breakpoint()
-    sorted_values = df.sort_values("min_dim")
-    index = min(len(sorted_values), 20) - 1
-
-    return sorted_values.iloc[index]["min_dim"]
+# min edge length (height and width) to save
+IMAGE_RES_MIN_SIZE = 50
+# Any chip with both dimensions greater than this size will have a chance to be included
+IMAGE_RES_SUFFICIENT_SIZE = 250
+# How many chips to save out per tree
+N_CHIPS_PER_TREE = 10
 
 
 def extract_shapes_from_mask(
@@ -93,8 +89,13 @@ def extract_shapes_from_mask(
     # Create a geodataframe. Note, this data is not geospatial, but this is the easiest way to work
     # abstract working with vector data.
     shapes_gdf = gpd.GeoDataFrame({"geometry": geometry, "IDs": ids})
+
+    # Merge by ID, forming multipolygons as needed
+    shapes_gdf = shapes_gdf.dissolve("IDs", as_index=False)
+
     shapes_gdf["filename"] = mask_path
     return shapes_gdf
+
 
 def save_chips(
     image_path: str,
@@ -104,14 +105,11 @@ def save_chips(
     mask_background: bool = MASK_BACKGROUND,
     mask_buffer_pixels: int = MASK_BUFFER_PIXELS,
     background_value: tuple = BACKGROUND_VALUE,
-    image_res_constraint: int = IMAGE_RES_CONSTRAINT,
 ):
     # load image
     img = Image.open(image_path)
     # Convert to numpy array for masking
-    img_array = (
-        np.array(img) if mask_background else None
-    )
+    img_array = np.array(img) if mask_background else None
 
     # Store the area as an attribute for future use
     shapes_gdf["polygon_area"] = shapes_gdf.area
@@ -123,36 +121,23 @@ def save_chips(
 
     # Compute for each polygon what fraction of the max area for that ID it is
     shapes_gdf["frac_of_max"] = (
-       shapes_gdf["polygon_area"] / shapes_gdf["polygon_area_max"]
+        shapes_gdf["polygon_area"] / shapes_gdf["polygon_area_max"]
     )
     # Remove the polygons which are less than the threshold fraction of the max for that ID
     shapes_gdf = shapes_gdf[shapes_gdf["frac_of_max"] > 0.5]
     # Remove the columns we no longer need
     shapes_gdf.drop(
-       ["frac_of_max", "polygon_area", "polygon_area_max"], axis=1, inplace=True
+        ["frac_of_max", "polygon_area", "polygon_area_max"], axis=1, inplace=True
     )
 
-    # Merge by ID, forming multipolygons as needed
-    shapes_gdf = shapes_gdf.dissolve("IDs", as_index=False)
-
-    # Compute the axis-aligned height and width of each ID
-    width = shapes_gdf.bounds.maxx - shapes_gdf.bounds.minx
-    height = shapes_gdf.bounds.maxy - shapes_gdf.bounds.miny
-
-    # Remove IDs that are too small
-    valid_dims = (height > image_res_constraint) & (width > image_res_constraint)
-    shapes_gdf = shapes_gdf[valid_dims]
-
-    # Remove any zero area polygons
-    shapes_gdf = shapes_gdf[shapes_gdf.area > 0]
     # This cannot be done inplace in modern versions of pandas
     shapes_gdf.IDs = shapes_gdf.IDs.replace(IDs_to_labels)
     # Check that all items were remapped
     if not (shapes_gdf.IDs.isin(IDs_to_labels.values())).all():
-       un_mapped_values = list(
-           set(list(shapes_gdf.IDs.unique())) - set(list(IDs_to_labels.values()))
-       )
-       raise ValueError(f"Not all values were remapped: {un_mapped_values}")
+        un_mapped_values = list(
+            set(list(shapes_gdf.IDs.unique())) - set(list(IDs_to_labels.values()))
+        )
+        raise ValueError(f"Not all values were remapped: {un_mapped_values}")
 
     # Make the output folder
     Path(output_folder).mkdir(exist_ok=True, parents=True)
@@ -167,11 +152,11 @@ def save_chips(
         pad_width = width * BBOX_PADDING_RATIO
         pad_height = height * BBOX_PADDING_RATIO
 
-        # padded floating coords
-        left = minx - pad_width
-        top = miny - pad_height
-        right = maxx + pad_width
-        bottom = maxy + pad_height
+        # padded coords for cropping
+        left = minx - pad_width - mask_buffer_pixels
+        top = miny - pad_height - mask_buffer_pixels
+        right = maxx + pad_width + mask_buffer_pixels
+        bottom = maxy + pad_height + mask_buffer_pixels
 
         # image shape (rows=height, cols=width)
         img_h, img_w = img_array.shape[:2]
@@ -225,11 +210,9 @@ def process_folder(
     mask_background: bool = MASK_BACKGROUND,
     mask_buffer_pixels: int = MASK_BUFFER_PIXELS,
     background_value: tuple = BACKGROUND_VALUE,
-    image_res_constraint: int = IMAGE_RES_CONSTRAINT,
-    min_size = 50,
-    sufficient_size = 250,
-    n_to_take = 10,
-
+    image_res_min_size: int = IMAGE_RES_MIN_SIZE,
+    image_res_sufficient_size=IMAGE_RES_SUFFICIENT_SIZE,
+    n_chips_per_tree=10,
 ) -> tuple:
     """
     Chip every image in a folder based on a folder of mask images with a parellel structure, writing
@@ -261,66 +244,78 @@ def process_folder(
                 f"{len(additional_images)} images do not have a corresponding renders. The first 10 are {list(additional_images)[:10]}"
             )
 
-    with open(Path(renders_folder, "IDs_to_labels.json"), "r") as file_h:
-        IDs_to_labels = json.load(file_h)
-        IDs_to_labels = {int(k): v for k, v in IDs_to_labels.items()}
-
+    # Extract all vector representations of trees across all images
     with Pool(n_workers) as p:
-        shapes = p.map(extract_shapes_from_mask, render_files[:100])
+        shapes = p.map(extract_shapes_from_mask, render_files[:30])
     all_shapes = pd.concat(shapes, ignore_index=True)
 
+    # Compubute the minimum dimension per chip
     width = all_shapes.bounds.maxx - all_shapes.bounds.minx
     height = all_shapes.bounds.maxy - all_shapes.bounds.miny
     min_dim = np.minimum(width, height)
-
     all_shapes["min_dim"] = min_dim
-    # all_shapes = all_shapes[min_dim >= IMAGE_RES_CONSTRAINT]
 
-    # Does there need to be some filtering here to get rid of multi-part goems
     # TODO split between oblique and ortho
-
-    # Compute the minimum size per ID, by selecting the 2*n_to_take th highest size
+    # Compute the minimum size per ID, by selecting the 2*n_chips_per_tree th highest size
     min_size_per_ID = all_shapes.groupby("IDs").apply(
-        lambda x: x.nlargest(2*n_to_take, "min_dim").iloc[-1]["min_dim"]
+        lambda x: x.nlargest(2 * n_chips_per_tree, "min_dim").iloc[-1]["min_dim"]
     )
-    # The min size is to ensure there chip is big enough to generate a reasonable prediction
-    # Also, any chip above the "sufficient" size should be eligible for inclusion
-    min_size_per_ID = min_size_per_ID.clip(min_size, sufficient_size)
+    # The min_size ensures that all chips are above a size that's feasible to generate a reasonable prediction on.
+    # The sufficient_size means that all chips above this size should have a chance for inclusion,
+    # so the minimum size should never be set higher than it.
+    min_size_per_ID = min_size_per_ID.clip(
+        image_res_min_size, image_res_sufficient_size
+    )
 
-    # Merge in the min size
+    # Merge in the min size to the size per shapes
     all_shapes = all_shapes.merge(
         min_size_per_ID.rename("min_size_per_ID"), left_on="IDs", right_index=True
     )
 
     # Remove chips that are smaller than the threshold
     all_shapes = all_shapes[all_shapes["min_dim"] >= all_shapes["min_size_per_ID"]]
-    print(f"Len all shapes {all_shapes}")
-    all_shapes = all_shapes.groupby('IDs').apply(
-        lambda x: x.sample(n=min(len(x), n_to_take))
-    ).reset_index(drop=True)
-    print(f"Len all shapes {all_shapes}")
+    # Select n_chips_per_tree from each ID or all, whichever is less
+    all_shapes = (
+        all_shapes.groupby("IDs")
+        .apply(lambda x: x.sample(n=min(len(x), n_chips_per_tree)))
+        .reset_index(drop=True)
+    )
 
-    # Group all_shapes by filename for efficient lookup
+    # Group all_shapes by filename to process each image independently
     shapes_by_file = dict(tuple(all_shapes.groupby("filename")))
+
+    # Read IDs to labels
+    with open(Path(renders_folder, "IDs_to_labels.json"), "r") as file_h:
+        IDs_to_labels = json.load(file_h)
+        IDs_to_labels = {int(k): v for k, v in IDs_to_labels.items()}
 
     # Build args for parallel save_chips calls
     save_chips_args = [
         (
-            str(Path(images_folder, Path(render_file).relative_to(renders_folder).with_suffix("")).with_suffix(images_ext)),
+            str(
+                Path(
+                    images_folder,
+                    Path(render_file).relative_to(renders_folder).with_suffix(""),
+                ).with_suffix(images_ext)
+            ),
             shapes_subset,
-            str(Path(output_dir, Path(render_file).relative_to(renders_folder).with_suffix(""))),
+            str(
+                Path(
+                    output_dir,
+                    Path(render_file).relative_to(renders_folder).with_suffix(""),
+                )
+            ),
             IDs_to_labels,
             mask_background,
             mask_buffer_pixels,
             background_value,
-            image_res_constraint,
         )
         for render_file, shapes_subset in shapes_by_file.items()
     ]
 
+    # Save out the chips, parallelizing across files
     with Pool(n_workers) as p:
         p.starmap(save_chips, save_chips_args)
-
 
 
 def parse_args():
@@ -351,10 +346,22 @@ def parse_args():
         help="RGB value for background pixels, 0-255 (default: %(default)s).",
     )
     parser.add_argument(
-        "--image-res-constraint",
+        "--image-res-min-size",
         type=int,
-        default=IMAGE_RES_CONSTRAINT,
+        default=IMAGE_RES_MIN_SIZE,
         help="Minimum edge length (height and width) in pixels to save a chip (default: %(default)s).",
+    )
+    parser.add_argument(
+        "--image-res-sufficient-size",
+        type=int,
+        default=IMAGE_RES_SUFFICIENT_SIZE,
+        help="If the height and width of a chip are greater than this value, ther will be a chance it will get saved. (default: %(default)s).",
+    )
+    parser.add_argument(
+        "--n-chips-per-tree",
+        type=int,
+        default=N_CHIPS_PER_TREE,
+        help="Save this many crops per tree",
     )
 
     args = parser.parse_args()
@@ -375,5 +382,7 @@ if __name__ == "__main__":
         mask_background=args.mask_background,
         mask_buffer_pixels=args.mask_buffer_pixels,
         background_value=tuple(args.background_value),
-        image_res_constraint=args.image_res_constraint,
+        image_res_min_size=args.image_res_min_size,
+        image_res_sufficient_size=args.image_res_sufficient_size,
+        n_chips_per_tree=args.n_chips_per_tree,
     )
