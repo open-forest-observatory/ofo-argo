@@ -46,22 +46,12 @@ def extract_shapes_from_mask(
     render_null_ID: int = RENDER_NULL_ID,
 ):
     """
-    Take an image and a one-channel mask and create a chip corresponding to each unique ID in the
-    mask. The content outside of the geometry can be masked to a background value.
+    Take a path to a one-channel image and extract the vector representations corresponding to the
+    different unique values within the mask.
 
     Args:
-        image_path (str): Path to an RGB image, which will be chipped
-        mask_path (str): Path to a one-channel integer image, where unique IDs define the chips
-        output_folder (str): Where to write all chips
-        IDs_to_labels (dict): Mapping from integer values in the mask image to the filenames used for the output chips
-        render_null_ID (int, optional): The ID of the background content in the mask, which is not chipped. Defaults to RENDER_NULL_ID.
-        mask_background (bool, optional): Should the content outside of the geometry be set to a background value. Defaults to MASK_BACKGROUND.
-        mask_buffer_pixels (int, optional): How many pixels to expand the geometry. Defaults to MASK_BUFFER_PIXELS.
-        background_value (tuple, optional): The RGB color to use for the background if masking is applied. Defaults to BACKGROUND_VALUE.
-        image_res_constraint (int, optional): Only save out chips that are at least this size in both dimensions. Defaults to IMAGE_RES_CONSTRAINT.
-
-    Raises:
-        ValueError: If values in the mask image are not included in the IDs_to_labels keys, meaning they cannot be remapped
+        mask_path (str): Path to a one-channel integer image, where unique IDs define the different trees
+        render_null_ID (int, optional): The ID of the background content in the mask, which is not included. Defaults to RENDER_NULL_ID.
     """
     mask_ids = imread(mask_path)  # load tif tree id mask
     mask_ids = np.squeeze(mask_ids)  # (H, W, 1) -> (H, W)
@@ -106,6 +96,28 @@ def save_chips(
     mask_buffer_pixels: int = MASK_BUFFER_PIXELS,
     background_value: tuple = BACKGROUND_VALUE,
 ):
+    """
+
+
+    image_path (str):
+        Path to an RGB image, which will be chipped
+    shapes_gdf (gpd.GeoDataFrame):
+        A dataframe of shapes representing the rendered trees, containing the "polygon_area" and
+        "IDs" attributes
+    output_folder (str):
+        Where to write all chips.
+    IDs_to_labels (dict):
+        Mapping from integer values in the mask image to the filenames used for the output chips
+    mask_background (bool, optional):
+        Should the content outside of the geometry be set to a background value. Defaults to MASK_BACKGROUND.
+    mask_buffer_pixels (int, optional):
+        How many pixels to expand the geometry. Defaults to MASK_BUFFER_PIXELS.
+    background_value (tuple, optional):
+        The RGB color to use for the background if masking is applied. Defaults to BACKGROUND_VALUE.
+
+    Raises:
+        ValueError: If values in the mask image are not included in the IDs_to_labels keys, meaning they cannot be remapped
+    """
     # load image
     img = Image.open(image_path)
     # Convert to numpy array for masking
@@ -141,49 +153,61 @@ def save_chips(
 
     # Make the output folder
     Path(output_folder).mkdir(exist_ok=True, parents=True)
-    # iterate over ids
+
+    # Compute the crop locations
+    minx = shapes_gdf.geometry.bounds.minx
+    miny = shapes_gdf.geometry.bounds.miny
+    maxx = shapes_gdf.geometry.bounds.maxx
+    maxy = shapes_gdf.geometry.bounds.maxy
+
+    width = maxx - minx
+    height = maxy - miny
+
+    pad_width = width * BBOX_PADDING_RATIO
+    pad_height = height * BBOX_PADDING_RATIO
+
+    # padded coords for cropping
+    # Don't inflate by the buffering amount if no masking is applied
+    left = minx - pad_width - (mask_buffer_pixels if mask_background else 0)
+    top = miny - pad_height - (mask_buffer_pixels if mask_background else 0)
+    right = maxx + pad_width + (mask_buffer_pixels if mask_background else 0)
+    bottom = maxy + pad_height + (mask_buffer_pixels if mask_background else 0)
+
+    # image shape (rows=height, cols=width)
+    img_h, img_w = img_array.shape[:2]
+
+    # integer pixel coordinates, clamped to image bounds
+    shapes_gdf["crop_minx"] = np.maximum(0, np.floor(left)).astype(int)
+    shapes_gdf["crop_miny"] = np.maximum(0, np.floor(top)).astype(int)
+    shapes_gdf["crop_maxx"] = np.minimum(img_w, np.ceil(right)).astype(int)
+    shapes_gdf["crop_maxy"] = np.minimum(img_h, np.ceil(bottom)).astype(int)
+
+    # Buffering is only required if we're masking the background, but it's best to do it upfront
+    if mask_background:
+        # Catch warnings about invalid geometries
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", category=RuntimeWarning)
+            # Expand the mask
+            shapes_gdf.geometry = shapes_gdf.buffer(mask_buffer_pixels)
+
+    # iterate over ids and save out each chip
     for _, row in shapes_gdf.iterrows():
-        tree_unique_id = row.IDs
-        # Create the mask
-        minx, miny, maxx, maxy = row.geometry.bounds
-        width = maxx - minx
-        height = maxy - miny
-
-        pad_width = width * BBOX_PADDING_RATIO
-        pad_height = height * BBOX_PADDING_RATIO
-
-        # padded coords for cropping
-        left = minx - pad_width - mask_buffer_pixels
-        top = miny - pad_height - mask_buffer_pixels
-        right = maxx + pad_width + mask_buffer_pixels
-        bottom = maxy + pad_height + mask_buffer_pixels
-
-        # image shape (rows=height, cols=width)
-        img_h, img_w = img_array.shape[:2]
-
-        # integer pixel coordinates, clamped to image bounds
-        crop_minx = max(0, int(floor(left)))
-        crop_miny = max(0, int(floor(top)))
-        crop_maxx = min(img_w, int(ceil(right)))
-        crop_maxy = min(img_h, int(ceil(bottom)))
 
         # extract crop
-        crop = img_array[crop_miny:crop_maxy, crop_minx:crop_maxx].copy()
+        crop = img_array[
+            row.crop_miny : row.crop_maxy, row.crop_minx : row.crop_maxx
+        ].copy()
 
         # Apply background masking if enabled
         if mask_background:
             # shift geometry into crop-local coordinates (use integer crop offsets)
-            shifted_geometry = translate(row.geometry, xoff=-crop_minx, yoff=-crop_miny)
-
-            # Catch warnings about invalid geometries
-            with warnings.catch_warnings():
-                warnings.simplefilter("ignore", category=RuntimeWarning)
-                # Expand the mask
-                buffered_geometry = shifted_geometry.buffer(mask_buffer_pixels)
+            shifted_geometry = translate(
+                row.geometry, xoff=-row.crop_minx, yoff=-row.crop_miny
+            )
 
             # rasterize the shifted geometry to a mask (0 inside geometry, 1 outside)
             mask = features.rasterize(
-                [(buffered_geometry, 0)],
+                [(shifted_geometry, 0)],
                 out_shape=(crop.shape[0], crop.shape[1]),
                 fill=1,
                 dtype="uint8",
@@ -193,7 +217,7 @@ def save_chips(
             crop[mask] = bg
 
         # Create the output path
-        output_path = Path(output_folder, f"{tree_unique_id}.png")
+        output_path = Path(output_folder, f"{row.IDs}.png")
 
         # save cropped img
         imwrite(output_path, crop)
@@ -246,7 +270,7 @@ def process_folder(
 
     # Extract all vector representations of trees across all images
     with Pool(n_workers) as p:
-        shapes = p.map(extract_shapes_from_mask, render_files[:30])
+        shapes = p.map(extract_shapes_from_mask, render_files)
     all_shapes = pd.concat(shapes, ignore_index=True)
 
     # Compubute the minimum dimension per chip
