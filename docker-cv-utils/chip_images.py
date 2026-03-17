@@ -235,14 +235,17 @@ def subset_shapes(
     filtering out chips that are too small to be useful.
 
     shapes (gpd.GeoDataFrame):
-        A dataframe of shapes with "IDs" and "min_dim" attributes
+        A dataframe of shapes with "IDs" and "min_dim" attributes.
     n_chips_per_tree (int):
-        Maximum number of chips to retain per tree ID
+        Maximum number of chips to retain per tree ID.
     image_res_min_size (int):
         Minimum acceptable chip size in pixels. Chips smaller than this are excluded.
     image_res_sufficient_size (int):
         Chip size above which all chips are eligible for inclusion. The per-ID size
         threshold is never set higher than this value.
+
+    Returns:
+        gpd.GeoDataFrame: Filtered and sampled subset of the input shapes.
     """
     # Compute the minimum size per ID, by selecting the 2*n_chips_per_tree th highest size
     min_size_per_ID = shapes.groupby("IDs").apply(
