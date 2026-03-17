@@ -643,7 +643,7 @@ spec:
               )
           }
           # Remap the unique_ID attribute to represent tree top IDs rather than crown IDs
-          grouped.unique_ID = grouped.unique_ID.rename(crown_to_tree_top_mapping)
+          grouped.unique_ID = grouped.unique_ID.replace(crown_to_tree_top_mapping)
           # Merge the predictions into the tree tops
           detected_tree_tops = detected_tree_tops.merge(grouped, on="unique_ID", how="left")
 
