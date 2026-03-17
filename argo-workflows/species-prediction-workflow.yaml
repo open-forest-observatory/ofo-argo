@@ -592,11 +592,20 @@ spec:
               """Tie break if there two or more options"""
               modes = series.mode()
               mode = np.random.choice(modes)
-              return mode
 
+              n_preds = len(series)
 
-          grouped = preds_df.groupby(["tree_ID"]).apply(lambda x: fair_mode(x[column_name]))
-          grouped = pd.DataFrame({"unique_ID": grouped.index, column_name: grouped.values})
+              frac_matching = (series == mode).sum() / n_preds
+              return pd.Series(
+                {
+                  column_name: mode,
+                  f"{column_name}_frac_matching_mode": frac_matching,
+                  f"{column_name}_n_preds": n_preds,
+                }
+              )
+
+          grouped = preds_df.groupby(["tree_ID"]).apply(lambda x: fair_mode(x[column_name]), include_groups=False)
+          grouped = grouped.reset_index().rename(columns={"tree_ID": "unique_ID"})
 
           detected_trees = gpd.read_file(input_trees_path)
           detected_trees["unique_ID"] = detected_trees["unique_ID"].astype(str)
