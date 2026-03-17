@@ -118,6 +118,10 @@ def save_chips(
     Raises:
         ValueError: If values in the mask image are not included in the IDs_to_labels keys, meaning they cannot be remapped
     """
+    # If there are no shapes to save then don't waste time loading the image
+    if len(shapes_gdf) == 0:
+        return
+
     # load image
     img = Image.open(image_path)
     # Convert to numpy array for masking
@@ -235,7 +239,8 @@ def subset_shapes(
     """
     # Compute the minimum size per ID, by selecting the 2*n_chips_per_tree th highest size
     min_size_per_ID = shapes.groupby("IDs").apply(
-        lambda x: x.nlargest(2 * n_chips_per_tree, "min_dim").iloc[-1]["min_dim"]
+        lambda x: x.nlargest(2 * n_chips_per_tree, "min_dim").iloc[-1]["min_dim"],
+        include_groups=False,
     )
     # The min_size ensures that all chips are above a size that's feasible to generate a reasonable prediction on.
     # The sufficient_size means that all chips above this size should have a chance for inclusion,
@@ -254,7 +259,10 @@ def subset_shapes(
     # Select n_chips_per_tree from each ID or all, whichever is less
     shapes = (
         shapes.groupby("IDs")
-        .apply(lambda x: x.sample(n=min(len(x), n_chips_per_tree)))
+        .apply(
+            lambda x: x.sample(n=min(len(x), n_chips_per_tree)), include_groups=False
+        )
+        .reset_index(level=0)
         .reset_index(drop=True)
     )
 
@@ -317,6 +325,8 @@ def process_folder(
     min_dim = np.minimum(width, height)
     all_shapes["min_dim"] = min_dim
 
+    # Apply the filtering proceedure to the two top-level folders independently, which correspond
+    # to the oblique and nadir missions
     top_level_folder = np.array(
         [f.relative_to(renders_folder).parts[0] for f in all_shapes.filename]
     )
@@ -325,6 +335,7 @@ def process_folder(
         raise ValueError("For the paired missions, there should be two unique folders")
 
     all_shapes_subsetted = []
+    # Iterate over the folders corresponding to oblique and nadir
     for unique_folder in unique_folders:
         all_shapes_subsetted.append(
             subset_shapes(
