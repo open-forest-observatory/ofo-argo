@@ -97,7 +97,7 @@ def save_chips(
     background_value: tuple = BACKGROUND_VALUE,
 ):
     """
-
+    Use the vector representation of the rendered mask to chip and save one image per tree.
 
     image_path (str):
         Path to an RGB image, which will be chipped
@@ -234,8 +234,15 @@ def subset_shapes(
     Subset a GeoDataFrame of tree shapes to at most n_chips_per_tree chips per tree ID,
     filtering out chips that are too small to be useful.
 
-    The minimum acceptable chip size per ID is determined by the 2*n_chips_per_tree-th
-    largest chip for that ID, clamped to [image_res_min_size, image_res_sufficient_size].
+    shapes (gpd.GeoDataFrame):
+        A dataframe of shapes with "IDs" and "min_dim" attributes
+    n_chips_per_tree (int):
+        Maximum number of chips to retain per tree ID
+    image_res_min_size (int):
+        Minimum acceptable chip size in pixels. Chips smaller than this are excluded.
+    image_res_sufficient_size (int):
+        Chip size above which all chips are eligible for inclusion. The per-ID size
+        threshold is never set higher than this value.
     """
     # Compute the minimum size per ID, by selecting the 2*n_chips_per_tree th highest size
     min_size_per_ID = shapes.groupby("IDs").apply(
