@@ -223,6 +223,44 @@ def save_chips(
         imwrite(output_path, crop)
 
 
+def subset_shapes(
+    shapes, n_chips_per_tree, image_res_min_size, image_res_sufficient_size
+):
+    """
+    Subset a GeoDataFrame of tree shapes to at most n_chips_per_tree chips per tree ID,
+    filtering out chips that are too small to be useful.
+
+    The minimum acceptable chip size per ID is determined by the 2*n_chips_per_tree-th
+    largest chip for that ID, clamped to [image_res_min_size, image_res_sufficient_size].
+    """
+    # Compute the minimum size per ID, by selecting the 2*n_chips_per_tree th highest size
+    min_size_per_ID = shapes.groupby("IDs").apply(
+        lambda x: x.nlargest(2 * n_chips_per_tree, "min_dim").iloc[-1]["min_dim"]
+    )
+    # The min_size ensures that all chips are above a size that's feasible to generate a reasonable prediction on.
+    # The sufficient_size means that all chips above this size should have a chance for inclusion,
+    # so the minimum size should never be set higher than it.
+    min_size_per_ID = min_size_per_ID.clip(
+        image_res_min_size, image_res_sufficient_size
+    )
+
+    # Merge in the min size to the size per shapes
+    shapes = shapes.merge(
+        min_size_per_ID.rename("min_size_per_ID"), left_on="IDs", right_index=True
+    )
+
+    # Remove chips that are smaller than the threshold
+    shapes = shapes[shapes["min_dim"] >= shapes["min_size_per_ID"]]
+    # Select n_chips_per_tree from each ID or all, whichever is less
+    shapes = (
+        shapes.groupby("IDs")
+        .apply(lambda x: x.sample(n=min(len(x), n_chips_per_tree)))
+        .reset_index(drop=True)
+    )
+
+    return shapes
+
+
 def process_folder(
     images_folder,
     renders_folder,
@@ -279,31 +317,25 @@ def process_folder(
     min_dim = np.minimum(width, height)
     all_shapes["min_dim"] = min_dim
 
-    # TODO split between oblique and ortho
-    # Compute the minimum size per ID, by selecting the 2*n_chips_per_tree th highest size
-    min_size_per_ID = all_shapes.groupby("IDs").apply(
-        lambda x: x.nlargest(2 * n_chips_per_tree, "min_dim").iloc[-1]["min_dim"]
+    top_level_folder = np.array(
+        [f.relative_to(renders_folder).parts[0] for f in all_shapes.filename]
     )
-    # The min_size ensures that all chips are above a size that's feasible to generate a reasonable prediction on.
-    # The sufficient_size means that all chips above this size should have a chance for inclusion,
-    # so the minimum size should never be set higher than it.
-    min_size_per_ID = min_size_per_ID.clip(
-        image_res_min_size, image_res_sufficient_size
-    )
+    unique_folders = np.unique(top_level_folder)
+    if len(unique_folders) != 2:
+        raise ValueError("For the paired missions, there should be two unique folders")
 
-    # Merge in the min size to the size per shapes
-    all_shapes = all_shapes.merge(
-        min_size_per_ID.rename("min_size_per_ID"), left_on="IDs", right_index=True
-    )
+    all_shapes_subsetted = []
+    for unique_folder in unique_folders:
+        all_shapes_subsetted.append(
+            subset_shapes(
+                all_shapes[top_level_folder == unique_folder],
+                int(n_chips_per_tree / 2),
+                image_res_min_size,
+                image_res_sufficient_size,
+            )
+        )
 
-    # Remove chips that are smaller than the threshold
-    all_shapes = all_shapes[all_shapes["min_dim"] >= all_shapes["min_size_per_ID"]]
-    # Select n_chips_per_tree from each ID or all, whichever is less
-    all_shapes = (
-        all_shapes.groupby("IDs")
-        .apply(lambda x: x.sample(n=min(len(x), n_chips_per_tree)))
-        .reset_index(drop=True)
-    )
+    all_shapes = pd.concat(all_shapes_subsetted)
 
     # Group all_shapes by filename to process each image independently
     shapes_by_file = dict(tuple(all_shapes.groupby("filename")))
