@@ -7,7 +7,7 @@ RUN apt-get update && apt-get install -y libexpat1 \
 ENV PIP_ROOT_USER_ACTION=ignore
 # TODO see if we can drop the dependency on Pillow in the future and replace the functionality
 # with that of imageio
-RUN pip install geopandas imageio Pillow rasterio scipy
+RUN pip install geopandas imageio Pillow rasterio scipy tqdm
 
 # Set the container workdir
 WORKDIR /app

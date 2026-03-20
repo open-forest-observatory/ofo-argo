@@ -408,7 +408,6 @@ def process_folder(
         IDs_to_labels = json.load(file_h)
         IDs_to_labels = {int(k): v for k, v in IDs_to_labels.items()}
 
-    print("Saving chips")
     # Build args for parallel save_chips calls
     # TODO consider a partial function
     save_chips_args = [
