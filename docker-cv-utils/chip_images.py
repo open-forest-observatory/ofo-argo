@@ -1,12 +1,11 @@
 import json
+import tempfile
 import warnings
 from argparse import ArgumentParser, BooleanOptionalAction
 from functools import partial
-import tempfile
 from multiprocessing import Pool
 from pathlib import Path
 
-from tqdm import tqdm
 import geopandas as gpd
 import numpy as np
 import pandas as pd
@@ -16,6 +15,7 @@ from PIL import Image
 from rasterio import features
 from rasterio.features import shapes
 from shapely.affinity import translate
+from tqdm import tqdm
 
 # Filter out warning about saving without CRS, since the data represents pixel coords
 warnings.filterwarnings("ignore", message="'crs' was not provided")
