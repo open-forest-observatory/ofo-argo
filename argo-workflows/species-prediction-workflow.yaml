@@ -409,8 +409,12 @@ spec:
           - name: chm-file
           - name: detected-tree-tops-file
           - name: detected-tree-crowns-file
-          - name: resolution
-            value: "0.2"
+          - name: edge-suppression-meters
+            value: "10"
+          - name: raster-blur-sigma
+            value: "0.333"
+          - name: "resolution"
+            value: "0.12"
           - name: chip-size
             value: "4000"
           - name: chip-stride
@@ -430,13 +434,20 @@ spec:
                   "tree_detection_framework.entrypoints.detect_geometric_two_stage",
                   "{{inputs.parameters.chm-file}}",
                   "{{inputs.parameters.detected-tree-tops-file}}",
+                  "--tree-crowns-save-path",
                   "{{inputs.parameters.detected-tree-crowns-file}}",
                   "--chip-size",
                   "{{inputs.parameters.chip-size}}",
                   "--chip-stride",
                   "{{inputs.parameters.chip-stride}}",
+                  "--edge-suppression-meters",
+                  "{{inputs.parameters.edge-suppression-meters}}",
+                  "--raster-blur-sigma",
+                  "{{inputs.parameters.raster-blur-sigma}}",
                   "--resolution",
                   "{{inputs.parameters.resolution}}",
+                  "--tree-top-detector-kwargs",
+                  "{\"b\": 0.025, \"c\": 0.0625}"
                 ]
     - name: render-instance-labels
       inputs:
@@ -455,10 +466,10 @@ spec:
             mountPath: /data
         resources:
           requests:
-            cpu: 2
-            memory: "16Gi"
+            cpu: 8
+            memory: "64Gi"
           limits:
-            memory: "16Gi"
+            memory: "64Gi"
         command: ["python",
             "-m", "geograypher.entrypoints.render_labels",
             "--mesh-file", "{{inputs.parameters.mesh-file}}",
