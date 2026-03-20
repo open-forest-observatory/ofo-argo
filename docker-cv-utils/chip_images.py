@@ -358,7 +358,10 @@ def process_folder(
 
     # Extract all vector representations of trees across all images
     with Pool(n_workers) as p:
-        futures = [p.apply_async(extract_shapes_from_mask, args) for args in zip(render_files, output_files)]
+        futures = [
+            p.apply_async(extract_shapes_from_mask, args)
+            for args in zip(render_files, output_files)
+        ]
         for f in tqdm(futures, desc="Extracting shapes from masks"):
             f.get()
 
