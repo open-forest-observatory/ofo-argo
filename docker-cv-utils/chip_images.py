@@ -1,12 +1,12 @@
 import json
-import time
 import warnings
 from argparse import ArgumentParser, BooleanOptionalAction
 from functools import partial
-from math import ceil, floor
+import tempfile
 from multiprocessing import Pool
 from pathlib import Path
 
+from tqdm import tqdm
 import geopandas as gpd
 import numpy as np
 import pandas as pd
@@ -16,6 +16,10 @@ from PIL import Image
 from rasterio import features
 from rasterio.features import shapes
 from shapely.affinity import translate
+
+# Filter out warning about saving without CRS, since the data represents pixel coords
+warnings.filterwarnings("ignore", message="'crs' was not provided")
+
 
 # Background masking configuration
 MASK_BACKGROUND = True  # Whether to mask out background trees
@@ -43,6 +47,7 @@ N_CHIPS_PER_TREE = 10
 
 def extract_shapes_from_mask(
     mask_path: str,
+    output_path: str,
     render_null_ID: int = RENDER_NULL_ID,
 ):
     """
@@ -51,6 +56,7 @@ def extract_shapes_from_mask(
 
     Args:
         mask_path (str): Path to a one-channel integer image, where unique IDs define the different trees
+        output_path (str): Where to save the vector results. Parent directory will be created if needed.
         render_null_ID (int, optional): The ID of the background content in the mask, which is not included. Defaults to RENDER_NULL_ID.
     """
     mask_ids = imread(mask_path)  # load tif tree id mask
@@ -84,12 +90,22 @@ def extract_shapes_from_mask(
     shapes_gdf = shapes_gdf.dissolve("IDs", as_index=False)
 
     shapes_gdf["filename"] = mask_path
-    return shapes_gdf
+
+    # Compute the minimum dimension per chip
+    width = shapes_gdf.bounds.maxx - shapes_gdf.bounds.minx
+    height = shapes_gdf.bounds.maxy - shapes_gdf.bounds.miny
+    min_dim = np.minimum(width, height)
+    shapes_gdf["min_dim"] = min_dim
+
+    # Save out
+    Path(output_path).parent.mkdir(exist_ok=True, parents=True)
+    shapes_gdf.to_file(output_path)
 
 
 def save_chips(
     image_path: str,
-    shapes_gdf: gpd.GeoDataFrame,
+    shapes_path: str,
+    IDs_to_include: pd.Series,
     output_folder: str,
     IDs_to_labels: dict,
     mask_background: bool = MASK_BACKGROUND,
@@ -101,9 +117,11 @@ def save_chips(
 
     image_path (str):
         Path to an RGB image, which will be chipped
-    shapes_gdf (gpd.GeoDataFrame):
-        A dataframe of shapes representing the rendered trees, containing the "polygon_area" and
-        "IDs" attributes
+    shapes_path (str):
+        A path to a dataframe of shapes representing the rendered trees, containing the
+        "polygon_area" and "IDs" attributes
+    IDs_to_include (pd.Series):
+        A series containing which IDs to produce renders for.
     output_folder (str):
         Where to write all chips.
     IDs_to_labels (dict):
@@ -118,6 +136,11 @@ def save_chips(
     Raises:
         ValueError: If values in the mask image are not included in the IDs_to_labels keys, meaning they cannot be remapped
     """
+    # Load the shapes
+    shapes_gdf = gpd.read_file(shapes_path)
+    # Subset to the IDs which should be written out
+    shapes_gdf = shapes_gdf[shapes_gdf.IDs.isin(IDs_to_include)]
+
     # If there are no shapes to save then don't waste time loading the image
     if len(shapes_gdf) == 0:
         return
@@ -324,58 +347,82 @@ def process_folder(
                 f"{len(additional_images)} images do not have a corresponding renders. The first 10 are {list(additional_images)[:10]}"
             )
 
+    # Where the vector representation of the masks is stored
+    shapes_dir = tempfile.TemporaryDirectory()
+
+    # Create paths within the temp dir to store each file
+    output_files = [
+        Path(shapes_dir.name, f.relative_to(renders_folder)).with_suffix(".gpkg")
+        for f in render_files
+    ]
+
     # Extract all vector representations of trees across all images
     with Pool(n_workers) as p:
-        shapes = p.map(extract_shapes_from_mask, render_files)
-    all_shapes = pd.concat(shapes, ignore_index=True)
+        futures = [p.apply_async(extract_shapes_from_mask, args) for args in zip(render_files, output_files)]
+        for f in tqdm(futures, desc="Extracting shapes from masks"):
+            f.get()
 
-    # Compubute the minimum dimension per chip
-    width = all_shapes.bounds.maxx - all_shapes.bounds.minx
-    height = all_shapes.bounds.maxy - all_shapes.bounds.miny
-    min_dim = np.minimum(width, height)
-    all_shapes["min_dim"] = min_dim
+    print("Determining a subset of chips to save")
+    # Read only the attributes required to perform subsetting, since the geometry is memory intensive
+    all_dimensions = []
+    for f in Path(shapes_dir.name).rglob("*.gpkg"):
+        gdf = gpd.read_file(f)
+        if len(gdf) > 0:
+            all_dimensions.append(gdf[["filename", "min_dim", "IDs"]])
+    all_dimensions = pd.concat(all_dimensions, ignore_index=True)
 
     # Apply the filtering proceedure to the two top-level folders independently, which correspond
     # to the oblique and nadir missions
     top_level_folder = np.array(
-        [f.relative_to(renders_folder).parts[0] for f in all_shapes.filename]
+        [
+            str(Path(f).relative_to(renders_folder).parts[0])
+            for f in all_dimensions.filename
+        ]
     )
     unique_folders = np.unique(top_level_folder)
     if len(unique_folders) != 2:
         raise ValueError("For the paired missions, there should be two unique folders")
 
-    all_shapes_subsetted = []
+    all_dimensions_subsetted = []
     # Iterate over the folders corresponding to oblique and nadir
     for unique_folder in unique_folders:
-        all_shapes_subsetted.append(
+        all_dimensions_subsetted.append(
             subset_shapes(
-                all_shapes[top_level_folder == unique_folder],
+                all_dimensions[top_level_folder == unique_folder],
                 int(n_chips_per_tree / 2),
                 image_res_min_size,
                 image_res_sufficient_size,
             )
         )
 
-    all_shapes = pd.concat(all_shapes_subsetted)
+    all_dimensions = pd.concat(all_dimensions_subsetted)
 
-    # Group all_shapes by filename to process each image independently
-    shapes_by_file = dict(tuple(all_shapes.groupby("filename")))
+    # Group the dimensions by filename to process each image independently
+    dimensions_by_file = dict(tuple(all_dimensions.groupby("filename")))
 
     # Read IDs to labels
     with open(Path(renders_folder, "IDs_to_labels.json"), "r") as file_h:
         IDs_to_labels = json.load(file_h)
         IDs_to_labels = {int(k): v for k, v in IDs_to_labels.items()}
 
+    print("Saving chips")
     # Build args for parallel save_chips calls
+    # TODO consider a partial function
     save_chips_args = [
         (
             str(
                 Path(
                     images_folder,
-                    Path(render_file).relative_to(renders_folder).with_suffix(""),
+                    Path(render_file).relative_to(renders_folder),
                 ).with_suffix(images_ext)
             ),
-            shapes_subset,
+            str(
+                Path(
+                    shapes_dir.name,
+                    Path(render_file).relative_to(renders_folder),
+                ).with_suffix(".gpkg")
+            ),
+            dimensions_subset["IDs"],
             str(
                 Path(
                     output_dir,
@@ -387,12 +434,14 @@ def process_folder(
             mask_buffer_pixels,
             background_value,
         )
-        for render_file, shapes_subset in shapes_by_file.items()
+        for render_file, dimensions_subset in dimensions_by_file.items()
     ]
 
     # Save out the chips, parallelizing across files
     with Pool(n_workers) as p:
-        p.starmap(save_chips, save_chips_args)
+        futures = [p.apply_async(save_chips, args) for args in save_chips_args]
+        for f in tqdm(futures, desc="Saving out chips"):
+            f.get()
 
 
 def parse_args():
