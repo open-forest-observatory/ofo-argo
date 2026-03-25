@@ -1,7 +1,7 @@
 apiVersion: argoproj.io/v1alpha1
 kind: Workflow
 metadata:
-  generateName: register-field-trees-to-CHM-workflow-
+  generateName: register-field-trees-to-chm-workflow-
 spec:
   serviceAccountName: argo
   entrypoint: main
@@ -210,7 +210,7 @@ spec:
               crs=gpd.read_file(metadata_files[0]).crs,
           )
 
-          # Overlay mission footprints with field plot bounds
+          # Overlay mission footprints with field trees
           overlay = gpd.overlay(mission_metadata, field_trees)
           pairs = overlay[["mission_id", "plot_id"]].drop_duplicates()
 
