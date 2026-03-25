@@ -467,9 +467,9 @@ spec:
         resources:
           requests:
             cpu: 8
-            memory: "24Gi"
+            memory: "54Gi"
           limits:
-            memory: "24Gi"
+            memory: "54Gi"
         command: ["python",
             "-m", "geograypher.entrypoints.render_labels",
             "--mesh-file", "{{inputs.parameters.mesh-file}}",
