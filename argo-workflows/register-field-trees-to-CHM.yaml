@@ -56,6 +56,8 @@ spec:
         value: "main"
       # Path on the shared volume to the single field trees file, which will be subset by plot_id.
       - name: FIELD_TREES_FILE
+      # Path on the shared volume to the plot bounds file, representing the extent of each survey
+      - name: FIELD_PLOT_BOUNDS_FILE
 
   # Defining where to read raw drone imagery data and write out imagery products to `/ofo-share`
   volumes:
@@ -198,10 +200,12 @@ spec:
 
           metadata_folder = Path("{{workflow.parameters.TEMP_FOLDER}}/{{workflow.name}}/mission-metadata")
           field_trees_file = Path("{{workflow.parameters.FIELD_TREES_FILE}}")
+          plot_bounds_file = Path("{{workflow.parameters.FIELD_PLOT_BOUNDS_FILE}}")
           temp_folder = Path("{{workflow.parameters.TEMP_FOLDER}}/{{workflow.name}}")
 
           # Read field trees
           field_trees = gpd.read_file(field_trees_file)
+          plot_bounds = gpd.read_file(plot_bounds_file)
 
           # Read all downloaded mission metadata files
           metadata_files = list(metadata_folder.rglob("*.gpkg"))
@@ -210,8 +214,11 @@ spec:
               crs=gpd.read_file(metadata_files[0]).crs,
           )
 
+          # Convert mission metadata to the same CRS as the field trees
+          plot_bounds = plot_bounds.to_crs(mission_metadata.crs)
+
           # Overlay mission footprints with field trees
-          overlay = gpd.overlay(mission_metadata, field_trees)
+          overlay = gpd.overlay(mission_metadata, plot_bounds)
           pairs = overlay[["mission_id", "plot_id"]].drop_duplicates()
 
           # For each (mission, plot) pair, subset field trees to that plot and save to disk
