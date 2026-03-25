@@ -45,9 +45,9 @@ spec:
       - name: S3_BUCKET_PUBLIC
         value: "ofo-public"
       - name: S3_DATA_FOLDER
-        value: "drone/mission-composites_01"
+        value: "drone/missions_03"
       - name: PHOTOGRAMMETRY_ID
-        value: "photogrammetry_01"
+        value: "photogrammetry_03"
       # All per-dataset temp products and outputs are saved under:
       # TEMP_FOLDER/{{workflow.name}}/{{dataset-name}}/
       - name: TEMP_FOLDER
@@ -372,7 +372,7 @@ spec:
             set -euo pipefail
             SRC="{{inputs.parameters.registered-trees-file}}"
             TEMP_DIR="{{inputs.parameters.temp-dir}}"
-            DST="s3:{{workflow.parameters.S3_BUCKET_PUBLIC}}/{{workflow.parameters.S3_DATA_FOLDER}}/{{inputs.parameters.dataset-name}}/{{workflow.parameters.S3_PHOTOGRAMMETRY_SUBFOLDER}}/{{inputs.parameters.dataset-name}}_registered_field_trees.gpkg"
+            DST="s3:{{workflow.parameters.S3_BUCKET_PUBLIC}}/{{workflow.parameters.S3_DATA_FOLDER}}/{{inputs.parameters.dataset-name}}/{{workflow.parameters.PHOTOGRAMMETRY_ID}}/{{inputs.parameters.dataset-name}}_registered_field_trees.gpkg"
 
             echo "[rclone] Uploading selected files from $SRC -> $DST"
             rclone copy "$SRC" "$DST" \
