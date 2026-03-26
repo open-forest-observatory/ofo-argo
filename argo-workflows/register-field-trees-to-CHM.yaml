@@ -193,10 +193,13 @@ spec:
             memory: "8Gi"
         command: ["python"]
         source: |
-          import json, sys
+          import json
+          import sys
+          import shutil
+          from pathlib import Path
+
           import geopandas as gpd
           import pandas as pd
-          from pathlib import Path
 
           metadata_folder = Path("{{workflow.parameters.TEMP_FOLDER}}/{{workflow.name}}/mission-metadata")
           field_trees_file = Path("{{workflow.parameters.FIELD_TREES_FILE}}")
@@ -213,6 +216,9 @@ spec:
               pd.concat([gpd.read_file(f) for f in metadata_files]),
               crs=gpd.read_file(metadata_files[0]).crs,
           )
+
+          # Once mission metadata has been read, delete the folder of metadata
+          shutil.rmtree(metadata_folder)
 
           # Convert mission metadata to the same CRS as the field trees
           plot_bounds = plot_bounds.to_crs(mission_metadata.crs)
