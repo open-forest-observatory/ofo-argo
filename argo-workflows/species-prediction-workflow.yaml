@@ -284,7 +284,7 @@ spec:
             MISSION_ID="{{inputs.parameters.mission-id}}"
             LOCAL_DIR="{{inputs.parameters.local-dir}}"
             S3_SRC="s3:{{inputs.parameters.s3-bucket}}/{{inputs.parameters.s3-data-folder}}/${MISSION_ID}/{{workflow.parameters.PHOTOGRAMMETRY_ID}}/full/"
-            INCLUDES="--include ${MISSION_ID}_cameras.xml --include ${MISSION_ID}_chm-ptcloud.tif --include ${MISSION_ID}_dtm-ptcloud.tif --include ${MISSION_ID}_mesh.ply"
+            INCLUDES="--include ${MISSION_ID}_cameras.xml --include ${MISSION_ID}_chm-mesh.tif --include ${MISSION_ID}_dtm-ptcloud.tif --include ${MISSION_ID}_mesh.ply"
 
             mkdir -p "$LOCAL_DIR"
 
@@ -294,7 +294,7 @@ spec:
               --stats 15s --stats-log-level NOTICE
 
             CAMERA_FILE="${LOCAL_DIR}/${MISSION_ID}_cameras.xml"
-            CHM_FILE="${LOCAL_DIR}/${MISSION_ID}_chm-ptcloud.tif"
+            CHM_FILE="${LOCAL_DIR}/${MISSION_ID}_chm-mesh.tif"
             DTM_FILE="${LOCAL_DIR}/${MISSION_ID}_dtm-ptcloud.tif"
             MESH_FILE="${LOCAL_DIR}/${MISSION_ID}_mesh.ply"
 
