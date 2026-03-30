@@ -114,19 +114,22 @@ spec:
                   value: "{{workflow.parameters.TEMP_FOLDER}}/{{workflow.name}}/{{inputs.parameters.mission-id}}_{{inputs.parameters.plot-id}}/{{inputs.parameters.mission-id}}_{{inputs.parameters.plot-id}}_field-trees.gpkg"
                 - name: CHM-file
                   value: "{{workflow.parameters.TEMP_FOLDER}}/{{workflow.name}}/{{inputs.parameters.mission-id}}_{{inputs.parameters.plot-id}}/{{inputs.parameters.mission-id}}_chm-ptcloud.tif"
-                - name: output-trees-file
-                  value: "{{workflow.parameters.TEMP_FOLDER}}/{{workflow.name}}/{{inputs.parameters.mission-id}}_{{inputs.parameters.plot-id}}/{{inputs.parameters.mission-id}}_{{inputs.parameters.plot-id}}_registered-trees.gpkg"
-          - name: upload-registered-trees
+                - name: output-shift-file
+                  value: "{{workflow.parameters.TEMP_FOLDER}}/{{workflow.name}}/{{inputs.parameters.mission-id}}_{{inputs.parameters.plot-id}}/{{inputs.parameters.plot-id}}_{{inputs.parameters.mission-id}}_shift.csv"
+
+          - name: upload-shift-file
             template: rclone-upload-template
             depends: "register-trees.Succeeded"
             arguments:
               parameters:
-                - name: dataset-name
-                  value: "{{inputs.parameters.mission-id}}_{{inputs.parameters.plot-id}}"
+                - name: plot-id
+                  value: "{{inputs.parameters.plot-id}}"
+                - name: mission-id
+                  value: "{{inputs.parameters.mission-id}}"
                 - name: temp-dir
                   value: "{{workflow.parameters.TEMP_FOLDER}}/{{workflow.name}}/{{inputs.parameters.mission-id}}_{{inputs.parameters.plot-id}}"
-                - name: registered-trees-file
-                  value: "{{workflow.parameters.TEMP_FOLDER}}/{{workflow.name}}/{{inputs.parameters.mission-id}}_{{inputs.parameters.plot-id}}/{{inputs.parameters.mission-id}}_{{inputs.parameters.plot-id}}_registered-trees.gpkg"
+                - name: shift-file
+                  value: "{{workflow.parameters.TEMP_FOLDER}}/{{workflow.name}}/{{inputs.parameters.mission-id}}_{{inputs.parameters.plot-id}}/{{inputs.parameters.plot-id}}_{{inputs.parameters.mission-id}}_shift.csv"
 ## Definitions of individual steps (templates)
     # Download mission-metadata gpkg files from S3 to the shared volume.
     - name: download-mission-metadata
@@ -335,7 +338,7 @@ spec:
         parameters:
           - name: input-trees-file
           - name: CHM-file
-          - name: output-trees-file
+          - name: output-shift-file
       container:
         image: ghcr.io/open-forest-observatory/tree-registration-and-matching:{{workflow.parameters.TRAM_IMAGE_TAG}}
         volumeMounts:
@@ -353,8 +356,8 @@ spec:
                   "{{inputs.parameters.input-trees-file}}",
                   "--CHM-file",
                   "{{inputs.parameters.CHM-file}}",
-                  "--output-shifted-trees",
-                  "{{inputs.parameters.output-trees-file}}",
+                  "--output-shift-summary",
+                  "{{inputs.parameters.output-shift-file}}",
                 ]
 
     # --------- RCLONE UPLOAD ---------
@@ -362,8 +365,9 @@ spec:
     - name: rclone-upload-template
       inputs:
         parameters:
-          - name: registered-trees-file
-          - name: dataset-name
+          - name: plot-id
+          - name: mission-id
+          - name: shift-file
           - name: temp-dir
       nodeSelector:
         feature.node.kubernetes.io/workload-type: cpu
@@ -376,9 +380,9 @@ spec:
         args:
           - |
             set -euo pipefail
-            SRC="{{inputs.parameters.registered-trees-file}}"
+            SRC="{{inputs.parameters.shift-file}}"
             TEMP_DIR="{{inputs.parameters.temp-dir}}"
-            DST="s3:{{workflow.parameters.S3_BUCKET_PUBLIC}}/{{workflow.parameters.S3_DATA_FOLDER}}/{{inputs.parameters.dataset-name}}/{{workflow.parameters.PHOTOGRAMMETRY_ID}}/{{inputs.parameters.dataset-name}}_registered_field_trees.gpkg"
+            DST="s3:{{workflow.parameters.S3_BUCKET_PUBLIC}}/{{workflow.parameters.S3_DATA_FOLDER}}/{{inputs.parameters.mission-id}}/{{workflow.parameters.PHOTOGRAMMETRY_ID}}/{{inputs.parameters.plot-id}}_{{inputs.parameters.mission-id}}_ground-reference-shift.csv"
 
             echo "[rclone] Uploading selected files from $SRC -> $DST"
             rclone copy "$SRC" "$DST" \
