@@ -215,9 +215,11 @@ spec:
 
           # Read all downloaded mission metadata files
           metadata_files = list(metadata_folder.rglob("*.gpkg"))
+          mission_metadata = [gpd.read_file(f) for f in metadata_files]
+
           mission_metadata = gpd.GeoDataFrame(
-              pd.concat([gpd.read_file(f) for f in metadata_files]),
-              crs=gpd.read_file(metadata_files[0]).crs,
+              pd.concat(mission_metadata),
+              crs=mission_metadata[0].crs,
           )
 
           # Once mission metadata has been read, delete the folder of metadata
