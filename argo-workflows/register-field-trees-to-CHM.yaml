@@ -457,7 +457,7 @@ spec:
             set -euo pipefail
             SRC="{{inputs.parameters.shift-file}}"
             TEMP_DIR="{{inputs.parameters.temp-dir}}"
-            DST="s3:{{workflow.parameters.S3_BUCKET_PUBLIC}}/{{workflow.parameters.S3_DATA_FOLDER}}/{{inputs.parameters.mission-id}}/{{workflow.parameters.PHOTOGRAMMETRY_ID}}/{{inputs.parameters.plot-id}}_{{inputs.parameters.mission-id}}_ground-reference-shift.csv"
+            DST="s3:{{workflow.parameters.S3_BUCKET_PUBLIC}}/{{workflow.parameters.S3_DATA_FOLDER}}/{{inputs.parameters.mission-id}}/{{workflow.parameters.PHOTOGRAMMETRY_ID}}/ground-reference-shifts/{{inputs.parameters.plot-id}}_{{inputs.parameters.mission-id}}_ground-reference-shift.csv"
 
             echo "[rclone] Uploading selected files from $SRC -> $DST"
             rclone copyto "$SRC" "$DST" \
