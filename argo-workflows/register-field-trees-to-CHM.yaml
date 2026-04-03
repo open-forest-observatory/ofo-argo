@@ -465,7 +465,7 @@ spec:
               --s3-upload-cutoff 200Mi --s3-chunk-size 100Mi --s3-upload-concurrency 4 \
               --stats 15s --stats-log-level NOTICE
 
-            echo "[rclone] Upload successful for {{inputs.parameters.dataset-name}}"
+            echo "[rclone] Upload successful for plot ID: {{inputs.parameters.plot-id}}, mission ID: {{inputs.parameters.mission-id}}"
 
             echo "[cleanup] Removing local dataset directory: $TEMP_DIR"
             rm -rf "$TEMP_DIR"
