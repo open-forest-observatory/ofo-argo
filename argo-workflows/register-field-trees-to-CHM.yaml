@@ -460,9 +460,9 @@ spec:
             DST="s3:{{workflow.parameters.S3_BUCKET_PUBLIC}}/{{workflow.parameters.S3_DATA_FOLDER}}/{{inputs.parameters.mission-id}}/{{workflow.parameters.PHOTOGRAMMETRY_ID}}/{{inputs.parameters.plot-id}}_{{inputs.parameters.mission-id}}_ground-reference-shift.csv"
 
             echo "[rclone] Uploading selected files from $SRC -> $DST"
-            rclone copy "$SRC" "$DST" \
+            rclone copyto "$SRC" "$DST" \
               --transfers 1 --checkers 1 --retries 5 --retries-sleep=15s \
-              --s3-upload-cutoff 200Mi --s3-chunk-size 100Mi --s3-upload-concurrency 4 \
+              --s3-upload-cutoff 200Mi --s3-chunk-size 100Mi \
               --stats 15s --stats-log-level NOTICE
 
             echo "[rclone] Upload successful for plot ID: {{inputs.parameters.plot-id}}, mission ID: {{inputs.parameters.mission-id}}"
