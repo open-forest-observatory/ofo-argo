@@ -120,8 +120,9 @@ spec:
             template: download-photogrammetry-products
             arguments:
               parameters:
+                # photogrammetry_run_id is the composite mission ID, e.g. "000004_000005"
                 - name: photogrammetry-run-id
-                  value: "{{=inputs.parameters['pair-name'][-6:]}}"
+                  value: "{{=inputs.parameters['pair-name'][7:13] + '_' + inputs.parameters['pair-name'][-6:]}}"
                 - name: local-dir
                   value: "{{workflow.parameters.TEMP_FOLDER}}/{{workflow.name}}/{{inputs.parameters.pair-name}}/photogrammetry-products"
 
@@ -129,13 +130,10 @@ spec:
             template: download-raw-imagery
             arguments:
               parameters:
-                # TODO: chip_images.py currently expects exactly 2 top-level subfolders in the
-                # imagery directory (one per mission in a nadir/oblique composite). If the
-                # photogrammetry_run_id represents a composite of two missions, pass both zip URLs
-                # here as a JSON list. If imagery is from a single mission, chip_images.py will
-                # need to be updated to handle the single-folder case.
+                # Pass both constituent mission zip files; chip_images.py expects exactly 2 top-level
+                # subfolders (nadir + oblique), which this produces.
                 - name: imagery-zip-urls
-                  value: "[\"{{workflow.parameters.S3_BUCKET}}/{{workflow.parameters.S3_MISSIONS_FOLDER}}/{{=inputs.parameters['pair-name'][-6:]}}/images/{{=inputs.parameters['pair-name'][-6:]}}_images.zip\"]"
+                  value: "[\"{{workflow.parameters.S3_BUCKET}}/{{workflow.parameters.S3_MISSIONS_FOLDER}}/{{=inputs.parameters['pair-name'][7:13]}}/images/{{=inputs.parameters['pair-name'][7:13]}}_images.zip\",\"{{workflow.parameters.S3_BUCKET}}/{{workflow.parameters.S3_MISSIONS_FOLDER}}/{{=inputs.parameters['pair-name'][-6:]}}/images/{{=inputs.parameters['pair-name'][-6:]}}_images.zip\"]"
                 - name: pair-name
                   value: "{{inputs.parameters.pair-name}}"
 
@@ -144,7 +142,7 @@ spec:
             arguments:
               parameters:
                 - name: photogrammetry-run-id
-                  value: "{{=inputs.parameters['pair-name'][-6:]}}"
+                  value: "{{=inputs.parameters['pair-name'][7:13] + '_' + inputs.parameters['pair-name'][-6:]}}"
                 - name: local-dir
                   value: "{{workflow.parameters.TEMP_FOLDER}}/{{workflow.name}}/{{inputs.parameters.pair-name}}/detected-trees"
 
@@ -155,7 +153,7 @@ spec:
                 - name: pair-name
                   value: "{{inputs.parameters.pair-name}}"
                 - name: photogrammetry-run-id
-                  value: "{{=inputs.parameters['pair-name'][-6:]}}"
+                  value: "{{=inputs.parameters['pair-name'][7:13] + '_' + inputs.parameters['pair-name'][-6:]}}"
                 - name: local-dir
                   value: "{{workflow.parameters.TEMP_FOLDER}}/{{workflow.name}}/{{inputs.parameters.pair-name}}/registration-shift"
 
@@ -167,7 +165,7 @@ spec:
                 - name: plot-id
                   value: "{{=inputs.parameters['pair-name'][0:6]}}"
                 - name: detected-crowns-file
-                  value: "{{workflow.parameters.TEMP_FOLDER}}/{{workflow.name}}/{{inputs.parameters.pair-name}}/detected-trees/{{=inputs.parameters['pair-name'][-6:]}}_detected-tree-crowns.gpkg"
+                  value: "{{workflow.parameters.TEMP_FOLDER}}/{{workflow.name}}/{{inputs.parameters.pair-name}}/detected-trees/{{=inputs.parameters['pair-name'][7:13] + '_' + inputs.parameters['pair-name'][-6:]}}_detected-tree-crowns.gpkg"
                 - name: shift-file
                   value: "{{workflow.parameters.TEMP_FOLDER}}/{{workflow.name}}/{{inputs.parameters.pair-name}}/registration-shift/{{inputs.parameters.pair-name}}_ground-reference-shift.csv"
                 - name: output-file
@@ -190,7 +188,7 @@ spec:
                 - name: mesh-crs
                   value: "{{workflow.parameters.MESH_CRS}}"
                 - name: original-image-folder
-                  value: "{{workflow.parameters.PHOTOGRAMMETRY_IMAGERY_FOLDER}}/{{=inputs.parameters['pair-name'][-6:]}}/photogrammetry/downloaded-raw-imagery"
+                  value: "{{workflow.parameters.PHOTOGRAMMETRY_IMAGERY_FOLDER}}/{{=inputs.parameters['pair-name'][7:13] + '_' + inputs.parameters['pair-name'][-6:]}}/photogrammetry/downloaded-raw-imagery"
                 - name: render-savefolder
                   value: "{{workflow.parameters.TEMP_FOLDER}}/{{workflow.name}}/{{inputs.parameters.pair-name}}/renders"
 
