@@ -41,17 +41,20 @@ spec:
   # These parameters can be referenced throughout the workflow templates using {{workflow.parameters.<name>}}
   arguments:
     parameters:
-      # S3 bucket for public/final outputs (mission composites, species predictions)
+      # S3 bucket to obtain drone mission bounds metadata and CHM files from
       - name: S3_BUCKET_PUBLIC
         value: "ofo-public"
+      # Which folder to use on S3
       - name: S3_DATA_FOLDER
         value: "drone/missions_03"
+      # Which photogrammetry run to use
       - name: PHOTOGRAMMETRY_ID
         value: "photogrammetry_03"
       # All per-dataset temp products and outputs are saved under:
       # TEMP_FOLDER/{{workflow.name}}/{{dataset-name}}/
       - name: TEMP_FOLDER
         value: "/data/argo-output/temp-dir"
+      # Image from tree-detection-and-matching repo to use.
       - name: TRAM_IMAGE_TAG
         value: "main"
       # Path on the shared volume to the single field trees file, which will be subset by plot_id.
@@ -198,8 +201,11 @@ spec:
         source: |
           import json
           import sys
+          import shapely
           import shutil
+          import pyproj
           from pathlib import Path
+
 
           import geopandas as gpd
           import pandas as pd
@@ -209,6 +215,43 @@ spec:
           plot_bounds_file = Path("{{workflow.parameters.FIELD_PLOT_BOUNDS_FILE}}")
           temp_folder = Path("{{workflow.parameters.TEMP_FOLDER}}/{{workflow.name}}")
 
+          # The threshold in square meters for inclusion, even if the field plot isn't fully contained within
+          # the mission footprint
+          PLOT_SIZE_THRESHOLD = 2500
+
+
+          def get_projected_CRS(lat, lon, assume_western_hem=True):
+              if assume_western_hem and lon > 0:
+                  lon = -lon
+              # https://gis.stackexchange.com/questions/190198/how-to-get-appropriate-crs-for-a-position-specified-in-lat-lon-coordinates
+              epgs_code = 32700 - round((45 + lat) / 90) * 100 + round((183 + lon) / 6)
+              crs = pyproj.CRS.from_epsg(epgs_code)
+              return crs
+
+
+          def ensure_projected_CRS(geodata: gpd.GeoDataFrame):
+              """Returns a projected geodataframe from the provided geodataframe by converting it to
+              ESPG:4326 (if not already) and determining the projected CRS from the point
+              coordinates.
+              Args:
+                  geodata (gpd.GeoDataGrame): Original geodataframe that is potentially unprojected
+              Returns:
+                  gpd.GeoDataGrame: projected geodataframe
+              """
+              # If CRS is projected return immediately
+              if geodata.crs.is_projected:
+                  return geodata
+
+              # If CRS is geographic and not long-lat, convert it to long-lat
+              if geodata.crs.is_geographic and geodata.crs != pyproj.CRS.from_epsg(4326):
+                  geodata = geodata.to_crs(pyproj.CRS.from_epsg(4326))
+
+              # Convert geographic long-lat CRS to projected CRS
+              point = geodata["geometry"].iloc[0].centroid
+              geometric_crs = get_projected_CRS(lon=point.x, lat=point.y)
+              return geodata.to_crs(geometric_crs)
+
+
           # Read field trees
           field_trees = gpd.read_file(field_trees_file)
           plot_bounds = gpd.read_file(plot_bounds_file)
@@ -217,20 +260,53 @@ spec:
           metadata_files = list(metadata_folder.rglob("*.gpkg"))
           mission_metadata = [gpd.read_file(f) for f in metadata_files]
 
+          # Once mission metadata has been read, delete it
+          shutil.rmtree(metadata_folder)
+
+          # Some composite missions have different polygons per constituent flight, so find the intersection
+          # of both. The mission_ID should be the concatenation of the constituent mission IDs,
+          # separated by an underscore
+          mission_metadata = [
+              gpd.GeoDataFrame(
+                  [
+                    {
+                        "geometry": shapely.intersection_all(gdf.geometry.to_list()),
+                        "mission_id": "_".join(gdf["mission_id"].to_list()),
+                    }
+                  ],
+                  crs=gdf.crs,
+              )
+              for gdf in mission_metadata
+          ]
+
           mission_metadata = gpd.GeoDataFrame(
               pd.concat(mission_metadata),
               crs=mission_metadata[0].crs,
           )
 
-          # Once mission metadata has been read, delete the folder of metadata
-          shutil.rmtree(metadata_folder)
+          # Convert mission metadata to projected CRS
+          mission_metadata = ensure_projected_CRS(mission_metadata)
 
-          # Convert mission metadata to the same CRS as the field trees
+          # Convert mission metadata to the same CRS as the mission_metadata
           plot_bounds = plot_bounds.to_crs(mission_metadata.crs)
 
-          # Overlay mission footprints with field trees
-          overlay = gpd.overlay(mission_metadata, plot_bounds)
-          pairs = overlay[["mission_id", "plot_id"]].drop_duplicates()
+          # Add a column noting the original area of the plots
+          plot_bounds["original_plot_area"] = plot_bounds.geometry.area
+
+          # Overlay mission footprints with field tree bounds
+          pairs = gpd.overlay(
+              mission_metadata[["mission_id", "geometry"]],
+              plot_bounds,
+          )
+          # Subset to relevant columns
+          pairs = pairs[["mission_id", "plot_id", "original_plot_area", "geometry"]]
+
+          # Retain pairs where the overlapping area is greater than the threshold or the field plot is fully
+          # contained within the mission footprint
+          pairs = pairs[
+              (pairs.geometry.area > PLOT_SIZE_THRESHOLD)
+              | (pairs.geometry.area == pairs["original_plot_area"])
+          ]
 
           # For each (mission, plot) pair, subset field trees to that plot and save to disk
           datasets = []
@@ -384,15 +460,15 @@ spec:
             set -euo pipefail
             SRC="{{inputs.parameters.shift-file}}"
             TEMP_DIR="{{inputs.parameters.temp-dir}}"
-            DST="s3:{{workflow.parameters.S3_BUCKET_PUBLIC}}/{{workflow.parameters.S3_DATA_FOLDER}}/{{inputs.parameters.mission-id}}/{{workflow.parameters.PHOTOGRAMMETRY_ID}}/{{inputs.parameters.plot-id}}_{{inputs.parameters.mission-id}}_ground-reference-shift.csv"
+            DST="s3:{{workflow.parameters.S3_BUCKET_PUBLIC}}/{{workflow.parameters.S3_DATA_FOLDER}}/{{inputs.parameters.mission-id}}/{{workflow.parameters.PHOTOGRAMMETRY_ID}}/ground-reference-shifts/{{inputs.parameters.plot-id}}_{{inputs.parameters.mission-id}}_ground-reference-shift.csv"
 
             echo "[rclone] Uploading selected files from $SRC -> $DST"
-            rclone copy "$SRC" "$DST" \
+            rclone copyto "$SRC" "$DST" \
               --transfers 1 --checkers 1 --retries 5 --retries-sleep=15s \
-              --s3-upload-cutoff 200Mi --s3-chunk-size 100Mi --s3-upload-concurrency 4 \
+              --s3-upload-cutoff 200Mi --s3-chunk-size 100Mi \
               --stats 15s --stats-log-level NOTICE
 
-            echo "[rclone] Upload successful for {{inputs.parameters.dataset-name}}"
+            echo "[rclone] Upload successful for plot ID: {{inputs.parameters.plot-id}}, mission ID: {{inputs.parameters.mission-id}}"
 
             echo "[cleanup] Removing local dataset directory: $TEMP_DIR"
             rm -rf "$TEMP_DIR"
