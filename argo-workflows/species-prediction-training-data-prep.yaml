@@ -56,7 +56,7 @@ spec:
       - name: PHOTOGRAMMETRY_ID
         value: "photogrammetry_01"
       # Subfolder (under PHOTOGRAMMETRY_ID) where pre-computed tree detections are stored on S3.
-      # Expected crowns filename: {photogrammetry_run_id}_detected-tree-crowns.gpkg
+      # Expected filenames: {photogrammetry_run_id}_detected-tree-crowns.gpkg and {photogrammetry_run_id}_detected-tree-tops.gpkg
       - name: S3_DETECTED_TREES_SUBFOLDER
         value: "detected-trees_0001"
       # All per-pair temp products are saved under: TEMP_FOLDER/{{workflow.name}}/{{pair-name}}/
@@ -299,20 +299,24 @@ spec:
             done
             echo "[download] All 4 photogrammetry files verified."
 
-            # --- Detected tree crowns ---
+            # --- Detected tree crowns and tops ---
             S3_TREES="s3:{{workflow.parameters.S3_BUCKET}}/{{workflow.parameters.S3_MISSIONS_FOLDER}}/${RUN_ID}/{{workflow.parameters.PHOTOGRAMMETRY_ID}}/{{workflow.parameters.S3_DETECTED_TREES_SUBFOLDER}}/"
             CROWNS_FILE="${RUN_ID}_detected-tree-crowns.gpkg"
-            echo "[rclone] Downloading detected tree crowns: $S3_TREES -> $TREES_DIR"
+            TOPS_FILE="${RUN_ID}_detected-tree-tops.gpkg"
+            echo "[rclone] Downloading detected tree crowns and tops: $S3_TREES -> $TREES_DIR"
             rclone copy "$S3_TREES" "$TREES_DIR" \
               --include "$CROWNS_FILE" \
+              --include "$TOPS_FILE" \
               --transfers 8 --checkers 8 --retries 5 --retries-sleep=15s \
               --stats 15s --stats-log-level NOTICE
 
-            if [ ! -f "${TREES_DIR}/${CROWNS_FILE}" ]; then
-              echo "[download] ERROR: Expected file not found: ${TREES_DIR}/${CROWNS_FILE}"
-              exit 1
-            fi
-            echo "[download] Detected tree crowns verified."
+            for f in "${TREES_DIR}/${CROWNS_FILE}" "${TREES_DIR}/${TOPS_FILE}"; do
+              if [ ! -f "$f" ]; then
+                echo "[download] ERROR: Expected file not found: $f"
+                exit 1
+              fi
+            done
+            echo "[download] Detected tree crowns and tops verified."
 
             # --- Registration shift ---
             SHIFT_FILENAME="${PAIR_NAME}_ground-reference-shift.csv"
