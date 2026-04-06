@@ -113,7 +113,7 @@ spec:
                 - name: input-trees-file
                   value: "{{workflow.parameters.TEMP_FOLDER}}/{{workflow.name}}/{{inputs.parameters.mission-id}}_{{inputs.parameters.plot-id}}/{{inputs.parameters.mission-id}}_{{inputs.parameters.plot-id}}_field-trees.gpkg"
                 - name: CHM-file
-                  value: "{{workflow.parameters.TEMP_FOLDER}}/{{workflow.name}}/{{inputs.parameters.mission-id}}_{{inputs.parameters.plot-id}}/{{inputs.parameters.mission-id}}_chm-ptcloud.tif"
+                  value: "{{workflow.parameters.TEMP_FOLDER}}/{{workflow.name}}/{{inputs.parameters.mission-id}}_{{inputs.parameters.plot-id}}/{{inputs.parameters.mission-id}}_chm-mesh.tif"
                 - name: output-shift-file
                   value: "{{workflow.parameters.TEMP_FOLDER}}/{{workflow.name}}/{{inputs.parameters.mission-id}}_{{inputs.parameters.plot-id}}/{{inputs.parameters.plot-id}}_{{inputs.parameters.mission-id}}_shift.csv"
 
@@ -281,7 +281,7 @@ spec:
             LOCAL_DIR="{{inputs.parameters.local-dir}}"
             S3_SRC="s3:{{inputs.parameters.s3-bucket}}/{{inputs.parameters.s3-data-folder}}/${MISSION_ID}/{{workflow.parameters.PHOTOGRAMMETRY_ID}}/full/"
             # TODO this could also be updated to include the tree top files
-            INCLUDES="--include ${MISSION_ID}_chm-ptcloud.tif"
+            INCLUDES="--include ${MISSION_ID}_chm-mesh.tif"
 
             mkdir -p "$LOCAL_DIR"
 
@@ -290,7 +290,7 @@ spec:
               --transfers 1 --checkers 1 --retries 5 --retries-sleep=15s \
               --stats 15s --stats-log-level NOTICE
 
-            CHM_FILE="${LOCAL_DIR}/${MISSION_ID}_chm-ptcloud.tif"
+            CHM_FILE="${LOCAL_DIR}/${MISSION_ID}_chm-mesh.tif"
 
             # Verify all expected files were downloaded
             if [ ! -f "$CHM_FILE" ]; then
