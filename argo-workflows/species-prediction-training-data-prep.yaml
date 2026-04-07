@@ -420,12 +420,14 @@ spec:
     - name: match-field-attributes
       inputs:
         parameters:
-          - name: plot-id
-          - name: detected-crowns-file
-          - name: shift-file
+          - name: field-trees-file
+          - name: field-bounds-file
+          - name: drone-trees-file
+          - name: drone-crowns-file
+          - name: registration-file
           - name: output-file
       script:
-        image: uhoosborne/geopandas@sha256:42bdd13882321a2647668446dae9ee1a8d76f2ac95aa8c3cb4e8eacadd5070d9
+        image: ghcr.io/open-forest-observatory/tree-registration-and-matching:latest
         volumeMounts:
           - name: data
             mountPath: /data
@@ -437,88 +439,58 @@ spec:
             memory: "8Gi"
         command: ["python"]
         source: |
-          import sys
-          import pandas as pd
-          import geopandas as gpd
+          # Input variables
+          field_trees_file = "{{inputs.parameters.field-trees-file}}"
+          field_bounds_file = "{{inputs.parameters.field-bounds-file}}"
+          drone_trees_file = "{{inputs.parameters.drone-trees-file}}"
+          drone_crowns_file = "{{inputs.parameters.drone-crowns-file}}"
+          registration_file = "{{inputs.parameters.registration-file}}"
+
+          output_file = Path("{{inputs.parameters.output-file}}")
           from pathlib import Path
 
-          # TODO: Update these column names to match the actual registration shift CSV schema
-          SHIFT_QUALITY_COLUMN = "quality_score"  # TODO: replace
-          SHIFT_X_COLUMN = "shift_x"              # TODO: replace
-          SHIFT_Y_COLUMN = "shift_y"              # TODO: replace
+          import geopandas as gpd
+          import pandas as pd
+          from tree_registration_and_matching.add_attributes import match_field_and_drone_trees
 
-          # TODO: Update these column names to match the field species data CSV schema
-          FIELD_PLOT_ID_COLUMN = "plot_id"         # TODO: replace
-          FIELD_TREE_ID_COLUMN = "tree_id"         # TODO: replace
-          FIELD_SPECIES_COLUMN = "species"         # TODO: replace
-          FIELD_X_COLUMN = "x"                     # TODO: replace
-          FIELD_Y_COLUMN = "y"                     # TODO: replace
-          FIELD_CRS = "EPSG:TODO"                  # TODO: replace with the CRS of the field data
+          # Read all the products
+          field_trees = gpd.read_file(field_trees_file)
+          field_bounds = gpd.read_file(field_bounds_file)
+          drone_trees = gpd.read_file(drone_trees_file)
+          drone_crowns = gpd.read_file(drone_crowns_file)
 
-          plot_id = "{{inputs.parameters.plot-id}}"
-          shift_file = "{{inputs.parameters.shift-file}}"
-          detected_crowns_file = "{{inputs.parameters.detected-crowns-file}}"
-          field_species_data_file = "{{workflow.parameters.FIELD_SPECIES_DATA_FILE}}"
-          output_file = "{{inputs.parameters.output-file}}"
-          quality_threshold = float("{{workflow.parameters.REGISTRATION_QUALITY_THRESHOLD}}")
+          registration = pd.read_csv(registration_file)
 
-          # Read shift and check registration quality; fail the task if below threshold
-          shift_df = pd.read_csv(shift_file)
-          quality = shift_df[SHIFT_QUALITY_COLUMN].iloc[0]
-          if quality < quality_threshold:
-              print(f"[match-field-attributes] ERROR: Registration quality {quality:.4f} is below "
-                    f"threshold {quality_threshold}. Failing pair.")
-              sys.exit(1)
-          shift_x = shift_df[SHIFT_X_COLUMN].iloc[0]
-          shift_y = shift_df[SHIFT_Y_COLUMN].iloc[0]
-          print(f"[match-field-attributes] Shift: x={shift_x:.3f}, y={shift_y:.3f}, quality={quality:.4f}")
+          # Determine the shift that the CRS needs to be interpreted in
+          working_CRS = registration["shift_CRS"].iloc[0]
+          drone_crown_crs = drone_crowns.crs
 
-          # Read detected tree crowns
-          detected_crowns = gpd.read_file(detected_crowns_file)
+          # Apply the shift
+          x_shift = registration["estimated_shift_x"].iloc[0]
+          y_shift = registration["estimated_shift_y"].iloc[0]
 
-          # Read field species data and filter to this plot
-          field_data = pd.read_csv(field_species_data_file)
-          plot_field_data = field_data[field_data[FIELD_PLOT_ID_COLUMN] == plot_id].copy()
-          if len(plot_field_data) == 0:
-              print(f"[match-field-attributes] ERROR: No field data found for plot {plot_id}")
-              sys.exit(1)
-          print(f"[match-field-attributes] Found {len(plot_field_data)} field trees for plot {plot_id}")
+          field_trees.to_crs(working_CRS, inplace=True)
+          field_bounds.to_crs(working_CRS, inplace=True)
 
-          # Build a GeoDataFrame from the field trees, applying the registration shift to align
-          # their coordinates with the drone/photogrammetry coordinate system
-          field_gdf = gpd.GeoDataFrame(
-              plot_field_data[[FIELD_TREE_ID_COLUMN, FIELD_SPECIES_COLUMN]],
-              geometry=gpd.points_from_xy(
-                  plot_field_data[FIELD_X_COLUMN] + shift_x,
-                  plot_field_data[FIELD_Y_COLUMN] + shift_y,
-              ),
-              crs=FIELD_CRS,
-          ).to_crs(detected_crowns.crs)
+          field_trees.geometry = field_trees.geometry.translate(xoff=x_shift, yoff=y_shift)
+          field_bounds.geometry = field_bounds.geometry.translate(xoff=x_shift, yoff=y_shift)
 
-          # Spatial join: match each shifted field tree point to the detected crown it falls within.
-          # TODO: Consider sjoin_nearest with a max_distance as a more robust fallback if many
-          # field trees fall outside any crown polygon.
-          matched = gpd.sjoin(
-              field_gdf,
-              detected_crowns[["unique_ID", "geometry"]],
-              how="inner",
-              predicate="within",
+          # Perform matching
+          drone_crowns_with_additional_attributes = match_field_and_drone_trees(
+              field_trees=field_trees,
+              drone_trees=drone_trees,
+              drone_crowns=drone_crowns,
+              field_perim=field_bounds,
+              keep_only_matched_crowns=True,
           )
-          # If multiple field trees fall within the same crown, keep only the first match
-          matched = matched.drop_duplicates(subset=["unique_ID"])
 
-          # Merge species labels back onto the detected crowns GeoDataFrame
-          crowns_with_species = detected_crowns.merge(
-              matched[["unique_ID", FIELD_TREE_ID_COLUMN, FIELD_SPECIES_COLUMN]],
-              on="unique_ID",
-              how="inner",  # Retain only crowns that matched a field tree
-          )
-          print(f"[match-field-attributes] {len(crowns_with_species)} crowns matched to field trees "
-                f"out of {len(detected_crowns)} detected and {len(plot_field_data)} field trees")
+          # Convert back to the original drone CRS
+          drone_crowns_with_additional_attributes.to_crs(drone_crown_crs, inplace=True)
 
-          Path(output_file).parent.mkdir(parents=True, exist_ok=True)
-          crowns_with_species.to_file(output_file)
-          print(f"[match-field-attributes] Wrote matched crowns to {output_file}")
+          # Save the drone crowns with additional field attributes to the file
+          output_file.parent.mkdir(exist_ok=True, parents=True)
+          drone_crowns_with_additional_attributes.to_file(output_file)
+
 
     - name: render-instance-labels
       inputs:
