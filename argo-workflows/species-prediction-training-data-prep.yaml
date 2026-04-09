@@ -346,7 +346,7 @@ spec:
 
             # Write photogrammetry product paths for use by downstream steps
             printf '{"camera":"%s","chm":"%s","dtm":"%s","mesh":"%s", "crowns": "%s", "treetops": "%s", "registration": "%s"}' \
-              "$CAMERA_FILE" "$CHM_FILE" "$DTM_FILE" "$MESH_FILE" "$CROWNS_FILE" "$TOPS_FILE" $"SHIFT_FILENAME" \
+              "$CAMERA_FILE" "$CHM_FILE" "$DTM_FILE" "$MESH_FILE" "${TREES_DIR}/$CROWNS_FILE" "${TREES_DIR}/$TOPS_FILE" "${SHIFT_DIR}/$SHIFT_FILENAME" \
               > /tmp/file-paths.json
             echo "[download] File paths written to /tmp/file-paths.json"
         resources:
