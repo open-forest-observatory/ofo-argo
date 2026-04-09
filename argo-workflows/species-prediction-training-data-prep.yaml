@@ -43,8 +43,10 @@ spec:
     parameters:
       # Path to a newline-separated file listing {plot_id}_{photogrammetry_run_id} pairs to process
       - name: DATASETS_FILE
-      # Path on the shared volume to the field species data CSV
-      - name: FIELD_SPECIES_DATA_FILE
+      # Path to the file of field trees for all plots
+      - name: FIELD_TREES_FILE
+      # Path to the file of plot boundaries for all plots
+      - name: FIELD_PLOTS_FILE
       - name: S3_BUCKET
         value: "ofo-public"
       # S3 folder containing per-mission photogrammetry products and pre-computed detections
@@ -144,12 +146,18 @@ spec:
             depends: "download-ground-reference-data.Succeeded"
             arguments:
               parameters:
-                - name: plot-id
-                  value: "{{=inputs.parameters['pair-name'][0:6]}}"
-                - name: detected-crowns-file
-                  value: "{{workflow.parameters.TEMP_FOLDER}}/{{workflow.name}}/{{inputs.parameters.pair-name}}/detected-trees/{{=inputs.parameters['pair-name'][7:13] + '_' + inputs.parameters['pair-name'][-6:]}}_detected-tree-crowns.gpkg"
-                - name: shift-file
-                  value: "{{workflow.parameters.TEMP_FOLDER}}/{{workflow.name}}/{{inputs.parameters.pair-name}}/registration-shift/{{inputs.parameters.pair-name}}_ground-reference-shift.csv"
+                - name: pair-name
+                  value: "{{inputs.parameters.pair-name}}"
+                - name: field-trees-file
+                  value: "{{workflow.parameters.FIELD_TREES_FILE}}"
+                - name: field-bounds-file
+                  value: "{{workflow.parameters.FIELD_PLOTS_FILE}}"
+                - name: drone-trees-file
+                  value: '{{=jsonpath(tasks["download-ground-reference-data"].outputs.parameters["local-files"], "$.crowns")}}'
+                - name: drone-crowns-file
+                  value: '{{=jsonpath(tasks["download-ground-reference-data"].outputs.parameters["local-files"], "$.treetops")}}'
+                - name: registration-file
+                  value: '{{=jsonpath(tasks["download-ground-reference-data"].outputs.parameters["local-files"], "$.registration")}}'
                 - name: output-file
                   value: "{{workflow.parameters.TEMP_FOLDER}}/{{workflow.name}}/{{inputs.parameters.pair-name}}/{{inputs.parameters.pair-name}}_matched-tree-crowns.gpkg"
 
@@ -333,8 +341,8 @@ spec:
             echo "[download] Registration shift file verified."
 
             # Write photogrammetry product paths for use by downstream steps
-            printf '{"camera":"%s","chm":"%s","dtm":"%s","mesh":"%s"}' \
-              "$CAMERA_FILE" "$CHM_FILE" "$DTM_FILE" "$MESH_FILE" \
+            printf '{"camera":"%s","chm":"%s","dtm":"%s","mesh":"%s", "crowns": "%s", "treetops": "%s", "registration": "%s"}' \
+              "$CAMERA_FILE" "$CHM_FILE" "$DTM_FILE" "$MESH_FILE" "$CROWNS_FILE" "$TOPS_FILE" $"SHIFT_FILENAME" \
               > /tmp/file-paths.json
             echo "[download] File paths written to /tmp/file-paths.json"
         resources:
@@ -420,6 +428,7 @@ spec:
     - name: match-field-attributes
       inputs:
         parameters:
+          - name: pair-name
           - name: field-trees-file
           - name: field-bounds-file
           - name: drone-trees-file
@@ -440,6 +449,7 @@ spec:
         command: ["python"]
         source: |
           # Input variables
+          pair_name = "{{inputs.parameters.pair-name}}"
           field_trees_file = "{{inputs.parameters.field-trees-file}}"
           field_bounds_file = "{{inputs.parameters.field-bounds-file}}"
           drone_trees_file = "{{inputs.parameters.drone-trees-file}}"
@@ -456,8 +466,14 @@ spec:
           # Read all the products
           field_trees = gpd.read_file(field_trees_file)
           field_bounds = gpd.read_file(field_bounds_file)
+
           drone_trees = gpd.read_file(drone_trees_file)
           drone_crowns = gpd.read_file(drone_crowns_file)
+
+          # Subset to the specified plot
+          plot_id = pair_name.split("_")[0]
+          field_trees = field_trees.query("plot_id==@plot_id")
+          field_bounds = field_bounds.query("plot_id==@plot_id")
 
           registration = pd.read_csv(registration_file)
 
