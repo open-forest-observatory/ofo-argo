@@ -51,7 +51,10 @@ spec:
         value: "ofo-public"
       # S3 folder containing per-mission photogrammetry products and pre-computed detections
       - name: S3_MISSIONS_FOLDER
-        value: "drone/mission-composites"
+        value: "drone/mission-composites_01"
+      # Where the single-mission imagery is stored
+      - name: S3_IMAGERY_FOLDER
+        value: "drone/missions_03"
       # S3 folder where output training chips and matched crowns will be written
       - name: S3_TRAINING_OUTPUT_FOLDER
         value: "drone/training-data_01"
@@ -126,7 +129,7 @@ spec:
                   value: "{{inputs.parameters.pair-name}}"
                 # photogrammetry_run_id is the composite mission ID, e.g. "000004_000005"
                 - name: photogrammetry-run-id
-                  value: "{{=inputs.parameters['pair-name'][7:13] + '_' + inputs.parameters['pair-name'][-6:]}}"
+                  value: "{{=inputs.parameters['pair-name'][5:11] + '_' + inputs.parameters['pair-name'][-6:]}}"
                 - name: local-dir
                   value: "{{workflow.parameters.TEMP_FOLDER}}/{{workflow.name}}/{{inputs.parameters.pair-name}}"
 
@@ -137,7 +140,7 @@ spec:
                 # Pass both constituent mission zip files; chip_images.py expects exactly 2 top-level
                 # subfolders (nadir + oblique), which this produces.
                 - name: imagery-zip-urls
-                  value: "[\"{{workflow.parameters.S3_BUCKET}}/{{workflow.parameters.S3_MISSIONS_FOLDER}}/{{=inputs.parameters['pair-name'][7:13]}}/images/{{=inputs.parameters['pair-name'][7:13]}}_images.zip\",\"{{workflow.parameters.S3_BUCKET}}/{{workflow.parameters.S3_MISSIONS_FOLDER}}/{{=inputs.parameters['pair-name'][-6:]}}/images/{{=inputs.parameters['pair-name'][-6:]}}_images.zip\"]"
+                  value: "[\"{{workflow.parameters.S3_BUCKET}}/{{workflow.parameters.S3_IMAGERY_FOLDER}}/{{=inputs.parameters['pair-name'][5:11]}}/images/{{=inputs.parameters['pair-name'][5:11]}}_images.zip\",\"{{workflow.parameters.S3_BUCKET}}/{{workflow.parameters.S3_IMAGERY_FOLDER}}/{{=inputs.parameters['pair-name'][-6:]}}/images/{{=inputs.parameters['pair-name'][-6:]}}_images.zip\"]"
                 - name: pair-name
                   value: "{{inputs.parameters.pair-name}}"
 
@@ -178,7 +181,7 @@ spec:
                 - name: mesh-crs
                   value: "{{workflow.parameters.MESH_CRS}}"
                 - name: original-image-folder
-                  value: "{{workflow.parameters.PHOTOGRAMMETRY_IMAGERY_FOLDER}}/{{=inputs.parameters['pair-name'][7:13] + '_' + inputs.parameters['pair-name'][-6:]}}/photogrammetry/downloaded-raw-imagery"
+                  value: "{{workflow.parameters.PHOTOGRAMMETRY_IMAGERY_FOLDER}}/{{=inputs.parameters['pair-name'][5:11] + '_' + inputs.parameters['pair-name'][-6:]}}/photogrammetry/downloaded-raw-imagery"
                 - name: render-savefolder
                   value: "{{workflow.parameters.TEMP_FOLDER}}/{{workflow.name}}/{{inputs.parameters.pair-name}}/renders"
 
@@ -309,8 +312,9 @@ spec:
 
             # --- Detected tree crowns and tops ---
             S3_TREES="s3:{{workflow.parameters.S3_BUCKET}}/{{workflow.parameters.S3_MISSIONS_FOLDER}}/${RUN_ID}/{{workflow.parameters.PHOTOGRAMMETRY_ID}}/{{workflow.parameters.S3_DETECTED_TREES_SUBFOLDER}}/"
-            CROWNS_FILE="${RUN_ID}_detected-tree-crowns.gpkg"
-            TOPS_FILE="${RUN_ID}_detected-tree-tops.gpkg"
+            # TODO consider removing the "classified" part
+            CROWNS_FILE="${RUN_ID}_detected-tree-crowns_classified.gpkg"
+            TOPS_FILE="${RUN_ID}_detected-tree-tops_classified.gpkg"
             echo "[rclone] Downloading detected tree crowns and tops: $S3_TREES -> $TREES_DIR"
             rclone copy "$S3_TREES" "$TREES_DIR" \
               --include "$CROWNS_FILE" \
