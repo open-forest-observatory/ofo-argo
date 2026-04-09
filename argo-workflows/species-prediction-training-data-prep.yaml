@@ -452,6 +452,12 @@ spec:
             memory: "8Gi"
         command: ["python"]
         source: |
+          from pathlib import Path
+
+          import geopandas as gpd
+          import pandas as pd
+          from tree_registration_and_matching.add_attributes import match_field_and_drone_trees
+
           # Input variables
           pair_name = "{{inputs.parameters.pair-name}}"
           field_trees_file = "{{inputs.parameters.field-trees-file}}"
@@ -461,11 +467,6 @@ spec:
           registration_file = "{{inputs.parameters.registration-file}}"
 
           output_file = Path("{{inputs.parameters.output-file}}")
-          from pathlib import Path
-
-          import geopandas as gpd
-          import pandas as pd
-          from tree_registration_and_matching.add_attributes import match_field_and_drone_trees
 
           # Read all the products
           field_trees = gpd.read_file(field_trees_file)
