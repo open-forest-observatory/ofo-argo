@@ -118,7 +118,7 @@ spec:
                 - name: CHM-file
                   value: "{{workflow.parameters.TEMP_FOLDER}}/{{workflow.name}}/{{inputs.parameters.mission-id}}_{{inputs.parameters.plot-id}}/{{inputs.parameters.mission-id}}_chm-mesh.tif"
                 - name: output-shift-file
-                  value: "{{workflow.parameters.TEMP_FOLDER}}/{{workflow.name}}/{{inputs.parameters.mission-id}}_{{inputs.parameters.plot-id}}/{{inputs.parameters.plot-id}}_{{inputs.parameters.mission-id}}_shift.csv"
+                  value: "{{workflow.parameters.TEMP_FOLDER}}/{{workflow.name}}/{{inputs.parameters.mission-id}}_{{inputs.parameters.plot-id}}/{{inputs.parameters.mission-id}}_{{inputs.parameters.plot-id}}_shift.csv"
 
           - name: upload-shift-file
             template: rclone-upload-template
@@ -132,7 +132,7 @@ spec:
                 - name: temp-dir
                   value: "{{workflow.parameters.TEMP_FOLDER}}/{{workflow.name}}/{{inputs.parameters.mission-id}}_{{inputs.parameters.plot-id}}"
                 - name: shift-file
-                  value: "{{workflow.parameters.TEMP_FOLDER}}/{{workflow.name}}/{{inputs.parameters.mission-id}}_{{inputs.parameters.plot-id}}/{{inputs.parameters.plot-id}}_{{inputs.parameters.mission-id}}_shift.csv"
+                  value: "{{workflow.parameters.TEMP_FOLDER}}/{{workflow.name}}/{{inputs.parameters.mission-id}}_{{inputs.parameters.plot-id}}/{{inputs.parameters.mission-id}}_{{inputs.parameters.plot-id}}_shift.csv"
 ## Definitions of individual steps (templates)
     # Download mission-metadata gpkg files from S3 to the shared volume.
     - name: download-mission-metadata
@@ -325,10 +325,10 @@ spec:
 
           json.dump(datasets, sys.stdout)
 
-    # Download mission composite photogrammetry products from S3 to the shared volume.
+    # Download photogrammetry products (for a single or composite mission) from S3 to the shared volume.
     # Returns a JSON dict of local file paths via outputs.parameters.local-files.
     # Keys: camera, chm, dtm, mesh. Fails if any expected file is missing.
-    # S3 source path: <s3-bucket>/drone/mission-composites_01/<mission-id>/full/<mission-id>
+    # S3 source path: <s3-bucket>/<S3_DATA_FOLDER>/<mission-id>/full/<mission-id>
     - name: download-input-data
       inputs:
         parameters:
@@ -460,7 +460,7 @@ spec:
             set -euo pipefail
             SRC="{{inputs.parameters.shift-file}}"
             TEMP_DIR="{{inputs.parameters.temp-dir}}"
-            DST="s3:{{workflow.parameters.S3_BUCKET_PUBLIC}}/{{workflow.parameters.S3_DATA_FOLDER}}/{{inputs.parameters.mission-id}}/{{workflow.parameters.PHOTOGRAMMETRY_ID}}/ground-reference-shifts/{{inputs.parameters.plot-id}}_{{inputs.parameters.mission-id}}_ground-reference-shift.csv"
+            DST="s3:{{workflow.parameters.S3_BUCKET_PUBLIC}}/{{workflow.parameters.S3_DATA_FOLDER}}/{{inputs.parameters.mission-id}}/{{workflow.parameters.PHOTOGRAMMETRY_ID}}/ground-reference-shifts/{{inputs.parameters.mission-id}}_{{inputs.parameters.plot-id}}_ground-reference-shift.csv"
 
             echo "[rclone] Uploading selected files from $SRC -> $DST"
             rclone copyto "$SRC" "$DST" \
