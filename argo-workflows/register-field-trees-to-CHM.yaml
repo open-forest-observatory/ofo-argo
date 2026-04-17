@@ -307,7 +307,7 @@ spec:
           # to avoid numerical issues.
           pairs = pairs[
               (pairs.geometry.area > PLOT_SIZE_THRESHOLD)
-              | (pairs.geometry.area - pairs["original_plot_area"]).abs() < 1e-4
+              | ((pairs.geometry.area - pairs["original_plot_area"]).abs() < 1e-4)
           ]
 
           # For each (mission, plot) pair, subset field trees to that plot and save to disk
