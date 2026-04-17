@@ -217,7 +217,7 @@ spec:
 
           # The threshold in square meters for inclusion, even if the field plot isn't fully contained within
           # the mission footprint
-          PLOT_SIZE_THRESHOLD = 2500
+          PLOT_SIZE_THRESHOLD = 1000
 
 
           def get_projected_CRS(lat, lon, assume_western_hem=True):
@@ -302,10 +302,12 @@ spec:
           pairs = pairs[["mission_id", "plot_id", "original_plot_area", "geometry"]]
 
           # Retain pairs where the overlapping area is greater than the threshold or the field plot is fully
-          # contained within the mission footprint
+          # contained within the mission footprint. The second check is done by checking whether the area
+          # is the same before and after the clipping to the plot bounds. But a small tolerence is required
+          # to avoid numerical issues.
           pairs = pairs[
               (pairs.geometry.area > PLOT_SIZE_THRESHOLD)
-              | (pairs.geometry.area == pairs["original_plot_area"])
+              | ((pairs.geometry.area - pairs["original_plot_area"]).abs() < 1e-4)
           ]
 
           # For each (mission, plot) pair, subset field trees to that plot and save to disk
