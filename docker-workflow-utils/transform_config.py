@@ -251,26 +251,6 @@ def main() -> None:
         photo_path_secondary
     )
 
-    # Validation: This script should only be called when downloads are configured,
-    # so at least one path should use __DOWNLOADED__ prefix
-    if not has_download_prefix(all_paths):
-        print("ERROR: Configuration mismatch detected")
-        print(
-            "  This script was called (implying S3 imagery downloads are configured),"
-        )
-        print("  but no photo_path entries use the __DOWNLOADED__ prefix.")
-        print("  Either:")
-        print(
-            "    1. Add __DOWNLOADED__ prefix to photo_path entries that should use downloaded imagery"
-        )
-        print(
-            "    2. Remove s3_imagery_zip_download from argo config if not using downloaded imagery"
-        )
-        print(f"  Current photo_path: {photo_path}")
-        if photo_path_secondary:
-            print(f"  Current photo_path_secondary: {photo_path_secondary}")
-        sys.exit(1)
-
     # Transform config
     transformed_config = replace_downloaded_placeholder_in_config(config, download_path)
 
