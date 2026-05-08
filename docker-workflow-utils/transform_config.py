@@ -20,8 +20,6 @@ Output:
 
 Validation:
     - Fails if __DOWNLOADED__ prefix is used but DOWNLOADED_IMAGERY_PATH is not set
-    - Fails if this script is called but no __DOWNLOADED__ paths found in photo_path
-      (indicates configuration mismatch - downloads specified but paths not using them)
 """
 
 import copy
