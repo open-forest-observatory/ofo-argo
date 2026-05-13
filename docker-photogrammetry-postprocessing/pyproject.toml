@@ -1,0 +1,10 @@
+[build-system]
+requires = ["setuptools"]
+build-backend = "setuptools.backends.legacy:build"
+
+[project]
+name = "photogrammetry-postprocessing"
+version = "0.1.0"
+
+[tool.setuptools]
+py-modules = ["postprocess", "compute_derived_altitude"]
