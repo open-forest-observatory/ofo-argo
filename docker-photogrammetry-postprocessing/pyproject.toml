@@ -7,4 +7,4 @@ name = "photogrammetry-postprocessing"
 version = "0.1.0"
 
 [tool.setuptools]
-py-modules = ["postprocess", "compute_derived_altitude"]
+packages = ["postprocessing"]
