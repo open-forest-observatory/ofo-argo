@@ -14,6 +14,8 @@ RUN curl https://rclone.org/install.sh | bash
 # Set working directory
 WORKDIR /app
 
+RUN pip3 install --upgrade pip
+
 # Copy requirements first to avoid re-installing if the scripts are changed
 COPY requirements.txt .
 # Install Python packages
