@@ -23,7 +23,6 @@ RUN pip3 install --no-cache-dir -r requirements.txt
 
 # Copy files
 COPY postprocessing/ postprocessing/
-COPY compute_derived_altitude.py .
 COPY entrypoint.py .
 COPY docker-entrypoint.sh .
 COPY pyproject.toml .
