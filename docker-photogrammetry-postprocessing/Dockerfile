@@ -14,16 +14,21 @@ RUN curl https://rclone.org/install.sh | bash
 # Set working directory
 WORKDIR /app
 
+RUN pip3 install --upgrade pip
+
 # Copy requirements first to avoid re-installing if the scripts are changed
 COPY requirements.txt .
 # Install Python packages
 RUN pip3 install --no-cache-dir -r requirements.txt
 
 # Copy files
-COPY postprocess.py .
-COPY compute_derived_altitude.py .
+COPY postprocessing/ postprocessing/
 COPY entrypoint.py .
 COPY docker-entrypoint.sh .
+COPY pyproject.toml .
+
+# Install the package so postprocess is importable from anywhere
+RUN pip3 install --no-cache-dir -e .
 
 # Make scripts executable
 RUN chmod +x docker-entrypoint.sh

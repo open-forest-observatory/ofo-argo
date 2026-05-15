@@ -12,7 +12,7 @@ import sys
 from pathlib import Path
 
 # Import processing functions
-from postprocess import postprocess_photogrammetry_containerized
+from postprocessing import postprocess_photogrammetry_containerized
 
 
 def get_s3_flags():
