@@ -23,7 +23,7 @@ def preprocess(
         dataset_dir: The directory where the preprocessed files will be saved.
         local_files: JSON string of local file paths (ortho, chm, shift, field_trees, plot_bounds).
         min_tree_height: Minimum tree height (meters) used to filter field trees.
-        output_path: Path to write the preprocessed file paths JSON. Default to a /tmp location, if not provided.
+        output_path: Path to write the preprocessed file paths JSON. Default to None.
     """
     field_trees_path = local_files["field_trees"]
     plot_bounds_path = local_files["plot_bounds"]
