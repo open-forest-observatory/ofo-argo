@@ -13,8 +13,18 @@ def preprocess(
     dataset_dir: Path,
     local_files: dict,
     min_tree_height: float,
-    output_path: Path = Path("/tmp/preprocessed-file-paths.json"),
+    output_path: Path | None = None,
 ):
+    """
+    Preprocesses the field trees and rasters for a single plot. 
+
+    Args:
+        plot_id: The plot ID to subset the field trees and plot bounds.
+        dataset_dir: The directory where the preprocessed files will be saved.
+        local_files: JSON string of local file paths (ortho, chm, shift, field_trees, plot_bounds).
+        min_tree_height: Minimum tree height (meters) used to filter field trees.
+        output_path: Path to write the preprocessed file paths JSON. Default to a /tmp location, if not provided.
+    """
     field_trees_path = local_files["field_trees"]
     plot_bounds_path = local_files["plot_bounds"]
     shift_file_path = local_files["shift"]
@@ -107,6 +117,7 @@ def preprocess(
         output_path=str(dataset_dir),
     )
 
+    # crop_raster_save_cog saves the outputs in a full/ subdirectory, so we construct those paths.
     cropped_ortho = dataset_dir / "full" / "cropped_ortho.tif"
     cropped_chm = dataset_dir / "full" / "cropped_chm.tif"
 
@@ -118,17 +129,17 @@ def preprocess(
     print(f"[preprocess] Cropped ortho: {cropped_ortho}")
     print(f"[preprocess] Cropped CHM:   {cropped_chm}")
 
-    preprocessed_files = {
-        **local_files,
-        "ortho": str(cropped_ortho),
-        "chm":   str(cropped_chm),
-    }
-
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    with open(output_path, "w") as f:
-        json.dump(preprocessed_files, f)
-
-    print("[preprocess] preprocessed-file-paths.json written.")
+    # Save updated file paths to a JSON for use in next steps. Primarily for Argo use.
+    if output_path is not None:
+        preprocessed_files = {
+            **local_files,
+            "ortho": str(cropped_ortho),
+            "chm":   str(cropped_chm),
+        }
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        with open(output_path, "w") as f:
+            json.dump(preprocessed_files, f)
+        print("[preprocess] preprocessed-file-paths.json written.")
 
 
 def parse_args():
@@ -160,8 +171,8 @@ def parse_args():
     parser.add_argument(
         "--output-path",
         type=Path,
-        default=Path("/tmp/preprocessed-file-paths.json"),
-        help="Path to write the preprocessed file paths JSON.",
+        default=None,
+        help="Path to write the preprocessed file paths JSON. If omitted, the file is not written.",
     )
     return parser.parse_args()
 
