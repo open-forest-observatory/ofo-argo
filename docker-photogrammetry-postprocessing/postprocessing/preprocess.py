@@ -4,8 +4,54 @@ from pathlib import Path
 
 import geopandas as gpd
 import pandas as pd
+import numpy as np
 
 from postprocessing import crop_raster_save_cog, transform_to_local_utm
+
+
+# Copied from https://github.com/open-forest-observatory/tree-registration-and-matching to avoid dependency.
+def ensure_height_is_present(
+    ground_reference_trees: gpd.GeoDataFrame, height_col: str = "height"
+) -> gpd.GeoDataFrame:
+    """
+    Ensure that every row has a height attribute with the following proceedure:
+    * If height is present, this is used
+    * Then, fill in with height_allometric
+    * Then, fill in with allometric height derived from DBH
+    * Finally, drop any trees without a height
+
+    Args:
+        ground_reference_trees (gpd.GeoDataFrame): The trees to add height to
+        height_col (str): Which column represents the height. Defaults to "height".
+
+    Returns:
+        gpd.GeoDataFrame: The ground reference trees with every row having the height attributes
+    """
+    # First replace any missing height values with pre-computed allometric values
+    nan_height = ground_reference_trees.height.isna()
+    ground_reference_trees.loc[nan_height, height_col] = ground_reference_trees[
+        nan_height
+    ].height_allometric.astype(float)
+
+    # For any remaining missing height values that have DBH, use an allometric equation to compute
+    # the height
+    nan_height = ground_reference_trees[height_col].isna()
+    # These parameters were fit on paired height, DBH data from Western conifers dataset.
+    allometric_height_func = lambda x: 1.3 + np.exp(
+        -0.3136489123372108 + 0.84623571 * np.log(x)
+    )
+    # Compute the allometric height and assign it
+    allometric_height = allometric_height_func(
+        ground_reference_trees[nan_height].dbh.to_numpy()
+    )
+    ground_reference_trees.loc[nan_height, height_col] = allometric_height
+
+    # Filter out any trees that still don't have height
+    ground_reference_trees = ground_reference_trees[
+        ~ground_reference_trees[height_col].isna()
+    ]
+
+    return ground_reference_trees
 
 
 def preprocess(
@@ -68,6 +114,9 @@ def preprocess(
     )
     # Convert back to the original CRS
     field_trees = field_trees.to_crs(original_crs)
+
+    # Ensure height is present, filling in allometric estimates where needed.
+    field_trees = ensure_height_is_present(field_trees)
 
     # Filter out short trees based on the provided minimum tree height.
     n_before = len(field_trees)
