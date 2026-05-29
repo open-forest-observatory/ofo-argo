@@ -738,7 +738,7 @@ spec:
 
             # Upload eval_results.json to ofo-internal
             EVAL_SRC="${DETECTOR_DIR}/eval_results.json"
-            EVAL_DST="s3:{{workflow.parameters.S3_BUCKET_INTERNAL}}/{{workflow.parameters.S3_RESULTS_FOLDER}}/{{workflow.name}}/${MISSION_ID}_${PLOT_ID}/${CONFIG_ID}/eval_results.json"
+            EVAL_DST="s3:{{workflow.parameters.S3_BUCKET_INTERNAL}}/tree-detection-and-eval/{{workflow.name}}/${MISSION_ID}_${PLOT_ID}/${CONFIG_ID}/eval_results.json"
 
             echo "[rclone] Uploading eval_results.json: $EVAL_SRC -> $EVAL_DST"
             rclone copyto "$EVAL_SRC" "$EVAL_DST" \
