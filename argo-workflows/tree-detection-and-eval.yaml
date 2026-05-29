@@ -1,0 +1,926 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Workflow
+metadata:
+  generateName: tdf-benchmark-workflow-
+spec:
+  serviceAccountName: argo
+  entrypoint: main
+  # Max concurrent pods across all tasks. Edit directly to change.
+  # (Argo doesn't support parameter substitution for integer fields like parallelism)
+  parallelism: 18
+
+  # Set imagePullPolicy for all containers in the workflow
+  podSpecPatch: |
+    containers:
+      - name: main
+        imagePullPolicy: Always
+
+  # Affinity rules for workflow pods:
+  # 1. nodeAffinity: Schedule on non-GPU nodes by default (GPU tasks override with affinity: {})
+  # 2. podAffinity: Prefer nodes with other running workflow pods to minimize autoscaler evictions
+  affinity:
+    nodeAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        nodeSelectorTerms:
+          - matchExpressions:
+              - key: nvidia.com/gpu.present
+                operator: DoesNotExist
+    podAffinity:
+      preferredDuringSchedulingIgnoredDuringExecution:
+        - weight: 100
+          podAffinityTerm:
+            labelSelector:
+              matchExpressions:
+                - key: workflows.argoproj.io/completed
+                  operator: In
+                  values:
+                    - "false"
+            topologyKey: kubernetes.io/hostname
+
+  arguments:
+    parameters:
+      # Path on shared volume to datasets.csv
+      # Columns: mission_id, plot_id
+      - name: DATASETS_FILE
+      # Path on shared volume to detection_config.csv
+      # Columns: config_id, detector, chip_size, chip_stride, chip_overlap_percentage,
+      # resolution, batch_size, postprocessing_id
+      # postprocessing_id references a key in postprocessing_config.yaml.
+      # Can be empty for detectors that skip the postprocessing chain (e.g. geometric).
+      - name: DETECTION_CONFIG_FILE
+      # Path on shared volume to postprocessing_config.yaml
+      # Keys are postprocessing_ids; values are ordered lists of postprocessor steps with args.
+      # Referenced by postprocessing_id in detection_config.csv.
+      - name: POSTPROCESSING_CONFIG_FILE
+      - name: FIELD_TREES_FILE
+        value: "/data/argo-input/tree-detection-and-evaluation/ofo_ground-reference_trees.gpkg"
+      - name: PLOT_BOUNDS_FILE
+        value: "/data/argo-input/tree-detection-and-evaluation/ofo_ground-reference_plots.gpkg"
+      - name: S3_BUCKET_PUBLIC  # to  download chm, ortho, and shift files
+        value: "ofo-public"
+      - name: S3_BUCKET_INTERNAL  # to write outputs
+        value: "ofo-internal"
+      # S3 folder prefix for drone missions.
+      - name: S3_MISSIONS_FOLDER
+        value: "drone/missions_03"
+      # Which photogrammetry run to use.
+      - name: PHOTOGRAMMETRY_ID
+        value: "photogrammetry_03"
+      # All per-dataset temp products are saved under:
+      # TEMP_FOLDER/{{workflow.name}}/{mission_id}_{plot_id}/
+      # Per-detector outputs are nested under:
+      # TEMP_FOLDER/{{workflow.name}}/{mission_id}_{plot_id}/{config_id}/
+      - name: TEMP_FOLDER
+        value: "/data/argo-output/temp-dir"
+      # S3 prefix under which per-task eval_results.json files are uploaded.
+      # Full path: {S3_RESULTS_FOLDER}/{workflow.name}/{mission_id}_{plot_id}/{config_id}/eval_results.json
+      - name: S3_RESULTS_FOLDER
+        value: "drone/tdf-benchmark"
+      # TDF Docker image tag
+      - name: TDF_IMAGE_TAG
+        value: "pr-187"  # to be changed once merged
+      - name: SAM3_CHECKPOINT_PATH
+        value: "/data/argo-input/tree-detection-and-evaluation/checkpoints/sam3.pt"
+      - name: DETECTREE2_WEIGHTS_PATH
+        value: "/app/checkpoints/230103_randresize_full.pth"
+      - name: PHOTOGRAMMETRY_POSTPROCESSING_IMAGE_TAG
+        value: "feature-AP-add-preprocessing-script"  # to be changed once merged
+      - name: TREE_REGISTRATION_IMAGE_TAG
+        value: "pr-22"  # to be changed once merged
+      # Minimum tree height (meters) applied in two places:
+      #   - preprocess: drops field trees below this height before saving ground_truth.gpkg
+      #   - postprocess: drops detections below this height before saving detections.gpkg
+      # Field and drone trees above this height enter matching
+      - name: MIN_TREE_HEIGHT
+        value: "5.0"
+      # Controls which trees are included in evaluation results.
+      - name: EVAL_MIN_TREE_HEIGHT
+        value: "5.0"
+
+  volumes:
+    - name: data
+      persistentVolumeClaim:
+        claimName: ceph-share-rw-pvc2
+
+  templates:
+
+    # main: reads datasets.csv and fans out to one dataset DAG per (mission, plot).
+    # Also reads detection_config.csv once and passes the result to each dataset DAG.
+    # After all datasets complete, runs aggregate-results then cleanup.
+    # Uses a DAG so that aggregate-results and cleanup run even on partial failures.
+    - name: main
+      dag:
+        tasks:
+          - name: determine-datasets
+            template: determine-datasets
+          - name: determine-detector-combinations
+            template: determine-detector-combinations
+          - name: process-datasets
+            template: process-dataset-workflow
+            depends: "determine-datasets.Succeeded && determine-detector-combinations.Succeeded"
+            arguments:
+              parameters:
+                - name: mission-id
+                  value: "{{item.mission-id}}"
+                - name: plot-id
+                  value: "{{item.plot-id}}"
+                - name: detector-combinations
+                  value: "{{tasks.determine-detector-combinations.outputs.result}}"
+            withParam: "{{tasks.determine-datasets.outputs.result}}"
+          - name: aggregate-results
+            template: aggregate-results
+            depends: "process-datasets.Succeeded || process-datasets.Failed"
+          - name: cleanup
+            template: cleanup
+            depends: "aggregate-results.Succeeded || aggregate-results.Failed"
+            arguments:
+              parameters:
+                - name: dataset-dir
+                  value: "{{workflow.parameters.TEMP_FOLDER}}/{{workflow.name}}"
+
+    # process-dataset-workflow: DAG for a single (mission, plot) pair.
+    # Downloads and preprocesses data once, then fans out to all detector configs
+    # in parallel. 
+    - name: process-dataset-workflow
+      inputs:
+        parameters:
+          - name: mission-id
+          - name: plot-id
+          - name: detector-combinations
+      dag:
+        failFast: false
+        tasks:
+
+          # Step 1: Pull ortho, CHM, and shift file from S3 to the shared volume.
+          # field_trees and plot_bounds are already on the shared volume.
+          # Outputs local-files JSON with all file paths for downstream steps.
+          - name: download-input-data
+            template: download-input-data
+            arguments:
+              parameters:
+                - name: mission-id
+                  value: "{{inputs.parameters.mission-id}}"
+                - name: plot-id
+                  value: "{{inputs.parameters.plot-id}}"
+                - name: dataset-dir
+                  value: "{{workflow.parameters.TEMP_FOLDER}}/{{workflow.name}}/{{inputs.parameters.mission-id}}_{{inputs.parameters.plot-id}}"
+
+          # Step 2: Subset field trees by plot_id, apply shift, filter by min height,
+          # and crop ortho + CHM to the shifted plot boundary.
+          # Outputs preprocessed-local-files JSON with cropped raster paths.
+          - name: preprocess
+            template: preprocess
+            depends: "download-input-data.Succeeded"
+            arguments:
+              parameters:
+                - name: plot-id
+                  value: "{{inputs.parameters.plot-id}}"
+                - name: dataset-dir
+                  value: "{{workflow.parameters.TEMP_FOLDER}}/{{workflow.name}}/{{inputs.parameters.mission-id}}_{{inputs.parameters.plot-id}}"
+                - name: local-files
+                  value: "{{tasks.download-input-data.outputs.parameters.local-files}}"
+
+          # Step 3: Fan out to one detector DAG per config. All detector DAGs for
+          # this dataset run in parallel. Each gets its own subdirectory under
+          # the shared dataset-dir. Uses detector-combinations passed in from main.
+          - name: process-detector-workflow
+            template: process-detector-workflow
+            depends: "preprocess.Succeeded"
+            arguments:
+              parameters:
+                - name: mission-id
+                  value: "{{inputs.parameters.mission-id}}"
+                - name: plot-id
+                  value: "{{inputs.parameters.plot-id}}"
+                - name: config-id
+                  value: "{{item.config-id}}"
+                - name: detector
+                  value: "{{item.detector}}"
+                - name: detection-params-json
+                  value: "{{item.detection-params-json}}"
+                - name: postprocessing-id
+                  value: "{{item.postprocessing-id}}"
+                - name: dataset-dir
+                  value: "{{workflow.parameters.TEMP_FOLDER}}/{{workflow.name}}/{{inputs.parameters.mission-id}}_{{inputs.parameters.plot-id}}"
+                - name: preprocessed-local-files
+                  value: "{{tasks.preprocess.outputs.parameters.preprocessed-local-files}}"
+            withParam: "{{inputs.parameters.detector-combinations}}"
+
+    # process-detector-workflow: DAG for a single detector config.
+    # All steps read from the shared dataset-dir; outputs go to
+    # dataset-dir/{config-id}/
+    - name: process-detector-workflow
+      inputs:
+        parameters:
+          - name: mission-id
+          - name: plot-id
+          - name: config-id
+          - name: detector
+          - name: detection-params-json
+          - name: postprocessing-id
+          - name: dataset-dir
+          - name: preprocessed-local-files
+      dag:
+        failFast: false
+        tasks:
+
+          # Detect trees over the cropped rasters.
+          # Writes raw_detections.gpkg to {dataset-dir}/{config-id}/
+          - name: detect-trees
+            template: detect-trees
+            arguments:
+              parameters:
+                - name: detector
+                  value: "{{inputs.parameters.detector}}"
+                - name: detection-params-json
+                  value: "{{inputs.parameters.detection-params-json}}"
+                - name: detector-dir
+                  value: "{{inputs.parameters.dataset-dir}}/{{inputs.parameters.config-id}}"
+                - name: preprocessed-local-files
+                  value: "{{inputs.parameters.preprocessed-local-files}}"
+
+          # Apply postprocessing chain (or just height filter for geometric).
+          # Writes detections.gpkg to {dataset-dir}/{config-id}/
+          - name: postprocess
+            template: postprocess
+            depends: "detect-trees.Succeeded"
+            arguments:
+              parameters:
+                - name: postprocessing-id
+                  value: "{{inputs.parameters.postprocessing-id}}"
+                - name: detector
+                  value: "{{inputs.parameters.detector}}"
+                - name: detector-dir
+                  value: "{{inputs.parameters.dataset-dir}}/{{inputs.parameters.config-id}}"
+                - name: preprocessed-local-files
+                  value: "{{inputs.parameters.preprocessed-local-files}}"
+
+          # Match predicted points against ground truth, compute P/R/F1.
+          # Reads ground_truth.gpkg from dataset-dir
+          # Writes eval_results.json to {dataset-dir}/{config-id}/
+          - name: evaluate
+            template: evaluate
+            depends: "postprocess.Succeeded"
+            arguments:
+              parameters:
+                - name: config-id
+                  value: "{{inputs.parameters.config-id}}"
+                - name: postprocessing-id
+                  value: "{{inputs.parameters.postprocessing-id}}"
+                - name: detector
+                  value: "{{inputs.parameters.detector}}"
+                - name: detection-params-json
+                  value: "{{inputs.parameters.detection-params-json}}"
+                - name: mission-id
+                  value: "{{inputs.parameters.mission-id}}"
+                - name: plot-id
+                  value: "{{inputs.parameters.plot-id}}"
+                - name: dataset-dir
+                  value: "{{inputs.parameters.dataset-dir}}"
+                - name: detector-dir
+                  value: "{{inputs.parameters.dataset-dir}}/{{inputs.parameters.config-id}}"
+
+          # Upload eval_results.json and detections.gpkg to ofo-internal s3 bucket.
+          # Temp files are cleaned up at the main level after aggregate-results completes.
+          - name: upload-eval-results
+            template: upload-eval-results
+            depends: "evaluate.Succeeded"
+            arguments:
+              parameters:
+                - name: mission-id
+                  value: "{{inputs.parameters.mission-id}}"
+                - name: plot-id
+                  value: "{{inputs.parameters.plot-id}}"
+                - name: config-id
+                  value: "{{inputs.parameters.config-id}}"
+                - name: detector-dir
+                  value: "{{inputs.parameters.dataset-dir}}/{{inputs.parameters.config-id}}"
+
+    # determine-datasets: reads datasets.csv and emits a JSON array of
+    # {mission-id, plot-id} dicts for the outer fan-out.
+    - name: determine-datasets
+      script:
+        image: python:3.9
+        volumeMounts:
+          - name: data
+            mountPath: /data
+        resources:
+          requests:
+            cpu: 1
+            memory: "2Gi"
+          limits:
+            memory: "4Gi"
+        command: ["python"]
+        source: |
+          import json
+          import sys
+          import csv
+
+          datasets_file = "{{workflow.parameters.DATASETS_FILE}}"
+
+          with open(datasets_file, "r") as f:
+              datasets = list(csv.DictReader(f))
+
+          result = [
+              {"mission-id": row["mission_id"], "plot-id": row["plot_id"]}
+              for row in datasets
+          ]
+
+          json.dump(result, sys.stdout)
+
+    # determine-detector-combinations: reads detection_config.csv once at the
+    # main level and emits a JSON array of detector config dicts.
+    # The result is passed to each process-dataset-workflow invocation and used
+    # directly as the withParam for the inner fan-out.
+    # postprocessing_id is passed through as-is; empty string means no postprocessing.
+    - name: determine-detector-combinations
+      script:
+        image: python:3.9
+        volumeMounts:
+          - name: data
+            mountPath: /data
+        resources:
+          requests:
+            cpu: 1
+            memory: "2Gi"
+          limits:
+            memory: "4Gi"
+        command: ["python"]
+        source: |
+          import json
+          import sys
+          import csv
+          import base64
+
+          detection_config_file = "{{workflow.parameters.DETECTION_CONFIG_FILE}}"
+
+          with open(detection_config_file, "r") as f:
+              configs = list(csv.DictReader(f))
+
+          result = []
+          for config in configs:
+              # Drop detection fields that are empty or not applicable to this detector.
+              # postprocessing_id is handled separately and excluded here.
+              detection_params = {
+                  k: v for k, v in config.items()
+                  if k not in ("config_id", "detector", "postprocessing_id")
+                  and v is not None
+                  and v != ""
+              }
+
+              # postprocessing_id is passed as empty string if not set.
+              # The postprocess step branches on whether this is empty.
+              postprocessing_id = config.get("postprocessing_id", "") or ""
+
+              # Note: detection-params-json is base64 encoded to safely pass arbitrary JSON through Argo's parameter system, 
+              # which had issues with special characters in raw JSON strings.
+              result.append({
+                  "config-id":             config["config_id"],
+                  "detector":              config["detector"],
+                  # bytes.encode() -> UTF-8 bytes going in to base64; bytes.decode() -> ASCII string coming out of base64.
+                  "detection-params-json": base64.b64encode(json.dumps(detection_params).encode()).decode(),
+                  "postprocessing-id":     postprocessing_id,
+              })
+
+          json.dump(result, sys.stdout)
+
+    # download-input-data: pulls ortho, CHM, and shift file from S3.
+    # All files land in dataset-dir (shared across all detector configs).
+    # Outputs /tmp/file-paths.json with local paths for all files.
+    - name: download-input-data
+      inputs:
+        parameters:
+          - name: mission-id
+          - name: plot-id
+          - name: dataset-dir
+      outputs:
+        parameters:
+          - name: local-files
+            valueFrom:
+              path: /tmp/file-paths.json
+      container:
+        image: rclone/rclone:sha-7a53f24
+        volumeMounts:
+          - name: data
+            mountPath: /data
+        command: ["/bin/sh", "-lc"]
+        args:
+          - |
+            set -euo pipefail
+
+            MISSION_ID="{{inputs.parameters.mission-id}}"
+            PLOT_ID="{{inputs.parameters.plot-id}}"
+            DATASET_DIR="{{inputs.parameters.dataset-dir}}"
+            S3_BUCKET_PUBLIC="{{workflow.parameters.S3_BUCKET_PUBLIC}}"
+            S3_MISSIONS_FOLDER="{{workflow.parameters.S3_MISSIONS_FOLDER}}"
+            PHOTOGRAMMETRY_ID="{{workflow.parameters.PHOTOGRAMMETRY_ID}}"
+
+            ORTHO_S3="${S3_MISSIONS_FOLDER}/${MISSION_ID}/${PHOTOGRAMMETRY_ID}/full/${MISSION_ID}_ortho-dsm-ptcloud.tif"
+            CHM_S3="${S3_MISSIONS_FOLDER}/${MISSION_ID}/${PHOTOGRAMMETRY_ID}/full/${MISSION_ID}_chm-mesh.tif"
+            SHIFT_S3="${S3_MISSIONS_FOLDER}/${MISSION_ID}/${PHOTOGRAMMETRY_ID}/ground-reference-shifts/${MISSION_ID}_${PLOT_ID}_ground-reference-shift.csv"
+
+            ORTHO_FILE="${DATASET_DIR}/${MISSION_ID}_ortho-dsm-ptcloud.tif"
+            CHM_FILE="${DATASET_DIR}/${MISSION_ID}_chm-mesh.tif"
+            SHIFT_FILE="${DATASET_DIR}/${MISSION_ID}_${PLOT_ID}_ground-reference-shift.csv"
+
+            mkdir -p "$DATASET_DIR"
+
+            # Download orthomosaic
+            echo "[rclone] Downloading orthomosaic: s3:${S3_BUCKET_PUBLIC}/${ORTHO_S3}"
+            rclone copyto "s3:${S3_BUCKET_PUBLIC}/${ORTHO_S3}" "$ORTHO_FILE" \
+              --transfers 8 --checkers 8 --retries 5 --retries-sleep=15s \
+              --stats 15s --stats-log-level NOTICE
+
+            if [ ! -f "$ORTHO_FILE" ]; then
+              echo "[download] ERROR: Orthomosaic not found: $ORTHO_FILE"
+              exit 1
+            fi
+            echo "[download] Orthomosaic verified."
+
+            # Download CHM
+            echo "[rclone] Downloading CHM: s3:${S3_BUCKET_PUBLIC}/${CHM_S3}"
+            rclone copyto "s3:${S3_BUCKET_PUBLIC}/${CHM_S3}" "$CHM_FILE" \
+              --transfers 8 --checkers 8 --retries 5 --retries-sleep=15s \
+              --stats 15s --stats-log-level NOTICE
+
+            if [ ! -f "$CHM_FILE" ]; then
+              echo "[download] ERROR: CHM not found: $CHM_FILE"
+              exit 1
+            fi
+            echo "[download] CHM verified."
+
+            # Download shift file
+            echo "[rclone] Downloading shift file: s3:${S3_BUCKET_PUBLIC}/${SHIFT_S3}"
+            rclone copyto "s3:${S3_BUCKET_PUBLIC}/${SHIFT_S3}" "$SHIFT_FILE" \
+              --retries 5 --retries-sleep=15s \
+              --stats 15s --stats-log-level NOTICE
+
+            if [ ! -f "$SHIFT_FILE" ]; then
+              echo "[download] ERROR: Shift file not found: $SHIFT_FILE"
+              exit 1
+            fi
+            echo "[download] Shift file verified."
+
+            # Write local file paths for downstream steps.
+            # field_trees and plot_bounds point to shared volume paths — no download needed.
+            printf '{"ortho":"%s","chm":"%s","shift":"%s","field_trees":"%s","plot_bounds":"%s"}' \
+              "$ORTHO_FILE" \
+              "$CHM_FILE" \
+              "$SHIFT_FILE" \
+              "{{workflow.parameters.FIELD_TREES_FILE}}" \
+              "{{workflow.parameters.PLOT_BOUNDS_FILE}}" \
+              > /tmp/file-paths.json
+
+            echo "[download] File paths written to /tmp/file-paths.json"
+        resources:
+          requests:
+            cpu: 2
+            memory: "4Gi"
+          limits:
+            memory: "8Gi"
+        env:
+          - name: RCLONE_CONFIG_S3_TYPE
+            value: "s3"
+          - name: RCLONE_CONFIG_S3_PROVIDER
+            valueFrom:
+              secretKeyRef:
+                name: s3-credentials
+                key: provider
+          - name: RCLONE_CONFIG_S3_ENDPOINT
+            valueFrom:
+              secretKeyRef:
+                name: s3-credentials
+                key: endpoint
+          - name: RCLONE_CONFIG_S3_ACCESS_KEY_ID
+            valueFrom:
+              secretKeyRef:
+                name: s3-credentials
+                key: access_key
+          - name: RCLONE_CONFIG_S3_SECRET_ACCESS_KEY
+            valueFrom:
+              secretKeyRef:
+                name: s3-credentials
+                key: secret_key
+
+    # preprocess: Runs once per (mission, plot); output is shared by all detector configs.
+    # Field trees:
+    #   - Subsets global field trees by plot_id
+    #   - Applies shift
+    #   - Filters by MIN_TREE_HEIGHT
+    #   - Writes dataset-dir/ground_truth.gpkg
+    #
+    # Raster cropping:
+    #   - Reads plot bounds, subsets to this plot_id
+    #   - Applies shift to plot bounds
+    #   - Crops ortho -> dataset-dir/full/cropped_ortho.tif
+    #   - Crops CHM   -> dataset-dir/full/cropped_chm.tif
+    #
+    # Outputs preprocessed-local-files JSON: same as local-files but with
+    # ortho and chm pointing to the cropped versions.
+    - name: preprocess
+      inputs:
+        parameters:
+          - name: plot-id
+          - name: dataset-dir
+          - name: local-files
+      outputs:
+        parameters:
+          - name: preprocessed-local-files
+            valueFrom:
+              path: /tmp/preprocessed-file-paths.json
+      container:
+        image: ghcr.io/open-forest-observatory/photogrammetry-postprocessing:{{workflow.parameters.PHOTOGRAMMETRY_POSTPROCESSING_IMAGE_TAG}}
+        volumeMounts:
+          - name: data
+            mountPath: /data
+        resources:
+          requests:
+            cpu: 4
+            memory: "16Gi"
+          limits:
+            memory: "32Gi"
+        command: [
+            "python", "-m", "postprocessing.preprocess",
+            "--plot-id", "{{inputs.parameters.plot-id}}",
+            "--dataset-dir", "{{inputs.parameters.dataset-dir}}",
+            "--local-files", "{{inputs.parameters.local-files}}",
+            "--min-tree-height", "{{workflow.parameters.MIN_TREE_HEIGHT}}",
+            "--output-path", "/tmp/preprocessed-file-paths.json",
+          ]
+
+    # detect-trees: dispatches to the correct TDF entrypoint based on detector.
+    # Reads cropped rasters from preprocessed-local-files.
+    # Writes raw_detections.gpkg to detector-dir.
+    - name: detect-trees
+      inputs:
+        parameters:
+          - name: detector
+          - name: detection-params-json
+          - name: detector-dir
+          - name: preprocessed-local-files
+      affinity: {}
+      container:
+        image: ghcr.io/open-forest-observatory/tree-detection-framework:{{workflow.parameters.TDF_IMAGE_TAG}}
+        volumeMounts:
+          - name: data
+            mountPath: /data
+        resources:
+          requests:
+            cpu: "4"
+            memory: "16Gi"
+            nvidia.com/gpu: "1"  # TODO: GPU is not needed for geometric detector. Handle that witihin CPU.
+          limits:
+            memory: "32Gi"
+            nvidia.com/gpu: "1"
+        command: ["/bin/bash", "-lc"]
+        args:
+          - |
+            set -euo pipefail
+
+            DETECTION_PARAMS_JSON=$(printf '%s' '{{inputs.parameters.detection-params-json}}' | base64 -d)
+
+            python -m tree_detection_framework.entrypoints.detect_trees \
+              --detector "{{inputs.parameters.detector}}" \
+              --detection-params-json "$DETECTION_PARAMS_JSON" \
+              --detector-dir "{{inputs.parameters.detector-dir}}" \
+              --preprocessed-local-files '{{inputs.parameters.preprocessed-local-files}}' \
+              --detectree2-weights-path "{{workflow.parameters.DETECTREE2_WEIGHTS_PATH}}" \
+              --sam3-checkpoint-path "{{workflow.parameters.SAM3_CHECKPOINT_PATH}}"
+
+    # postprocess: applies the postprocessing chain for this postprocessing_id.
+    # Geometric (empty postprocessing_id): only applies min height filter.
+    # CV detectors: looks up postprocessing_id in postprocessing_config.yaml,
+    # applies chain in order, then converts polygons to points via chm_max,
+    # then applies min height filter.
+    # Writes detections.gpkg to detector-dir.
+    - name: postprocess
+      inputs:
+        parameters:
+          - name: postprocessing-id
+          - name: detector
+          - name: detector-dir
+          - name: preprocessed-local-files
+      container:
+        image: ghcr.io/open-forest-observatory/tree-detection-framework:{{workflow.parameters.TDF_IMAGE_TAG}}
+        volumeMounts:
+          - name: data
+            mountPath: /data
+        resources:
+          requests:
+            cpu: "4"
+            memory: "16Gi"
+          limits:
+            memory: "16Gi"
+        command: [
+            "python", "-m", "tree_detection_framework.entrypoints.postprocess",
+            "--postprocessing-id", "{{inputs.parameters.postprocessing-id}}",
+            "--detector-dir", "{{inputs.parameters.detector-dir}}",
+            "--preprocessed-local-files", "{{inputs.parameters.preprocessed-local-files}}",
+            "--min-tree-height", "{{workflow.parameters.MIN_TREE_HEIGHT}}",
+            "--postprocessing-config-file", "{{workflow.parameters.POSTPROCESSING_CONFIG_FILE}}",
+          ]
+
+    # evaluate: matches predicted tree points against ground truth.
+    # Reads ground_truth.gpkg from dataset-dir (shared across detectors).
+    # Reads detections.gpkg from detector-dir.
+    # Writes eval_results.json to detector-dir.
+    - name: evaluate
+      inputs:
+        parameters:
+          - name: config-id
+          - name: postprocessing-id
+          - name: detector
+          - name: detection-params-json
+          - name: mission-id
+          - name: plot-id
+          - name: dataset-dir
+          - name: detector-dir
+      script:
+        image: ghcr.io/open-forest-observatory/tree-registration-and-matching:{{workflow.parameters.TREE_REGISTRATION_IMAGE_TAG}}
+        volumeMounts:
+          - name: data
+            mountPath: /data
+        resources:
+          requests:
+            cpu: "2"
+            memory: "8Gi"
+          limits:
+            memory: "16Gi"
+        command: ["python"]
+        source: |
+          import base64
+          import json
+          from pathlib import Path
+          from datetime import date
+
+          import geopandas as gpd
+
+          from tree_registration_and_matching.eval import obj_mee_matching
+          from tree_registration_and_matching.utils import ensure_projected_CRS
+
+          config_id = "{{inputs.parameters.config-id}}"
+          postprocessing_id = "{{inputs.parameters.postprocessing-id}}"
+          detector = "{{inputs.parameters.detector}}"
+          mission_id = "{{inputs.parameters.mission-id}}"
+          plot_id = "{{inputs.parameters.plot-id}}"
+          dataset_dir = Path("{{inputs.parameters.dataset-dir}}")
+          detector_dir = Path("{{inputs.parameters.detector-dir}}")
+          detection_params = json.loads(base64.b64decode('{{inputs.parameters.detection-params-json}}').decode())
+
+          min_tree_height   = float("{{workflow.parameters.EVAL_MIN_TREE_HEIGHT}}")
+
+          ground_truth_path = dataset_dir / "ground_truth.gpkg"
+          detections_path = detector_dir / "detections.gpkg"
+          shifted_plot_bounds_path = dataset_dir / "shifted_plot_bounds.gpkg"
+          output_path = detector_dir / "eval_results.json"
+
+          detections = gpd.read_file(detections_path)
+          ground_truth = gpd.read_file(ground_truth_path)
+          obs_bounds = gpd.read_file(shifted_plot_bounds_path)
+
+          print(f"[evaluate] {len(detections)} predictions, {len(ground_truth)} ground truth trees")
+
+          ground_truth = ensure_projected_CRS(ground_truth)
+          detections   = detections.to_crs(ground_truth.crs)
+          obs_bounds   = obs_bounds.to_crs(ground_truth.crs)
+
+          f1, metrics = obj_mee_matching(
+              shifted_field_trees=ground_truth,
+              drone_trees=detections,
+              obs_bounds=obs_bounds,
+              min_height=min_tree_height,
+              return_all_metrics=True,
+          )
+
+          # Contents of the eval_results.json file.
+          results = {
+              "mission_id":        mission_id,
+              "plot_id":           plot_id,
+              "config_id":         config_id,
+              "postprocessing_id": postprocessing_id,
+              "detector":          detector,
+              "run_date":          str(date.today()),
+              "min_height_filter": min_tree_height,
+              **detection_params,
+              **metrics,
+          }
+
+          output_path.parent.mkdir(parents=True, exist_ok=True)
+          with open(output_path, "w") as f:
+              json.dump(results, f, indent=2)
+
+          print(f"[evaluate] Results written to {output_path}")
+
+    # upload-eval-results: uploads eval_results.json and detections.gpkg to
+    # ofo-internal. Temp files are cleaned up at the main level after
+    # aggregate-results completes.
+    - name: upload-eval-results
+      inputs:
+        parameters:
+          - name: mission-id
+          - name: plot-id
+          - name: config-id
+          - name: detector-dir
+      container:
+        image: rclone/rclone:sha-7a53f24
+        volumeMounts:
+          - name: data
+            mountPath: /data
+        command: ["/bin/sh", "-lc"]
+        args:
+          - |
+            set -euo pipefail
+
+            DETECTOR_DIR="{{inputs.parameters.detector-dir}}"
+            MISSION_ID="{{inputs.parameters.mission-id}}"
+            PLOT_ID="{{inputs.parameters.plot-id}}"
+            CONFIG_ID="{{inputs.parameters.config-id}}"
+
+            # Upload eval_results.json to ofo-internal
+            EVAL_SRC="${DETECTOR_DIR}/eval_results.json"
+            EVAL_DST="s3:{{workflow.parameters.S3_BUCKET_INTERNAL}}/{{workflow.parameters.S3_RESULTS_FOLDER}}/{{workflow.name}}/${MISSION_ID}_${PLOT_ID}/${CONFIG_ID}/eval_results.json"
+
+            echo "[rclone] Uploading eval_results.json: $EVAL_SRC -> $EVAL_DST"
+            rclone copyto "$EVAL_SRC" "$EVAL_DST" \
+              --retries 5 --retries-sleep=15s \
+              --stats 15s --stats-log-level NOTICE
+
+            echo "[rclone] eval_results.json upload successful."
+
+            # Upload detections.gpkg to private S3
+            DETECTIONS_SRC="${DETECTOR_DIR}/detections.gpkg"
+            DETECTIONS_DST="s3:{{workflow.parameters.S3_BUCKET_INTERNAL}}/tree-detection-and-eval/{{workflow.name}}/${MISSION_ID}_${PLOT_ID}/${CONFIG_ID}/detections.gpkg"
+
+            echo "[rclone] Uploading detections.gpkg: $DETECTIONS_SRC -> $DETECTIONS_DST"
+            rclone copyto "$DETECTIONS_SRC" "$DETECTIONS_DST" \
+              --retries 5 --retries-sleep=15s \
+              --stats 15s --stats-log-level NOTICE
+
+            echo "[rclone] detections.gpkg upload successful."
+        resources:
+          requests:
+            cpu: 500m
+            memory: "256Mi"
+          limits:
+            memory: "1Gi"
+        env:
+          - name: RCLONE_CONFIG_S3_TYPE
+            value: "s3"
+          - name: RCLONE_CONFIG_S3_PROVIDER
+            valueFrom:
+              secretKeyRef:
+                name: s3-credentials
+                key: provider
+          - name: RCLONE_CONFIG_S3_ENDPOINT
+            valueFrom:
+              secretKeyRef:
+                name: s3-credentials
+                key: endpoint
+          - name: RCLONE_CONFIG_S3_ACCESS_KEY_ID
+            valueFrom:
+              secretKeyRef:
+                name: s3-credentials
+                key: access_key
+          - name: RCLONE_CONFIG_S3_SECRET_ACCESS_KEY
+            valueFrom:
+              secretKeyRef:
+                name: s3-credentials
+                key: secret_key
+
+    # cleanup: deletes the shared dataset temp directory.
+    # Runs after all detector tasks finish (succeeded or failed).
+    - name: cleanup
+      inputs:
+        parameters:
+          - name: dataset-dir
+      container:
+        image: alpine:latest
+        volumeMounts:
+          - name: data
+            mountPath: /data
+        command: ["/bin/sh", "-lc"]
+        args:
+          - |
+            set -euo pipefail
+            echo "[cleanup] Removing dataset temp directory: {{inputs.parameters.dataset-dir}}"
+            rm -rf "{{inputs.parameters.dataset-dir}}"
+            echo "[cleanup] Done"
+        resources:
+          requests:
+            cpu: 100m
+            memory: "128Mi"
+          limits:
+            memory: "256Mi"
+
+    # aggregate-results: runs once after all dataset workflows complete.
+    # Reads all eval_results.json files from the shared volume, merges into a
+    # single CSV, and uploads to ofo-internal.
+    # Split into two steps because python:3.9 doesn't include rclone.
+    - name: aggregate-results
+      steps:
+        - - name: build-summary
+            template: build-eval-summary-csv
+        - - name: upload-summary
+            template: upload-eval-summary-csv
+
+
+    # build-eval-summary-csv: reads all eval_results.json files from the shared
+    # volume and merges them into a single CSV at
+    # TEMP_FOLDER/workflow.name/workflow.name_eval_results.csv.
+    - name: build-eval-summary-csv
+      script:
+        image: python:3.9
+        volumeMounts:
+          - name: data
+            mountPath: /data
+        resources:
+          requests:
+            cpu: 1
+            memory: "4Gi"
+          limits:
+            memory: "8Gi"
+        command: ["python"]
+        source: |
+          import csv
+          import json
+          from pathlib import Path
+
+          workflow_name = "{{workflow.name}}"
+          temp_folder   = "{{workflow.parameters.TEMP_FOLDER}}"
+
+          run_dir = Path(temp_folder) / workflow_name
+          result_files = sorted(run_dir.rglob("eval_results.json"))
+          print(f"[aggregate] Found {len(result_files)} eval_results.json files under {run_dir}")
+
+          if not result_files:
+              raise RuntimeError(f"No eval_results.json files found under {run_dir}")
+
+          records = []
+          for f in result_files:
+              with open(f) as fh:
+                  records.append(json.load(fh))
+
+          summary_path = run_dir / f"{workflow_name}_eval_results.csv"
+          fieldnames = list(records[0].keys())
+          with open(summary_path, "w", newline="") as fh:
+              writer = csv.DictWriter(fh, fieldnames=fieldnames, extrasaction="ignore")
+              writer.writeheader()
+              writer.writerows(records)
+
+          print(f"[aggregate] Wrote {len(records)} rows to {summary_path}")
+
+
+    # upload-eval-summary-csv: uploads the aggregated eval_results.csv to
+    # ofo-internal/tree-detection-and-eval/workflow.name/.
+    - name: upload-eval-summary-csv
+      container:
+        image: rclone/rclone:sha-7a53f24
+        volumeMounts:
+          - name: data
+            mountPath: /data
+        command: ["/bin/sh", "-lc"]
+        args:
+          - |
+            set -euo pipefail
+
+            WORKFLOW_NAME="{{workflow.name}}"
+            TEMP_FOLDER="{{workflow.parameters.TEMP_FOLDER}}"
+
+            SRC="${TEMP_FOLDER}/${WORKFLOW_NAME}/${WORKFLOW_NAME}_eval_results.csv"
+            DST="s3:{{workflow.parameters.S3_BUCKET_INTERNAL}}/tree-detection-and-eval/${WORKFLOW_NAME}/${WORKFLOW_NAME}_eval_results.csv"
+
+            echo "[rclone] Uploading aggregated eval results: $SRC -> $DST"
+            rclone copyto "$SRC" "$DST" \
+              --retries 5 --retries-sleep=15s \
+              --stats 15s --stats-log-level NOTICE
+
+            echo "[rclone] Upload successful."
+        resources:
+          requests:
+            cpu: 500m
+            memory: "256Mi"
+          limits:
+            memory: "1Gi"
+        env:
+          - name: RCLONE_CONFIG_S3_TYPE
+            value: "s3"
+          - name: RCLONE_CONFIG_S3_PROVIDER
+            valueFrom:
+              secretKeyRef:
+                name: s3-credentials
+                key: provider
+          - name: RCLONE_CONFIG_S3_ENDPOINT
+            valueFrom:
+              secretKeyRef:
+                name: s3-credentials
+                key: endpoint
+          - name: RCLONE_CONFIG_S3_ACCESS_KEY_ID
+            valueFrom:
+              secretKeyRef:
+                name: s3-credentials
+                key: access_key
+          - name: RCLONE_CONFIG_S3_SECRET_ACCESS_KEY
+            valueFrom:
+              secretKeyRef:
+                name: s3-credentials
+                key: secret_key
