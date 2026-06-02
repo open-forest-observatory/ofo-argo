@@ -80,10 +80,6 @@ def preprocess(
     # Destination path to save the preprocessed field trees
     ground_truth_path = dataset_dir / "ground_truth.gpkg"
 
-    # Create the "full" directory for cropped rasters if it doesn't exist. This is where
-    # crop_raster_save_cog writes to {output_path}/full/{filename}
-    (dataset_dir / "full").mkdir(parents=True, exist_ok=True)
-
     # Load field trees
     field_trees = gpd.read_file(field_trees_path)
     field_trees = field_trees[field_trees["plot_id"] == plot_id].copy()
@@ -151,24 +147,20 @@ def preprocess(
     plot_bounds_buffered = plot_bounds_buffered.to_crs(bounds_original_crs)
 
     print(f"[preprocess] Cropping orthomosaic to plot bounds")
+    cropped_ortho = dataset_dir / "cropped_ortho.tif"
     crop_raster_save_cog(
         raster_filepath=ortho_path,
-        output_filename="cropped_ortho.tif",
+        output_filepath=cropped_ortho,
         mission_polygon=plot_bounds_buffered,
-        output_path=str(dataset_dir),
     )
 
     print(f"[preprocess] Cropping CHM to plot bounds")
+    cropped_chm = dataset_dir / "cropped_chm.tif"
     crop_raster_save_cog(
         raster_filepath=chm_path,
-        output_filename="cropped_chm.tif",
+        output_filepath=cropped_chm,
         mission_polygon=plot_bounds_buffered,
-        output_path=str(dataset_dir),
     )
-
-    # crop_raster_save_cog saves the outputs in a full/ subdirectory, so we construct those paths.
-    cropped_ortho = dataset_dir / "full" / "cropped_ortho.tif"
-    cropped_chm = dataset_dir / "full" / "cropped_chm.tif"
 
     # Check that the cropped files were created successfully
     for f in [cropped_ortho, cropped_chm]:
