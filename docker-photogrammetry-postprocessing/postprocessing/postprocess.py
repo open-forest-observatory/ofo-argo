@@ -504,10 +504,10 @@ def postprocess_photogrammetry_containerized(
             try:
                 crop_raster_save_cog(
                     raster_filepath=row["full_path"],
-                    output_filename=row["postprocessed_filename"],
+                    output_filepath=postprocessed_path / row["postprocessed_filename"],
                     mission_polygon=mission_polygon,
-                    output_path=postprocessed_path,
                 )
+
             except Exception as e:
                 print(
                     f"  Warning: Failed to process {row['photogrammetry_output_filename']}: {e}"
