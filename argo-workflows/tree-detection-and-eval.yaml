@@ -86,7 +86,7 @@ spec:
       - name: PHOTOGRAMMETRY_POSTPROCESSING_IMAGE_TAG
         value: "feature-AP-add-preprocessing-script"  # to be changed once merged
       - name: TREE_REGISTRATION_IMAGE_TAG
-        value: "pr-22"  # to be changed once merged
+        value: "main"
       # Minimum tree height (meters) applied in two places:
       #   - preprocess: drops field trees below this height before saving ground_truth.gpkg
       #   - postprocess: drops detections below this height before saving detections.gpkg
