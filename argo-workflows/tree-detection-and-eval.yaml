@@ -78,13 +78,13 @@ spec:
         value: "drone/tdf-benchmark"
       # TDF Docker image tag
       - name: TDF_IMAGE_TAG
-        value: "pr-187"  # to be changed once merged
+        value: "main"
       - name: SAM3_CHECKPOINT_PATH
         value: "/data/argo-input/tree-detection-and-evaluation/checkpoints/sam3.pt"
       - name: DETECTREE2_WEIGHTS_PATH
         value: "/app/checkpoints/230103_randresize_full.pth"
       - name: PHOTOGRAMMETRY_POSTPROCESSING_IMAGE_TAG
-        value: "feature-AP-add-preprocessing-script"  # to be changed once merged
+        value: "main"
       - name: TREE_REGISTRATION_IMAGE_TAG
         value: "main"
       # Minimum tree height (meters) applied in two places:
