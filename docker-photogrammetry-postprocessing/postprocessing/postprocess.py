@@ -178,7 +178,7 @@ def _crop_rgb_orthomosaic(src, geometries, output_filename):
 
 
 def crop_raster_save_cog(
-    raster_filepath, output_filename, mission_polygon, output_path
+    raster_filepath: str | Path, output_filepath: str | Path, mission_polygon: gpd.GeoDataFrame
 ):
     """
     Crop raster to mission polygon boundary and save as Cloud Optimized GeoTIFF (COG).
@@ -187,11 +187,13 @@ def crop_raster_save_cog(
     For other rasters, uses standard nodata value handling.
 
     Args:
-        raster_filepath: Path to input raster file
-        output_filename: Output filename
-        mission_polygon: GeoDataFrame containing mission boundary polygon
-        output_path: Base output directory path
+        raster_filepath (str | Path): Path to input raster file
+        output_filepath (str | Path): Path to save output file after cropping
+        mission_polygon (GeoDataFrame): GeoDataFrame containing mission boundary polygon
     """
+    # Ensure output_filepath is a Path object
+    output_filepath = Path(output_filepath)
+
     # Read raster
     with rasterio.open(raster_filepath) as src:
         # Reproject mission polygon to match raster CRS
@@ -206,7 +208,7 @@ def crop_raster_save_cog(
         colorinterp = None
         if _is_rgb_orthomosaic(src):
             cropped_data, cropped_transform, profile, colorinterp = (
-                _crop_rgb_orthomosaic(src, geometries, output_filename)
+                _crop_rgb_orthomosaic(src, geometries, output_filepath.name)
             )
         else:
             # Standard handling for non-RGB rasters (elevation data, etc.)
@@ -219,7 +221,7 @@ def crop_raster_save_cog(
                 nodata_value = -32767
                 output_dtype = "int16"
                 print(
-                    f"  Warning: {output_filename} has no nodata defined. "
+                    f"  Warning: {output_filepath.name} has no nodata defined. "
                     "Promoting uint8 to int16 to enable nodata masking."
                 )
             else:
@@ -255,15 +257,14 @@ def crop_raster_save_cog(
                 cropped_data = cropped_data.astype(output_dtype)
 
         # Write output
-        output_file_path = os.path.join(output_path, "full", output_filename)
-        with rasterio.open(output_file_path, "w", **profile) as dst:
+        with rasterio.open(output_filepath, "w", **profile) as dst:
             dst.write(cropped_data)
 
             # Set color interpretation for RGBA so GIS software recognizes alpha band
             if colorinterp is not None:
                 dst.colorinterp = colorinterp
 
-    print(f"  Saved COG: {output_filename}")
+    print(f"  Saved COG: {output_filepath}")
 
 
 def make_chm(dsm_filepath, dtm_filepath):
@@ -503,10 +504,10 @@ def postprocess_photogrammetry_containerized(
             try:
                 crop_raster_save_cog(
                     raster_filepath=row["full_path"],
-                    output_filename=row["postprocessed_filename"],
+                    output_filepath=postprocessed_path / row["postprocessed_filename"],
                     mission_polygon=mission_polygon,
-                    output_path=postprocessed_path,
                 )
+
             except Exception as e:
                 print(
                     f"  Warning: Failed to process {row['photogrammetry_output_filename']}: {e}"
