@@ -178,7 +178,9 @@ def _crop_rgb_orthomosaic(src, geometries, output_filename):
 
 
 def crop_raster_save_cog(
-    raster_filepath: str | Path, output_filepath: str | Path, mission_polygon: gpd.GeoDataFrame
+    raster_filepath: str | Path,
+    output_filepath: str | Path,
+    mission_polygon: gpd.GeoDataFrame,
 ):
     """
     Crop raster to mission polygon boundary and save as Cloud Optimized GeoTIFF (COG).

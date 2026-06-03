@@ -61,7 +61,7 @@ def preprocess(
     output_path: Path | None = None,
 ):
     """
-    Preprocesses the field trees and rasters for a single plot. 
+    Preprocesses the field trees and rasters for a single plot.
 
     Args:
         plot_id: The plot ID to subset the field trees and plot bounds.
@@ -92,7 +92,9 @@ def preprocess(
     plot_bounds = plot_bounds[plot_bounds["plot_id"] == plot_id].copy()
 
     if len(plot_bounds) == 0:
-        raise ValueError(f"No plot bounds found for plot_id={plot_id} in {plot_bounds_path}")
+        raise ValueError(
+            f"No plot bounds found for plot_id={plot_id} in {plot_bounds_path}"
+        )
 
     # Load the shift information
     shift_df = pd.read_csv(shift_file_path)
@@ -102,11 +104,9 @@ def preprocess(
 
     # Convert field trees to the shift CRS
     original_crs = field_trees.crs
-    field_trees  = field_trees.to_crs(shift_crs)
+    field_trees = field_trees.to_crs(shift_crs)
     # Apply the shift to the field trees
-    field_trees["geometry"] = field_trees.geometry.translate(
-        xoff=shift_x, yoff=shift_y
-    )
+    field_trees["geometry"] = field_trees.geometry.translate(xoff=shift_x, yoff=shift_y)
     # Convert back to the original CRS
     field_trees = field_trees.to_crs(original_crs)
 
@@ -128,9 +128,7 @@ def preprocess(
     # so that they are aligned with the shifted trees and rasters.
     bounds_original_crs = plot_bounds.crs
     plot_bounds = plot_bounds.to_crs(shift_crs)
-    plot_bounds["geometry"] = plot_bounds.geometry.translate(
-        xoff=shift_x, yoff=shift_y
-    )
+    plot_bounds["geometry"] = plot_bounds.geometry.translate(xoff=shift_x, yoff=shift_y)
     plot_bounds = plot_bounds.to_crs(bounds_original_crs)
 
     # Save the shifted plot bounds, which will be used for cropping the rasters and
@@ -164,7 +162,9 @@ def preprocess(
     # Check that the cropped files were created successfully
     for f in [cropped_ortho, cropped_chm]:
         if not f.exists():
-            raise RuntimeError(f"[preprocess] ERROR: expected cropped file not found: {f}")
+            raise RuntimeError(
+                f"[preprocess] ERROR: expected cropped file not found: {f}"
+            )
 
     print(f"[preprocess] Cropped ortho: {cropped_ortho}")
     print(f"[preprocess] Cropped CHM:   {cropped_chm}")
@@ -174,7 +174,7 @@ def preprocess(
         preprocessed_files = {
             **local_files,
             "ortho": str(cropped_ortho),
-            "chm":   str(cropped_chm),
+            "chm": str(cropped_chm),
         }
         output_path.parent.mkdir(parents=True, exist_ok=True)
         with open(output_path, "w") as f:
