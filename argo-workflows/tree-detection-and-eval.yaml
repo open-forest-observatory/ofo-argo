@@ -196,8 +196,6 @@ spec:
                   value: "{{item.config-id}}"
                 - name: detector
                   value: "{{item.detector}}"
-                - name: detection-params-json
-                  value: "{{item.detection-params-json}}"
                 - name: postprocessing-id
                   value: "{{item.postprocessing-id}}"
                 - name: dataset-dir
@@ -216,7 +214,6 @@ spec:
           - name: plot-id
           - name: config-id
           - name: detector
-          - name: detection-params-json
           - name: postprocessing-id
           - name: dataset-dir
           - name: preprocessed-local-files
@@ -230,10 +227,10 @@ spec:
             template: detect-trees
             arguments:
               parameters:
+                - name: config-id
+                  value: "{{inputs.parameters.config-id}}"
                 - name: detector
                   value: "{{inputs.parameters.detector}}"
-                - name: detection-params-json
-                  value: "{{inputs.parameters.detection-params-json}}"
                 - name: detector-dir
                   value: "{{inputs.parameters.dataset-dir}}/{{inputs.parameters.config-id}}"
                 - name: preprocessed-local-files
@@ -269,8 +266,6 @@ spec:
                   value: "{{inputs.parameters.postprocessing-id}}"
                 - name: detector
                   value: "{{inputs.parameters.detector}}"
-                - name: detection-params-json
-                  value: "{{inputs.parameters.detection-params-json}}"
                 - name: mission-id
                   value: "{{inputs.parameters.mission-id}}"
                 - name: plot-id
@@ -350,7 +345,6 @@ spec:
           import json
           import sys
           import csv
-          import base64
 
           detection_config_file = "{{workflow.parameters.DETECTION_CONFIG_FILE}}"
 
@@ -359,27 +353,12 @@ spec:
 
           result = []
           for config in configs:
-              # Drop detection fields that are empty or not applicable to this detector.
-              # postprocessing_id is handled separately and excluded here.
-              detection_params = {
-                  k: v for k, v in config.items()
-                  if k not in ("config_id", "detector", "postprocessing_id")
-                  and v is not None
-                  and v != ""
-              }
-
-              # postprocessing_id is passed as empty string if not set.
-              # The postprocess step branches on whether this is empty.
               postprocessing_id = config.get("postprocessing_id", "") or ""
 
-              # Note: detection-params-json is base64 encoded to safely pass arbitrary JSON through Argo's parameter system, 
-              # which had issues with special characters in raw JSON strings.
               result.append({
-                  "config-id":             config["config_id"],
-                  "detector":              config["detector"],
-                  # bytes.encode() -> UTF-8 bytes going in to base64; bytes.decode() -> ASCII string coming out of base64.
-                  "detection-params-json": base64.b64encode(json.dumps(detection_params).encode()).decode(),
-                  "postprocessing-id":     postprocessing_id,
+                  "config-id":         config["config_id"],
+                  "detector":          config["detector"],
+                  "postprocessing-id": postprocessing_id,
               })
 
           json.dump(result, sys.stdout)
@@ -554,8 +533,8 @@ spec:
     - name: detect-trees
       inputs:
         parameters:
+          - name: config-id
           - name: detector
-          - name: detection-params-json
           - name: detector-dir
           - name: preprocessed-local-files
       affinity: {}
@@ -576,8 +555,18 @@ spec:
         args:
           - |
             set -euo pipefail
-
-            DETECTION_PARAMS_JSON=$(printf '%s' '{{inputs.parameters.detection-params-json}}' | base64 -d)
+            # Read detection config parameters from the detection_config.csv file based on config-id.
+            # Passes the parameters as a JSON string to the detection entrypoint.
+            DETECTION_PARAMS_JSON=$(python -c "
+            import csv, json, sys
+            with open('{{workflow.parameters.DETECTION_CONFIG_FILE}}') as f:
+                for row in csv.DictReader(f):
+                    if row['config_id'] == '{{inputs.parameters.config-id}}':
+                        params = {k: v for k, v in row.items() if k not in ('config_id', 'detector', 'postprocessing_id') and v is not None and v != ''}
+                        print(json.dumps(params))
+                        sys.exit(0)
+            sys.exit(1)
+            ")
 
             python -m tree_detection_framework.entrypoints.detect_trees \
               --detector "{{inputs.parameters.detector}}" \
@@ -630,7 +619,6 @@ spec:
           - name: config-id
           - name: postprocessing-id
           - name: detector
-          - name: detection-params-json
           - name: mission-id
           - name: plot-id
           - name: dataset-dir
@@ -648,7 +636,7 @@ spec:
             memory: "16Gi"
         command: ["python"]
         source: |
-          import base64
+          import csv
           import json
           from pathlib import Path
           from datetime import date
@@ -665,7 +653,11 @@ spec:
           plot_id = "{{inputs.parameters.plot-id}}"
           dataset_dir = Path("{{inputs.parameters.dataset-dir}}")
           detector_dir = Path("{{inputs.parameters.detector-dir}}")
-          detection_params = json.loads(base64.b64decode('{{inputs.parameters.detection-params-json}}').decode())
+          with open("{{workflow.parameters.DETECTION_CONFIG_FILE}}") as f:
+              for row in csv.DictReader(f):
+                  if row["config_id"] == config_id:
+                      detection_params = {k: v for k, v in row.items() if k not in ("config_id", "detector", "postprocessing_id") and v is not None and v != ""}
+                      break
 
           min_tree_height   = float("{{workflow.parameters.EVAL_MIN_TREE_HEIGHT}}")
 
