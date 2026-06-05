@@ -106,8 +106,9 @@ spec:
 
     # main: reads datasets.csv and fans out to one dataset DAG per (mission, plot).
     # Also reads detection_config.csv once and passes the result to each dataset DAG.
-    # After all datasets complete, runs aggregate-results then cleanup.
-    # Uses a DAG so that aggregate-results and cleanup run even on partial failures.
+    # Each dataset DAG cleans up its own raster files once all detectors for that dataset
+    # complete, then the global aggregate-results and upload-summary steps run.
+    # Uses a DAG so that aggregate-results runs even on partial failures.
     - name: main
       dag:
         tasks:
@@ -130,13 +131,6 @@ spec:
           - name: aggregate-results
             template: aggregate-results
             depends: "process-datasets.Succeeded || process-datasets.Failed"
-          - name: cleanup
-            template: cleanup
-            depends: "aggregate-results.Succeeded || aggregate-results.Failed"
-            arguments:
-              parameters:
-                - name: dataset-dir
-                  value: "{{workflow.parameters.TEMP_FOLDER}}/{{workflow.name}}"
 
     # process-dataset-workflow: DAG for a single (mission, plot) pair.
     # Downloads and preprocesses data once, then fans out to all detector configs
@@ -203,6 +197,17 @@ spec:
                 - name: preprocessed-local-files
                   value: "{{tasks.preprocess.outputs.parameters.preprocessed-local-files}}"
             withParam: "{{inputs.parameters.detector-combinations}}"
+
+          # Step 4: Once all detectors for this dataset have completed (success or failure), cleanup deletes rasters (.tif), 
+          # raw_detections.gpkg, ground-reference shift CSVs, and shifted_plot_bounds.gpkg.
+          # Preserves detections.gpkg and eval_results.json in each config subdir.
+          - name: cleanup
+            template: cleanup
+            depends: "process-detector-workflow.Succeeded || process-detector-workflow.Failed"
+            arguments:
+              parameters:
+                - name: dataset-dir
+                  value: "{{workflow.parameters.TEMP_FOLDER}}/{{workflow.name}}/{{inputs.parameters.mission-id}}_{{inputs.parameters.plot-id}}"
 
     # process-detector-workflow: DAG for a single detector config.
     # All steps read from the shared dataset-dir; outputs go to
@@ -703,9 +708,7 @@ spec:
 
           print(f"[evaluate] Results written to {output_path}")
 
-    # upload-eval-results: uploads eval_results.json and detections.gpkg to
-    # ofo-internal. Temp files are cleaned up at the main level after
-    # aggregate-results completes.
+    # upload-eval-results: uploads eval_results.json and detections.gpkg to ofo-internal.
     - name: upload-eval-results
       inputs:
         parameters:
@@ -779,8 +782,8 @@ spec:
                 name: s3-credentials
                 key: secret_key
 
-    # cleanup: deletes the shared dataset temp directory.
-    # Runs after all detector tasks finish (succeeded or failed).
+    # cleanup: once all detectors for a dataset finish, deletes rasters (.tif),
+    # raw_detections.gpkg, ground-reference shift CSVs, and shifted_plot_bounds.gpkg.
     - name: cleanup
       inputs:
         parameters:
@@ -794,9 +797,13 @@ spec:
         args:
           - |
             set -euo pipefail
-            echo "[cleanup] Removing dataset temp directory: {{inputs.parameters.dataset-dir}}"
-            rm -rf "{{inputs.parameters.dataset-dir}}"
-            echo "[cleanup] Done"
+            echo "[cleanup] Deleting raster files from: {{inputs.parameters.dataset-dir}}"
+            find "{{inputs.parameters.dataset-dir}}" -name "*.tif" -delete
+            echo "[cleanup] Deleting raw detection files and shift files..."
+            find "{{inputs.parameters.dataset-dir}}" -name "raw_detections.gpkg" -delete
+            find "{{inputs.parameters.dataset-dir}}" -name "*_ground-reference-shift.csv" -delete
+            find "{{inputs.parameters.dataset-dir}}" -name "shifted_plot_bounds.gpkg" -delete
+            echo "[cleanup] Cleanup complete."
         resources:
           requests:
             cpu: 100m
