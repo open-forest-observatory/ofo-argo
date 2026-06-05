@@ -226,10 +226,25 @@ spec:
         failFast: false
         tasks:
 
-          # Detect trees over the cropped rasters.
-          # Writes raw_detections.gpkg to {dataset-dir}/{config-id}/
-          - name: detect-trees
-            template: detect-trees
+          # CV detectors: require GPU node.
+          - name: detect-trees-gpu
+            template: detect-trees-gpu
+            when: "\"{{inputs.parameters.detector}}\" != \"geometric\""
+            arguments:
+              parameters:
+                - name: config-id
+                  value: "{{inputs.parameters.config-id}}"
+                - name: detector
+                  value: "{{inputs.parameters.detector}}"
+                - name: detector-dir
+                  value: "{{inputs.parameters.dataset-dir}}/{{inputs.parameters.config-id}}"
+                - name: preprocessed-local-files
+                  value: "{{inputs.parameters.preprocessed-local-files}}"
+
+          # Geometric detector: CPU only, no GPU resource request.
+          - name: detect-trees-cpu
+            template: detect-trees-cpu
+            when: "\"{{inputs.parameters.detector}}\" == \"geometric\""
             arguments:
               parameters:
                 - name: config-id
@@ -245,7 +260,7 @@ spec:
           # Writes detections.gpkg to {dataset-dir}/{config-id}/
           - name: postprocess
             template: postprocess
-            depends: "detect-trees.Succeeded"
+            depends: "detect-trees-gpu.Succeeded || detect-trees-cpu.Succeeded"
             arguments:
               parameters:
                 - name: postprocessing-id
@@ -532,10 +547,10 @@ spec:
             "--output-path", "/tmp/preprocessed-file-paths.json",
           ]
 
-    # detect-trees: dispatches to the correct TDF entrypoint based on detector.
+    # detect-trees-gpu: CV detector variant. Runs on GPU nodes.
     # Reads cropped rasters from preprocessed-local-files.
     # Writes raw_detections.gpkg to detector-dir.
-    - name: detect-trees
+    - name: detect-trees-gpu
       inputs:
         parameters:
           - name: config-id
@@ -552,10 +567,56 @@ spec:
           requests:
             cpu: "4"
             memory: "16Gi"
-            nvidia.com/gpu: "1"  # TODO: GPU is not needed for geometric detector. Handle that witihin CPU.
+            nvidia.com/gpu: "1"
           limits:
             memory: "32Gi"
             nvidia.com/gpu: "1"
+        command: ["/bin/bash", "-lc"]
+        args:
+          - |
+            set -euo pipefail
+            # Read detection config parameters from the detection_config.csv file based on config-id.
+            # Passes the parameters as a JSON string to the detection entrypoint.
+            DETECTION_PARAMS_JSON=$(python -c "
+            import csv, json, sys
+            with open('{{workflow.parameters.DETECTION_CONFIG_FILE}}') as f:
+                for row in csv.DictReader(f):
+                    if row['config_id'] == '{{inputs.parameters.config-id}}':
+                        params = {k: v for k, v in row.items() if k not in ('config_id', 'detector', 'postprocessing_id') and v is not None and v != ''}
+                        print(json.dumps(params))
+                        sys.exit(0)
+            sys.exit(1)
+            ")
+
+            python -m tree_detection_framework.entrypoints.detect_trees \
+              --detector "{{inputs.parameters.detector}}" \
+              --detection-params-json "$DETECTION_PARAMS_JSON" \
+              --detector-dir "{{inputs.parameters.detector-dir}}" \
+              --preprocessed-local-files '{{inputs.parameters.preprocessed-local-files}}' \
+              --detectree2-weights-path "{{workflow.parameters.DETECTREE2_WEIGHTS_PATH}}" \
+              --sam3-checkpoint-path "{{workflow.parameters.SAM3_CHECKPOINT_PATH}}"
+
+    # detect-trees-cpu: for geometric detector use. Runs on CPU nodes
+    # Reads cropped rasters from preprocessed-local-files.
+    # Writes raw_detections.gpkg to detector-dir.
+    - name: detect-trees-cpu
+      inputs:
+        parameters:
+          - name: config-id
+          - name: detector
+          - name: detector-dir
+          - name: preprocessed-local-files
+      container:
+        image: ghcr.io/open-forest-observatory/tree-detection-framework:{{workflow.parameters.TDF_IMAGE_TAG}}
+        volumeMounts:
+          - name: data
+            mountPath: /data
+        resources:
+          requests:
+            cpu: "4"
+            memory: "16Gi"
+          limits:
+            memory: "32Gi"
         command: ["/bin/bash", "-lc"]
         args:
           - |
