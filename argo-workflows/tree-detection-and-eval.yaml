@@ -938,6 +938,9 @@ spec:
               --stats 15s --stats-log-level NOTICE
 
             echo "[rclone] Upload successful."
+
+            rm "$SRC"
+            echo "[cleanup] Deleted local summary CSV."
         resources:
           requests:
             cpu: 500m
