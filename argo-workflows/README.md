@@ -22,3 +22,50 @@ The workflow contains the following steps
     - The CHM file is downloaded from `S3`.
     - Registration is run using the [this](https://github.com/open-forest-observatory/tree-registration-and-matching/blob/main/tree_registration_and_matching/entrypoints/register_trees_to_CHM.py) tree-registration-and-matching entrypoint.
     - The shift file is uploaded to `S3` and the intermediate data products are deleted.
+
+### Tree Detection and Evaluation
+The `tree-detection-and-eval.yaml` workflow benchmarks one or more tree detectors against field reference data across a set of drone missions and field plots. It fans out over all `(mission, plot)` pairs in a datasets file and all detector configurations in a detection config file, running each combination in parallel.
+
+The workflow performs the following steps for each `(mission, plot, detector config)` combination:
+- **Download**: Pulls the orthomosaic, CHM, and ground-reference shift file from S3.
+- **Preprocess**: Applies the spatial shift to field trees and plot bounds, filters by minimum tree height, and crops rasters to the shifted plot boundary.
+- **Detect**: Runs the specified detector (geometric on CPU; all others on GPU) to produce raw detections.
+- **Postprocess**: Applies the postprocessing chain for the config (or just a height filter for the geometric detector).
+- **Evaluate**: Matches predicted tree points to ground truth and computes precision, recall, and F1.
+- **Upload**: Writes per-run `eval_results.json` and `detections.gpkg` to S3. After all datasets finish, merges all results into a single summary CSV and uploads it.
+
+#### Input file structure examples
+
+**`datasets.csv`** - one row per `(mission, plot)` pair to process:
+```
+mission_id,plot_id
+000001,0052
+000091,0040
+000113,0028
+```
+
+**`detection_config.csv`** - one row per detector configuration to benchmark. `postprocessing_id` references a key in `postprocessing_config.yaml`; leave it empty for the geometric detector.
+```
+config_id,detector,chip_size,chip_stride,chip_overlap_percentage,resolution,batch_size,postprocessing_id
+geometric_01,geometric,2000,1900,,0.2,1,
+deepforest_01,deepforest,500,500,,0.2,4,postprocessing_01
+detectree2_01,detectree2,500,500,,0.2,4,postprocessing_02
+```
+
+**`postprocessing_config.yaml`** - maps each `postprocessing_id` to an ordered list of postprocessor steps:
+```yaml
+postprocessing_01:
+  - name: multi_region_NMS
+    args:
+      threshold: 0.5
+      min_confidence: 0.3
+      intersection_method: IOU
+  - name: filter_by_chm
+    args:
+      min_height: 5.0
+postprocessing_02:
+  - name: suppress_tile_boundary_with_NMS
+  - name: single_region_hole_suppression
+    args:
+      min_area_threshold: 25.0
+```
