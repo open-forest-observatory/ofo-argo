@@ -568,6 +568,8 @@ spec:
                 for row in csv.DictReader(f):
                     if row['config_id'] == '{{inputs.parameters.config-id}}':
                         params = {k: v for k, v in row.items() if k not in ('config_id', 'detector', 'postprocessing_id') and v is not None and v != ''}
+                        params['detectree2_weights_path'] = '{{workflow.parameters.DETECTREE2_WEIGHTS_PATH}}'
+                        params['sam3_checkpoint_path'] = '{{workflow.parameters.SAM3_CHECKPOINT_PATH}}'
                         print(json.dumps(params))
                         sys.exit(0)
             sys.exit(1)
@@ -577,9 +579,7 @@ spec:
               --detector "{{inputs.parameters.detector}}" \
               --detection-params-json "$DETECTION_PARAMS_JSON" \
               --detector-dir "{{inputs.parameters.detector-dir}}" \
-              --preprocessed-local-files '{{inputs.parameters.preprocessed-local-files}}' \
-              --detectree2-weights-path "{{workflow.parameters.DETECTREE2_WEIGHTS_PATH}}" \
-              --sam3-checkpoint-path "{{workflow.parameters.SAM3_CHECKPOINT_PATH}}"
+              --preprocessed-local-files '{{inputs.parameters.preprocessed-local-files}}'
 
     # detect-trees-cpu: for geometric detector use. Runs on CPU nodes
     # Reads cropped rasters from preprocessed-local-files.
@@ -623,9 +623,7 @@ spec:
               --detector "{{inputs.parameters.detector}}" \
               --detection-params-json "$DETECTION_PARAMS_JSON" \
               --detector-dir "{{inputs.parameters.detector-dir}}" \
-              --preprocessed-local-files '{{inputs.parameters.preprocessed-local-files}}' \
-              --detectree2-weights-path "{{workflow.parameters.DETECTREE2_WEIGHTS_PATH}}" \
-              --sam3-checkpoint-path "{{workflow.parameters.SAM3_CHECKPOINT_PATH}}"
+              --preprocessed-local-files '{{inputs.parameters.preprocessed-local-files}}'
 
     # postprocess: applies the postprocessing chain for this postprocessing_id.
     # Geometric (empty postprocessing_id): only applies min height filter.
