@@ -92,10 +92,10 @@ spec:
       #   - postprocess: drops detections below this height before saving detections.gpkg
       # Field and drone trees above this height enter matching
       - name: MIN_TREE_HEIGHT
-        value: "5.0"
+        value: "8.0"
       # Controls which trees are included in evaluation results.
       - name: EVAL_MIN_TREE_HEIGHT
-        value: "5.0"
+        value: "10.0"
 
   volumes:
     - name: data
