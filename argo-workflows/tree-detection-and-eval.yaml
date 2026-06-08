@@ -430,25 +430,20 @@ spec:
               --transfers 8 --checkers 8 --retries 5 --retries-sleep=15s \
               --stats 15s --stats-log-level NOTICE
 
-            for f in "$ORTHO_FILE" "$CHM_FILE"; do
-              if [ ! -f "$f" ]; then
-                echo "[download] ERROR: Expected file not found: $f"
-                exit 1
-              fi
-            done
-            echo "[download] Ortho and CHM verified."
-
             # Download shift file
             echo "[rclone] Downloading shift file: s3:${S3_BUCKET_PUBLIC}/${SHIFT_S3}"
             rclone copyto "s3:${S3_BUCKET_PUBLIC}/${SHIFT_S3}" "$SHIFT_FILE" \
               --retries 5 --retries-sleep=15s \
               --stats 15s --stats-log-level NOTICE
 
-            if [ ! -f "$SHIFT_FILE" ]; then
-              echo "[download] ERROR: Shift file not found: $SHIFT_FILE"
-              exit 1
-            fi
-            echo "[download] Shift file verified."
+            # Verify all expected files were downloaded
+            for f in "$ORTHO_FILE" "$CHM_FILE" "$SHIFT_FILE"; do
+              if [ ! -f "$f" ]; then
+                echo "[download] ERROR: Expected file not found: $f"
+                exit 1
+              fi
+            done
+            echo "[download] All 3 expected files verified."
 
             # Write local file paths for downstream steps.
             # field_trees and plot_bounds point to shared volume paths — no download needed.
