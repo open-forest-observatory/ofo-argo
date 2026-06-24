@@ -99,7 +99,7 @@ All inputs must be placed in `/ofo-share/argo-data/`.
 
 #### Add drone imagery datasets
 
-To add new drone imagery datasets to be processed using Argo, transfer files from your local machine (or the cloud) to the `/ofo-share` volume. Put the drone imagery datasets to be processed in their own directory in `/ofo-share/argo-data/argo-input/datasets` (or another folder within `argo-input`).
+To add new drone imagery datasets to be processed using Argo, transfer files from your local machine (or the cloud) to the `/ofo-share` volume. Put the drone imagery datasets to be processed in their own directory in `/ofo-share/argo-data/argo-input/datasets` (or another folder within `argo-data`).
 
 One data transfer method is the `scp` command-line tool:
 
@@ -121,7 +121,7 @@ Replace `<vm.ip.address>` with the IP address of a cluster node that has the sha
 
     See the [updated config example](https://github.com/open-forest-observatory/automate-metashape/blob/main/config/config-example.yml) for the full structure.
 
-Metashape processing parameters are specified in configuration YAML files which should be placed somewhere within `/ofo-share/argo-data/argo-input`.
+Metashape processing parameters are specified in configuration YAML files which should be placed somewhere within `/ofo-share/argo-data`.
 
 Every project to be processed needs to have its own standalone configuration file.
 
@@ -134,6 +134,47 @@ location **inside the docker container**. The `/ofo-share/argo-data` directory g
 project:
   photo_path: /data/argo-input/datasets/dataset_1
 ```
+
+**Parameters handled by Argo:** The `project_path`, `output_path`, and `project_name` configuration parameters are handled automatically by the Argo workflow:
+
+- `project_path` and `output_path` are determined via CLI arguments passed to the automate-metashape container, derived from the `TEMP_WORKING_DIR` Argo workflow parameter (passed by the user on the command line when invoking `argo submit`)
+- `project_name` is extracted from `project.project_name` in the config file (or from the filename
+  of the config file if missing in the config) and passed by Argo via CLI to each step to ensure consistent project names per mission
+
+Any values specified for `project_path` and `output_path` in the config.yml will be overridden by Argo CLI arguments.
+
+#### Create a config list file
+
+We use a text file, for example `config-list.txt`, to tell the Argo workflow which config files
+should be processed in the current run. Place this file in the **same directory as your config files**, then list just the **filenames** (not full paths), one per line.
+
+**Example:** If your configs are in `/ofo-share/argo-data/argo-input/configs/`, create a file at `/ofo-share/argo-data/argo-input/configs/config-list.txt`:
+
+```
+# Benchmarking missions
+01_benchmarking-greasewood.yml
+02_benchmarking-greasewood.yml
+
+# Skipping emerald for now
+# 01_benchmarking-emerald-subset.yml
+# 02_benchmarking-emerald-subset.yml
+
+03_production-run.yml  # high priority
+```
+
+**Features:**
+
+- **Filenames only**: List just the config filename; the directory is inferred from the config list's location
+- **Comments**: Lines starting with `#` (after whitespace) are skipped
+- **Inline comments**: Text after `#` on any line is ignored (e.g., `config.yml # note`)
+- **Blank lines**: Empty lines are ignored for readability
+- **Backward compatibility**: Absolute paths (starting with `/`) still work if needed
+
+The project name will be automatically derived from the config filename (e.g., `project-name.yml` becomes project `project-name`), unless explicitly set in the config file at `project.project_name` (which takes priority).
+
+You can create your own config list file and name it whatever you want, placing it anywhere within `/ofo-share/argo-data/`. Then specify the path to it within the container (using `/data/XYZ` to refer to `/ofo-share/argo-data/XYZ`) using the `CONFIG_LIST` parameter when submitting the workflow.
+
+
 
 ## Downloading imagery from S3 (optional)
 
@@ -271,57 +312,6 @@ After all processing completes (including upload and postprocessing):
 
 Each project gets its own isolated download directory to prevent collisions when processing multiple projects in parallel.
 
-### Troubleshooting S3 imagery download
-
-#### "Config validation failed: __DOWNLOADED__ prefix used but no downloads specified"
-
-**Cause:** Your `photo_path` contains `__DOWNLOADED__` but `s3_imagery_zip_download` is empty or missing.
-
-**Solution:** Either add `s3_imagery_zip_download` entries, or change `photo_path` to use direct paths (e.g., `/data/...`).
-
-#### "Config validation failed: Downloads specified but no __DOWNLOADED__ paths found"
-
-**Cause:** You specified `s3_imagery_zip_download` but your `photo_path` entries don't use the `__DOWNLOADED__` prefix.
-
-**Solution:** Update `photo_path` to use `__DOWNLOADED__/...` paths that reference your downloaded zip contents.
-
-#### Download fails with "Failed to copy" or timeout errors
-
-**Possible causes:**
-
-- Incorrect S3 path format (should be `bucket/path/file.zip` without a remote prefix)
-- S3 credentials not configured in the cluster's `s3-credentials` secret
-- Network issues or S3 endpoint unavailable
-- Zip file doesn't exist at the specified path
-
-**Debug steps:**
-
-1. Check the `download-imagery` step logs in Argo UI
-2. Verify the S3 path is correct by listing files (requires rclone configured with the same credentials):
-   ```bash
-   rclone ls :s3:ofo-public/drone/missions_01/000558/images/ --s3-provider=Ceph --s3-endpoint=<endpoint>
-   ```
-
-#### "Photo path not found" errors in setup step
-
-**Cause:** The extracted zip structure doesn't match your `photo_path` entries.
-
-**Solution:**
-
-1. Check what's actually inside your zip file
-2. Ensure `photo_path` matches the extracted folder structure
-3. Remember: zip filename (minus `.zip`) becomes the top-level folder
-
-#### Disk space issues
-
-**Cause:** Downloaded imagery fills up the shared storage.
-
-**Solutions:**
-
-- Ensure `cleanup_downloaded_imagery: true` (default) to auto-delete after completion
-- Process fewer projects in parallel to reduce concurrent disk usage
-- Monitor disk usage during workflow execution
-
 ## Resource request configuration
 
 All Argo workflow resource requests (GPU, CPU, memory) are configured in the top-level `argo` section of your automate-metashape config file. The defaults assume one or more JS2 `m3.large` CPU nodes and one or more `mig1` (7-slice MIG `g3.xl`) GPU nodes (see [cluster access and resizing](cluster-access-and-resizing.md)).
@@ -446,45 +436,6 @@ argo:
 ```
 
 This 4-level fallback applies: Secondary-specific → Primary step → User defaults → Hardcoded defaults
-
-**Parameters handled by Argo:** The `project_path`, `output_path`, and `project_name` configuration parameters are handled automatically by the Argo workflow:
-
-- `project_path` and `output_path` are determined via CLI arguments passed to the automate-metashape container, derived from the `TEMP_WORKING_DIR` Argo workflow parameter (passed by the user on the command line when invoking `argo submit`)
-- `project_name` is extracted from `project.project_name` in the config file (or from the filename
-  of the config file if missing in the config) and passed by Argo via CLI to each step to ensure consistent project names per mission
-
-Any values specified for `project_path` and `output_path` in the config.yml will be overridden by Argo CLI arguments.
-
-#### Create a config list file
-
-We use a text file, for example `config-list.txt`, to tell the Argo workflow which config files
-should be processed in the current run. Place this file in the **same directory as your config files**, then list just the **filenames** (not full paths), one per line.
-
-**Example:** If your configs are in `/ofo-share/argo-data/argo-input/configs/`, create a file at `/ofo-share/argo-data/argo-input/configs/config-list.txt`:
-
-```
-# Benchmarking missions
-01_benchmarking-greasewood.yml
-02_benchmarking-greasewood.yml
-
-# Skipping emerald for now
-# 01_benchmarking-emerald-subset.yml
-# 02_benchmarking-emerald-subset.yml
-
-03_production-run.yml  # high priority
-```
-
-**Features:**
-
-- **Filenames only**: List just the config filename; the directory is inferred from the config list's location
-- **Comments**: Lines starting with `#` (after whitespace) are skipped
-- **Inline comments**: Text after `#` on any line is ignored (e.g., `config.yml # note`)
-- **Blank lines**: Empty lines are ignored for readability
-- **Backward compatibility**: Absolute paths (starting with `/`) still work if needed
-
-The project name will be automatically derived from the config filename (e.g., `project-name.yml` becomes project `project-name`), unless explicitly set in the config file at `project.project_name` (which takes priority).
-
-You can create your own config list file and name it whatever you want, placing it anywhere within `/ofo-share/argo-data/`. Then specify the path to it within the container (using `/data/XYZ` to refer to `/ofo-share/argo-data/XYZ`) using the `CONFIG_LIST` parameter when submitting the workflow.
 
 ### Determine the maximum number of projects to process in parallel
 
