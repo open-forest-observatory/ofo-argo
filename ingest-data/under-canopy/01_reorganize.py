@@ -2,6 +2,8 @@ from pathlib import Path
 import argparse
 import re
 import os
+import json
+import shutil
 
 import pandas as pd
 
@@ -50,17 +52,23 @@ def main(input_data_folder, output_data_folder, mission_file):
 
         # Create an output folder based on the output folder / ofo_mission_id
         output_folder = Path(output_data_folder, f"{ofo_mission_id:06d}")
+        # remove old folder
+        shutil.rmtree(output_folder)
+        # And recreate
         output_folder.mkdir(parents=True, exist_ok=True)
 
         # Hardlink all files to that location
         # The output format should be <mission_id>/<mission_id>-<image_id>.JPG
         filename_remapping = {
-            in_f: Path(output_folder, f"{ofo_mission_id:06d}-{i:06d}.JPG")
+            str(in_f): str(Path(output_folder, f"{ofo_mission_id:06d}-{i:06d}.JPG"))
             for i, in_f in enumerate(matching_files)
         }
 
         for in_f, out_f in filename_remapping.items():
             os.link(in_f, out_f)
+
+        with open(Path(output_folder, "filename-remapping.json"), "w") as outfile_h:
+            json.dump(filename_remapping, outfile_h)
 
 
 if __name__ == "__main__":
