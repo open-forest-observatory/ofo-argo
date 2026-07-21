@@ -50,6 +50,9 @@ def main(input_data_folder, output_data_folder, mission_file):
             ]
         )
 
+        # TODO: Consider a check to see whether this is within the start/end timestamps and/or if there are timestamp gaps
+        # This would require first parsing the metadata
+
         # Create an output folder based on the output folder / ofo_mission_id
         output_folder = Path(output_data_folder, f"{ofo_mission_id:06d}")
         # remove old folder
