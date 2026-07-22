@@ -140,7 +140,7 @@ spec:
 ## Definitions of individual steps (templates)
 
     # determine-missions: reads MISSIONS_FILE and emits a JSON array of
-    # {ofo-mission-id, mission-id-padded, gopro-file-prefix} objects, one per CSV row.
+    # {ofo-mission-id, mission-id-padded, sd-card-id, gopro-file-prefix} objects, one per CSV row.
     - name: determine-missions
       script:
         image: ghcr.io/open-forest-observatory/ingest-data-under-canopy:{{workflow.parameters.INGEST_IMAGE_TAG}}
