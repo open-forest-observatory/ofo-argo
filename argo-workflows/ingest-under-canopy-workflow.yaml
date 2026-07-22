@@ -171,7 +171,7 @@ spec:
               {
                   "ofo-mission-id": row["ofo_mission_id"],
                   "mission-id-padded": f"{int(row['ofo_mission_id']):06d}",
-                  "sd-card-id": row["sd_card_id"],
+                  "sd-card-id": row["gopro_sd_card_id"],
                   "gopro-file-prefix": row["gopro_file_prefix"],
               }
               for _, row in missions.iterrows()
