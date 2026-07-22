@@ -40,9 +40,10 @@ spec:
   arguments:
     parameters:
       # Path on the shared volume to a CSV with columns: ofo_mission_id, gopro_file_prefix
-      # gopro_file_prefix may contain multiple comma-separated prefixes for a single mission.
+      # gopro_file_prefix may contain multiple space-separated prefixes for a single mission.
       - name: MISSIONS_FILE
-      # Folder of raw GoPro files to search (recursively) for each mission's images.
+      # Folder of raw GoPro files to search (recursively) for each mission's images, with respect
+      # to the mounted file system.
       - name: INPUT_DATA_FOLDER
         value: "/data/under-canopy-imagery-organization/0_raw"
       # Per-mission working directories (reorganized images + metadata, deleted after upload) are
@@ -162,6 +163,7 @@ spec:
               {
                   "ofo-mission-id": row["ofo_mission_id"],
                   "mission-id-padded": f"{int(row['ofo_mission_id']):06d}",
+                  "sd-card-id": row["sd_card_id"],
                   "gopro-file-prefix": row["gopro_file_prefix"],
               }
               for row in missions
@@ -175,6 +177,7 @@ spec:
       inputs:
         parameters:
           - name: ofo-mission-id
+          - name: sd-card-id
           - name: gopro-file-prefix
       container:
         image: ghcr.io/open-forest-observatory/ingest-data-under-canopy:{{workflow.parameters.INGEST_IMAGE_TAG}}
@@ -193,6 +196,8 @@ spec:
           - "{{workflow.parameters.TEMP_FOLDER}}/{{workflow.name}}"
           - "--ofo-mission-id"
           - "{{inputs.parameters.ofo-mission-id}}"
+          - "--sd-card-id"
+          - "{{inputs.parameters.sd-card-id}}"
           - "--gopro-file-prefix"
           - "{{inputs.parameters.gopro-file-prefix}}"
 
