@@ -27,6 +27,12 @@ def parse_args():
         help="The OFO mission ID for this dataset.",
     )
     parser.add_argument(
+        "--sd-card-id",
+        type=str,
+        required=True,
+        help="The SD card ID for this dataset.",
+    )
+    parser.add_argument(
         "--gopro-file-prefix",
         type=str,
         nargs="+",
@@ -37,14 +43,14 @@ def parse_args():
     return parser.parse_args()
 
 
-def main(input_data_folder, output_data_folder, ofo_mission_id, gopro_file_prefix):
+def main(input_data_folder, output_data_folder, ofo_mission_id, sd_card_id, gopro_file_prefix):
     # Split the gopro_collect_id by commas and remove whitespace to get all included prefixes
     gopro_file_prefixes = [x.strip() for x in gopro_file_prefix]
 
     # Find all files matching any prefixes
     matching_files = [
         f
-        for f in input_data_folder.rglob("*")
+        for f in input_data_folder.rglob(f"**/card_{sd_card_id:02}/**")
         if re.match("|".join(re.escape(p) for p in gopro_file_prefixes), f.name)
     ]
 
