@@ -143,7 +143,7 @@ spec:
     # {ofo-mission-id, mission-id-padded, gopro-file-prefix} objects, one per CSV row.
     - name: determine-missions
       script:
-        image: python:3.9
+        image: ghcr.io/open-forest-observatory/ingest-data-under-canopy:{{workflow.parameters.INGEST_IMAGE_TAG}}
         volumeMounts:
           - name: data
             mountPath: /data
@@ -155,14 +155,17 @@ spec:
             memory: "2Gi"
         command: ["python"]
         source: |
-          import csv
           import json
           import sys
 
+          import pandas as pd
+
           missions_file = "{{workflow.parameters.MISSIONS_FILE}}"
 
-          with open(missions_file, "r") as f:
-              missions = list(csv.DictReader(f))
+          # skipinitialspace handles ", "-separated headers/values; dtype=str preserves
+          # values like a zero-padded ofo_mission_id.
+          missions = pd.read_csv(missions_file, dtype=str, skipinitialspace=True)
+          missions.columns = missions.columns.str.strip()
 
           result = [
               {
@@ -171,7 +174,7 @@ spec:
                   "sd-card-id": row["sd_card_id"],
                   "gopro-file-prefix": row["gopro_file_prefix"],
               }
-              for row in missions
+              for _, row in missions.iterrows()
           ]
 
           json.dump(result, sys.stdout)
