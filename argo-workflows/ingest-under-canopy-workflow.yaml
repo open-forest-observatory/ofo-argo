@@ -45,7 +45,7 @@ spec:
       # Folder of raw GoPro files to search (recursively) for each mission's images, with respect
       # to the mounted file system.
       - name: INPUT_DATA_FOLDER
-        value: "/data/under-canopy-imagery-organization/0_raw"
+        value: "/data/argo-input/under-canopy-imagery-organization/0_raw"
       # Per-mission working directories (reorganized images + metadata, deleted after upload) are
       # created under: TEMP_FOLDER/{{workflow.name}}/{mission_id}/
       - name: TEMP_FOLDER
@@ -83,6 +83,8 @@ spec:
                   value: "{{item.ofo-mission-id}}"
                 - name: mission-id-padded
                   value: "{{item.mission-id-padded}}"
+                - name: sd-card-id
+                  value: "{{item.sd-card-id}}"
                 - name: gopro-file-prefix
                   value: "{{item.gopro-file-prefix}}"
             withParam: "{{tasks.determine-missions.outputs.result}}"
@@ -94,6 +96,7 @@ spec:
         parameters:
           - name: ofo-mission-id
           - name: mission-id-padded
+          - name: sd-card-id
           - name: gopro-file-prefix
       dag:
         # failFast=false ensures other missions continue processing if this one fails
@@ -105,6 +108,8 @@ spec:
               parameters:
                 - name: ofo-mission-id
                   value: "{{inputs.parameters.ofo-mission-id}}"
+                - name: sd-card-id
+                  value: "{{inputs.parameters.sd-card-id}}"
                 - name: gopro-file-prefix
                   value: "{{inputs.parameters.gopro-file-prefix}}"
 
