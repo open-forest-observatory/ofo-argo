@@ -42,13 +42,15 @@ def main(input_data_folder, output_data_folder, mission_file):
         gopro_file_prefixes = [x.strip() for x in gopro_file_prefix.split(",")]
 
         # Find all files matching any prefixes
-        matching_files = sorted(
-            [
+        matching_files = [
                 f
                 for f in input_data_folder.rglob("*")
                 if re.match("|".join(re.escape(p) for p in gopro_file_prefixes), f.name)
-            ]
-        )
+        ]
+
+        # Sort files by name. 
+        # TODO we might want to parse the timestamp in the future but the names should be consecutive in time.
+        matching_files = sorted(matching_files)
 
         # TODO: Consider a check to see whether this is within the start/end timestamps and/or if there are timestamp gaps
         # This would require first parsing the metadata
@@ -63,7 +65,7 @@ def main(input_data_folder, output_data_folder, mission_file):
         # Hardlink all files to that location
         # The output format should be <mission_id>/<mission_id>-<image_id>.JPG
         filename_remapping = {
-            str(in_f): str(Path(output_folder, f"{ofo_mission_id:06d}-{i:06d}.JPG"))
+            str(in_f): str(Path(output_folder, f"{ofo_mission_id:06d}_{i:06d}.JPG"))
             for i, in_f in enumerate(matching_files)
         }
 
