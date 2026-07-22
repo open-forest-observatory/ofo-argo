@@ -43,15 +43,15 @@ def parse_args():
 
 
 def main(input_data_folder, output_data_folder, ofo_mission_id, sd_card_id, gopro_file_prefix):
+    
+    # Find files matching the card
+    card_search_str = f"**/card_{sd_card_id}/**/*"
+    matching_files = list(input_data_folder.rglob(card_search_str))
+
+    # Find files matching any of the prefixes
     # Split the space-separated prefixes into individual prefixes
     gopro_file_prefixes = gopro_file_prefix.split()
-
-    # Find all files matching any prefixes
-    matching_files = [
-        f
-        for f in input_data_folder.rglob(f"**/card_{sd_card_id:02}/**")
-        if re.match("|".join(re.escape(p) for p in gopro_file_prefixes), f.name)
-    ]
+    matching_files = [f for f in matching_files if re.match("|".join(re.escape(p) for p in gopro_file_prefixes), f.name)]
 
     # Sort files by name.
     # TODO we might want to parse the timestamp in the future but the names should be consecutive in time.
