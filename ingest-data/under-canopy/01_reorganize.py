@@ -35,17 +35,16 @@ def parse_args():
     parser.add_argument(
         "--gopro-file-prefix",
         type=str,
-        nargs="+",
         required=True,
-        help="One or more GoPro file prefixes for this mission.",
+        help="One or more space-separated GoPro file prefixes for this mission.",
     )
 
     return parser.parse_args()
 
 
 def main(input_data_folder, output_data_folder, ofo_mission_id, sd_card_id, gopro_file_prefix):
-    # Split the gopro_collect_id by commas and remove whitespace to get all included prefixes
-    gopro_file_prefixes = [x.strip() for x in gopro_file_prefix]
+    # Split the space-separated prefixes into individual prefixes
+    gopro_file_prefixes = gopro_file_prefix.split()
 
     # Find all files matching any prefixes
     matching_files = [
