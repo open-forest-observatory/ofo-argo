@@ -41,19 +41,39 @@ S3_DRONE_MISSIONS_PATH = "ofo-public/gopro"
 # Helper Functions
 # =============================================================================
 
+
 def parse_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument("missions_list_path", type=Path, default=Path(MISSIONS_LIST_PATH), help="Path to the csv file with mission_id and crs columns.")
-    parser.add_argument("base_config_path", type=Path, default=Path(BASE_CONFIG_PATH), help="Path to the base automate-metashape configuration YAML.")
-    parser.add_argument("output_dir", type=Path, default=Path(OUTPUT_DIR), help="Output directory for derived config files.")
-    parser.add_argument("--s3-drone-missions-path", type=str, default=S3_DRONE_MISSIONS_PATH, help="S3 path prefix for drone mission imagery downloads.")
+    parser.add_argument(
+        "missions_list_path",
+        type=Path,
+        default=Path(MISSIONS_LIST_PATH),
+        help="Path to the csv file with mission_id and crs columns.",
+    )
+    parser.add_argument(
+        "base_config_path",
+        type=Path,
+        default=Path(BASE_CONFIG_PATH),
+        help="Path to the base automate-metashape configuration YAML.",
+    )
+    parser.add_argument(
+        "output_dir",
+        type=Path,
+        default=Path(OUTPUT_DIR),
+        help="Output directory for derived config files.",
+    )
+    parser.add_argument(
+        "--s3-drone-missions-path",
+        type=str,
+        default=S3_DRONE_MISSIONS_PATH,
+        help="S3 path prefix for drone mission imagery downloads.",
+    )
 
     return parser.parse_args()
 
 
 def create_derived_config(
     base_config: dict,
-    mission_id: str,
     photo_paths: list[str],
     project_crs: str,
     s3_download_path: str,
@@ -83,8 +103,13 @@ def create_derived_config(
 # =============================================================================
 
 
-def main(missions_list_path: Path, base_config_path: Path, output_dir: Path, s3_drone_missions_path: str):
-    missions_df = pd.read_csv(missions_list_path)
+def main(
+    missions_list_path: Path,
+    base_config_path: Path,
+    output_dir: Path,
+    s3_drone_missions_path: str,
+):
+    missions_df = pd.read_csv(missions_list_path, skipinitialspace=True)
 
     # Load base configuration
     print(f"Loading base config from: {base_config_path}")
@@ -97,14 +122,13 @@ def main(missions_list_path: Path, base_config_path: Path, output_dir: Path, s3_
     # Process each mission
     config_filenames = []
 
-    success_count = 0
-    for idx, row in missions_df.iterrows():
-        mission_id = row["mission_id"]
-        project_crs = row["crs"]
+    for _, row in missions_df.iterrows():
+        mission_id = f"{int(row['mission_id']):06}"
+        project_crs = str(row["crs"])
 
         # Generate S3 download path
         s3_download_path = (
-            f"{S3_DRONE_MISSIONS_PATH}/{mission_id}/images/{mission_id}_images.zip"
+            f"{s3_drone_missions_path}/{mission_id}/images/{mission_id}_images.zip"
         )
 
         photo_paths = [f"__DOWNLOADED__/{mission_id}_images"]
@@ -112,7 +136,6 @@ def main(missions_list_path: Path, base_config_path: Path, output_dir: Path, s3_
         # Create derived config
         derived_config = create_derived_config(
             base_config,
-            mission_id,
             photo_paths,
             project_crs,
             s3_download_path,
@@ -129,12 +152,12 @@ def main(missions_list_path: Path, base_config_path: Path, output_dir: Path, s3_
     # Write config list file with priority and standard sections
     config_list_path = output_dir / "config-list.txt"
     with open(config_list_path, "w") as f:
-        f.write("# High-priority missions\n")
         for filename in config_filenames:
             f.write(f"{filename}\n")
-        f.write("\n")
 
-    print(f"Successfully created {success_count} derived config files in: {output_dir}")
+    print(
+        f"Successfully created {len(config_filenames)} derived config files in: {output_dir}"
+    )
     print(f"Config list written to: {config_list_path}")
 
 
