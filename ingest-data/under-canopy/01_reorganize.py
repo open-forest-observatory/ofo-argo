@@ -61,7 +61,7 @@ def main(input_data_folder, output_data_folder, ofo_mission_id, sd_card_id, gopr
     # This would require first parsing the metadata
 
     # Create an output folder based on the output folder / ofo_mission_id
-    output_folder = Path(output_data_folder, f"{ofo_mission_id:06d}")
+    output_folder = Path(output_data_folder, f"{ofo_mission_id:06d}/{ofo_mission_id:06d}_images")
     # remove old folder, if present
     shutil.rmtree(output_folder, ignore_errors=True)
     # And recreate
