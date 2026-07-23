@@ -28,7 +28,7 @@ def parse_args():
     )
     parser.add_argument(
         "--sd-card-id",
-        type=str,
+        type=int,
         required=True,
         help="The SD card ID for this dataset.",
     )
@@ -46,7 +46,9 @@ def main(input_data_folder, output_data_folder, ofo_mission_id, sd_card_id, gopr
 
     # Find files matching the card
     card_search_str = f"**/card_{sd_card_id:02}/**/*"
+    print(f"Searching for files matching {card_search_str} in {input_data_folder}")
     matching_files = list(input_data_folder.rglob(card_search_str))
+    print(f"Found {len(matching_files)} files matching the card search string.")
 
     # Find files matching any of the prefixes
     # Split the space-separated prefixes into individual prefixes
