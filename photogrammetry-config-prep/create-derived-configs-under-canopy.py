@@ -25,10 +25,6 @@ MISSIONS_LIST_PATH = "/home/derek/repos/ofo-argo/photogrammetry-config-prep/conf
 # Path to the base automate-metashape configuration YAML
 BASE_CONFIG_PATH = "/home/derek/repos/ofo-argo/photogrammetry-config-prep/config-prep-runs/run-03/input/config-base.yml"
 
-# The CRS to use for this project. For under canopy data it may not be possible to extract it from the data.
-# TODO this may be worth setting to the 29*** one we use
-CRS = "EPSG:3310"
-
 # Output directory for derived config files
 OUTPUT_DIR = "/home/derek/repos/ofo-argo/photogrammetry-config-prep/config-prep-runs/run-03/derived-configs"
 
@@ -50,7 +46,6 @@ def parse_args():
     parser.add_argument("missions_list_path", type=Path, default=Path(MISSIONS_LIST_PATH), help="Path to the csv file with mission_id and crs columns.")
     parser.add_argument("base_config_path", type=Path, default=Path(BASE_CONFIG_PATH), help="Path to the base automate-metashape configuration YAML.")
     parser.add_argument("output_dir", type=Path, default=Path(OUTPUT_DIR), help="Output directory for derived config files.")
-    parser.add_argument("--crs", type=str, default=CRS)
     parser.add_argument("--s3-drone-missions-path", type=str, default=S3_DRONE_MISSIONS_PATH, help="S3 path prefix for drone mission imagery downloads.")
 
     return parser.parse_args()
@@ -106,7 +101,6 @@ def main(missions_list_path: Path, base_config_path: Path, output_dir: Path, s3_
     for idx, row in missions_df.iterrows():
         mission_id = row["mission_id"]
         project_crs = row["crs"]
-
 
         # Generate S3 download path
         s3_download_path = (
