@@ -7,7 +7,7 @@ spec:
   entrypoint: main
   # Max concurrent missions to process in parallel. Edit this value directly to change.
   # (Argo doesn't support parameter substitution for integer fields like parallelism)
-  parallelism: 10
+  parallelism: 18
 
   # Set imagePullPolicy for all containers in the workflow
   podSpecPatch: |
@@ -278,7 +278,7 @@ spec:
           - "{{workflow.parameters.TEMP_FOLDER}}/{{workflow.name}}/{{inputs.parameters.mission-id-padded}}"
           - "{{workflow.parameters.TEMP_FOLDER}}/{{workflow.name}}/{{inputs.parameters.mission-id-padded}}_images.zip"
           - "--s3-dest"
-          - "{{workflow.parameters.S3_BUCKET}}/{{workflow.parameters.S3_BASE_FOLDER}}/{{inputs.parameters.mission-id-padded}}/{{inputs.parameters.mission-id-padded}}_images.zip"
+          - "{{workflow.parameters.S3_BUCKET}}/{{workflow.parameters.S3_BASE_FOLDER}}/{{inputs.parameters.mission-id-padded}}/images/{{inputs.parameters.mission-id-padded}}_images.zip"
         env:
           - name: RCLONE_CONFIG_JS2S3_TYPE
             value: "s3"
