@@ -43,9 +43,9 @@ def parse_args():
 
 
 def main(input_data_folder, output_data_folder, ofo_mission_id, sd_card_id, gopro_file_prefix):
-    
+
     # Find files matching the card
-    card_search_str = f"**/card_{sd_card_id}/**/*"
+    card_search_str = f"**/card_{sd_card_id:02}/**/*"
     matching_files = list(input_data_folder.rglob(card_search_str))
 
     # Find files matching any of the prefixes
