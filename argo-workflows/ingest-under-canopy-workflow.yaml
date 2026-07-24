@@ -52,7 +52,7 @@ spec:
         value: "/data/argo-output/temp-dir"
       # S3 bucket and folder that outputs are uploaded to, via the 'js2s3' rclone remote.
       # Full paths:
-      #   {S3_BUCKET}/{S3_BASE_FOLDER}/{mission_id}/{mission_id}_image-metadata.gpkg
+      #   {S3_BUCKET}/{S3_BASE_FOLDER}/{mission_id}/images/{mission_id}_image-metadata.gpkg
       #   {S3_BUCKET}/{S3_BASE_FOLDER}/{mission_id}/{mission_id}_images.zip
       - name: S3_BUCKET
         value: "ofo-public"
