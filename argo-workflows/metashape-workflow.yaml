@@ -742,6 +742,12 @@ spec:
             SRC="{{workflow.parameters.TEMP_WORKING_DIR}}/{{workflow.name}}/{{inputs.parameters.project-name}}/photogrammetry/output/"
             SRC_parent="{{workflow.parameters.TEMP_WORKING_DIR}}/{{workflow.name}}/{{inputs.parameters.project-name}}/photogrammetry"
 
+            # rename the metadata.xml file if present so it's identified by the project name in the flat S3 folder
+            if [ -f "$SRC/metadata.xml" ]; then
+              mv "$SRC/metadata.xml" "$SRC/{{inputs.parameters.project-name}}_mesh_metadata.xml"
+              echo "Renamed metadata.xml to {{inputs.parameters.project-name}}_mesh_metadata.xml"
+            fi
+
             # Build S3 destination path with optional photogrammetry config subfolder
             if [ -n "{{inputs.parameters.photogrammetry-config-subfolder}}" ]; then
               DST="s3:{{workflow.parameters.S3_BUCKET_INTERNAL}}/{{workflow.parameters.S3_PHOTOGRAMMETRY_DIR}}/{{inputs.parameters.photogrammetry-config-subfolder}}"
