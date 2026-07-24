@@ -21,10 +21,10 @@ def parse_args():
         type=Path,
     )
     parser.add_argument(
-        "--ofo-mission-id",
+        "--collect-id",
         type=int,
         required=True,
-        help="The OFO mission ID for this dataset.",
+        help="The OFO collect ID for this dataset.",
     )
     parser.add_argument(
         "--sd-card-id",
@@ -42,7 +42,7 @@ def parse_args():
     return parser.parse_args()
 
 
-def main(input_data_folder, output_data_folder, ofo_mission_id, sd_card_id, gopro_file_prefix):
+def main(input_data_folder, output_data_folder, collect_id, sd_card_id, gopro_file_prefix):
 
     # Find files matching the card
     card_search_str = f"**/card_{sd_card_id:02}/**/*"
@@ -60,17 +60,17 @@ def main(input_data_folder, output_data_folder, ofo_mission_id, sd_card_id, gopr
     # TODO: Consider a check to see whether this is within the start/end timestamps and/or if there are timestamp gaps
     # This would require first parsing the metadata
 
-    # Create an output folder based on the output folder / ofo_mission_id
-    output_folder = Path(output_data_folder, f"{ofo_mission_id:06d}/{ofo_mission_id:06d}_images")
+    # Create an output folder based on the output folder / collect_id
+    output_folder = Path(output_data_folder, f"{collect_id:06d}/{collect_id:06d}_images")
     # remove old folder, if present
     shutil.rmtree(output_folder, ignore_errors=True)
     # And recreate
     output_folder.mkdir(parents=True, exist_ok=True)
 
     # Hardlink all files to that location
-    # The output format should be <mission_id>/<mission_id>-<image_id>.JPG
+    # The output format should be <collect_id>/<collect_id>-<image_id>.JPG
     filename_remapping = {
-        str(in_f): str(Path(output_folder, f"{ofo_mission_id:06d}_{i:06d}.JPG"))
+        str(in_f): str(Path(output_folder, f"{collect_id:06d}_{i:06d}.JPG"))
         for i, in_f in enumerate(matching_files)
     }
 
