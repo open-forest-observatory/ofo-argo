@@ -47,6 +47,15 @@ spec:
       - name: FIELD_TREES_FILE
       # Path to the file of plot boundaries for all plots
       - name: FIELD_PLOTS_FILE
+      # The leading path to where images were located when photogrammetry was run. The overall
+      # path to the images is expected to be:
+      # {PHOTOGRAMMETRY_IMAGERY_FOLDER}/{photogrammetry_run_id}/photogrammetry/downloaded-raw-imagery
+      - name: PHOTOGRAMMETRY_IMAGERY_FOLDER
+      # The path to the live/dead classification model weights file
+      - name: LD_MODEL_PATH
+      # The path to the live/dead classification model config file (.py)
+      - name: LD_CONFIG_PATH
+      ## Defaulted arguments follow
       - name: S3_BUCKET
         value: "ofo-public"
       # S3 folder containing per-mission photogrammetry products and pre-computed detections
@@ -67,18 +76,12 @@ spec:
       # All per-pair temp products are saved under: TEMP_FOLDER/{{workflow.name}}/{{pair-name}}/
       - name: TEMP_FOLDER
         value: "/data/argo-output/temp-dir"
-      # The leading path to where images were located when photogrammetry was run. The overall
-      # path to the images is expected to be:
-      # {PHOTOGRAMMETRY_IMAGERY_FOLDER}/{photogrammetry_run_id}/photogrammetry/downloaded-raw-imagery
-      - name: PHOTOGRAMMETRY_IMAGERY_FOLDER
       # Maximum number of image chips to save per tree (passed as --n-chips-per-tree to chip_images.py)
       - name: MAX_VIEWS_PER_TREE
         value: 10
       # Minimum registration shift quality score; pairs scoring below this threshold fail the task
       - name: REGISTRATION_QUALITY_THRESHOLD
         value: 0.5  # TODO: Set appropriate threshold based on experiments (see issue #55)
-      - name: LD_MODEL_PATH
-      - name: LD_CONFIG_PATH
       - name: MESH_CRS
         value: 26910
       - name: N_WORKERS
