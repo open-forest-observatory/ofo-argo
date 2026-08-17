@@ -124,7 +124,7 @@ spec:
         parameters:
           - name: plot-id
           - name: photogrammetry-run-id
-          # Derived as "{plot-id}_{photogrammetry-run-id}"; used to name per-pair output files/folders.
+          # Derived as "{photogrammetry-run-id}_{plot-id}"; used to name per-pair output files/folders.
           - name: pair-name
       dag:
         # failFast=false ensures other pairs continue if this one fails
@@ -268,7 +268,7 @@ spec:
                   datasets.append({
                       "photogrammetry-run-id": photogrammetry_run_id,
                       "plot-id": plot_id,
-                      "pair-name": f"{plot_id}_{photogrammetry_run_id}",
+                      "pair-name": f"{photogrammetry_run_id}_{plot_id}",
                   })
           json.dump(datasets, sys.stdout)
 
