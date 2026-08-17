@@ -194,7 +194,7 @@ spec:
                 - name: mesh-crs
                   value: "{{workflow.parameters.MESH_CRS}}"
                 - name: original-image-folder
-                  value: "{{workflow.parameters.PHOTOGRAMMETRY_IMAGERY_FOLDER}}/{{inputs.parameters.photogrammetry-run-id}}/photogrammetry/downloaded-raw-imagery"
+                  value: "{{workflow.parameters.PHOTOGRAMMETRY_IMAGERY_FOLDER}}/{{inputs.parameters.photogrammetry-run-id}}/photogrammetry/downloaded-raw-imagery/"
                 - name: render-savefolder
                   value: "{{workflow.parameters.TEMP_FOLDER}}/{{workflow.name}}/{{inputs.parameters.pair-name}}/renders"
 
