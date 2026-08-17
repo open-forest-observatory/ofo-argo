@@ -92,6 +92,8 @@ spec:
         value: "main"
       - name: GEOGRAYPHER_IMAGE_TAG
         value: "main"
+      - name: TRAM_IMAGE_TAG
+        value: "main"
       - name: CV_UTILS_IMAGE_TAG
         value: "main"
 
@@ -464,7 +466,7 @@ spec:
           - name: registration-file
           - name: output-file
       script:
-        image: ghcr.io/open-forest-observatory/tree-registration-and-matching:latest
+        image: ghcr.io/open-forest-observatory/tree-registration-and-matching:{{workflow.parameters.TRAM_IMAGE_TAG}}
         volumeMounts:
           - name: data
             mountPath: /data
