@@ -169,9 +169,9 @@ spec:
                 - name: field-bounds-file
                   value: "{{workflow.parameters.FIELD_PLOTS_FILE}}"
                 - name: drone-trees-file
-                  value: '{{=jsonpath(tasks["download-ground-reference-data"].outputs.parameters["local-files"], "$.crowns")}}'
-                - name: drone-crowns-file
                   value: '{{=jsonpath(tasks["download-ground-reference-data"].outputs.parameters["local-files"], "$.treetops")}}'
+                - name: drone-crowns-file
+                  value: '{{=jsonpath(tasks["download-ground-reference-data"].outputs.parameters["local-files"], "$.crowns")}}'
                 - name: registration-file
                   value: '{{=jsonpath(tasks["download-ground-reference-data"].outputs.parameters["local-files"], "$.registration")}}'
                 - name: output-file
