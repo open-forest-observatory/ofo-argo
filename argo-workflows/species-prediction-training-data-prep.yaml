@@ -41,8 +41,8 @@ spec:
   # These parameters can be referenced throughout the workflow templates using {{workflow.parameters.<name>}}
   arguments:
     parameters:
-      # Path to a newline-separated file with comma-separated "{photogrammetry_run_id}, {plot_id}"
-      # pairs to process, e.g. "000004_000005, 0010". photogrammetry_run_id is itself the
+      # Path to a newline-separated file with comma-separated "{photogrammetry_run_id}, {plot_id}, {mesh_CRS}"
+      # pairs to process, e.g. "000004_000005, 0010, 26910". photogrammetry_run_id is itself the
       # composite "{mission_lo}_{mission_hi}" ID for a paired photogrammetry run.
       - name: DATASETS_FILE
       # Path to the file of field trees for all plots, with a `plot_id` column
@@ -87,10 +87,6 @@ spec:
       # Minimum registration shift quality score; pairs scoring below this threshold fail the task
       - name: REGISTRATION_QUALITY_THRESHOLD
         value: 0.5  # TODO: Set appropriate threshold based on experiments (see issue #55)
-      # What CRS to interpret all meshes in.
-      # TODO this should be specified per dataset as it may vary in a large area.
-      - name: MESH_CRS
-        value: 26910
       # The number of workers used for image chipping
       - name: N_CHIPPING_WORKERS
         value: 12
@@ -125,6 +121,8 @@ spec:
                   value: "{{item.photogrammetry-run-id}}"
                 - name: pair-name
                   value: "{{item.pair-name}}"
+                - name: mesh-crs
+                  value: "{{item.mesh_CRS}}"
             # Continue processing remaining pairs even if one fails
             withParam: "{{steps.determine-datasets.outputs.result}}"
 
@@ -135,6 +133,7 @@ spec:
           - name: photogrammetry-run-id
           # Derived as "{photogrammetry-run-id}_{plot-id}"; used to name per-pair output files/folders.
           - name: pair-name
+          - name: mesh-crs
       dag:
         # failFast=false ensures other pairs continue if this one fails
         failFast: false
@@ -199,7 +198,7 @@ spec:
                 - name: trees-file
                   value: "{{workflow.parameters.TEMP_FOLDER}}/{{workflow.name}}/{{inputs.parameters.pair-name}}/{{inputs.parameters.pair-name}}_matched-tree-crowns.gpkg"
                 - name: mesh-crs
-                  value: "{{workflow.parameters.MESH_CRS}}"
+                  value: "{{inputs.parameters.mesh-crs}}"
                 - name: original-image-folder
                   value: "{{workflow.parameters.PHOTOGRAMMETRY_IMAGERY_FOLDER}}/{{inputs.parameters.photogrammetry-run-id}}/photogrammetry/downloaded-raw-imagery/"
                 - name: render-savefolder
@@ -255,8 +254,8 @@ spec:
 
 ## Definitions of individual step templates
 
-    # Parse the newline-separated datasets file (comma-separated "{photogrammetry_run_id}, {plot_id}"
-    # per line) into a JSON array of {photogrammetry-run-id, plot-id, pair-name} objects.
+    # Parse the newline-separated datasets file (comma-separated "{photogrammetry_run_id}, {plot_id}, {mesh_CRS}"
+    # per line) into a JSON array of {photogrammetry-run-id, plot-id, mesh_CRS, pair-name} objects.
     - name: determine-datasets
       script:
         image: python:3.9
@@ -273,10 +272,11 @@ spec:
                   line = line.strip()
                   if not line:
                       continue
-                  photogrammetry_run_id, plot_id = [x.strip() for x in line.split(",")]
+                  photogrammetry_run_id, plot_id, mesh_CRS = [x.strip() for x in line.split(",")]
                   datasets.append({
                       "photogrammetry-run-id": photogrammetry_run_id,
                       "plot-id": plot_id,
+                      "mesh_CRS": mesh_CRS,
                       "pair-name": f"{photogrammetry_run_id}_{plot_id}",
                   })
           json.dump(datasets, sys.stdout)
