@@ -87,8 +87,20 @@ spec:
       # Minimum registration shift quality score; pairs scoring below this threshold fail the task
       - name: REGISTRATION_QUALITY_THRESHOLD
         value: 0.5  # TODO: Set appropriate threshold based on experiments (see issue #55)
+      # Locations on the mesh below this height are masked
+      - name: RENDER_GROUND_HEIGHT_THRESHOLD
+        value: 2.0
+      # The mesh is rendered in chunks with this number of cameras per chunk
+      - name: RENDER_N_CAMERAS_PER_CHUNK
+        value: 50
+      # The distances from the labels that the mesh is cropped to
+      - name: RENDER_MESH_ROI_BUFFER_RADIUS_METERS
+        value: 50
+      # The distances from the labels that the cameras are cropped to
+      - name: RENDER_CAMERAS_ROI_BUFFER_RADIUS_METERS
+        value: 100
       # The number of workers used for image chipping
-      - name: N_CHIPPING_WORKERS
+      - name: CHIPPING_N_WORKERS
         value: 12
       # All *_IMAGE_TAG arguments control which image on the github container registry is used
       - name: OFO_ARGO_UTILS_IMAGE_TAG
@@ -577,9 +589,11 @@ spec:
             "--image-folder", "\"\"",
             "--render-savefolder", "{{inputs.parameters.render-savefolder}}",
             "--texture-column-name", "unique_ID",
-            "--ground-height-threshold", "2.0",
+            "--ground-height-threshold", "{{workflow.parameters.RENDER_GROUND_HEIGHT_THRESHOLD}}",
             "--original-image-folder", "{{inputs.parameters.original-image-folder}}",
-            "--n-cameras-per-chunk", "50"]
+            "--n-cameras-per-chunk", "{{workflow.parameters.RENDER_N_CAMERAS_PER_CHUNK}}",
+            "--mesh-ROI-buffer-radius-meters", "{{workflow.parameters.RENDER_MESH_ROI_BUFFER_RADIUS_METERS}}",
+            "--cameras-ROI-buffer-radius-meters", "{{workflow.parameters.RENDER_CAMERAS_ROI_BUFFER_RADIUS_METERS}}"]
 
     - name: chip-images
       inputs:
@@ -603,7 +617,7 @@ spec:
                   "{{inputs.parameters.images-folder}}",
                   "{{inputs.parameters.renders-folder}}",
                   "{{inputs.parameters.output-folder}}",
-                  "--n-workers", "{{workflow.parameters.N_CHIPPING_WORKERS}}",
+                  "--n-workers", "{{workflow.parameters.CHIPPING_N_WORKERS}}",
                   "--n-chips-per-tree", "{{inputs.parameters.max-views-per-tree}}"
                   ]
 
