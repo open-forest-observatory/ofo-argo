@@ -45,9 +45,9 @@ spec:
       # pairs to process, e.g. "000004_000005, 0010". photogrammetry_run_id is itself the
       # composite "{mission_lo}_{mission_hi}" ID for a paired photogrammetry run.
       - name: DATASETS_FILE
-      # Path to the file of field trees for all plots
+      # Path to the file of field trees for all plots, with a `plot_id` column
       - name: FIELD_TREES_FILE
-      # Path to the file of plot boundaries for all plots
+      # Path to the file of plot boundaries for all plots, with a `plot_id` column
       - name: FIELD_PLOTS_FILE
       # The leading path to where images were located when photogrammetry was run. The overall
       # path to the images is expected to be:
@@ -58,7 +58,7 @@ spec:
       # The path to the live/dead classification model config file (.py)
       - name: LD_CONFIG_PATH
       ## Defaulted arguments follow
-      - name: S3_BUCKET
+      - name: INPUT_S3_BUCKET
         value: "ofo-public"
       # S3 folder containing per-mission photogrammetry products and pre-computed detections
       - name: S3_MISSIONS_FOLDER
@@ -69,10 +69,13 @@ spec:
       # S3 folder where output training chips and matched crowns will be written
       - name: S3_TRAINING_OUTPUT_FOLDER
         value: "drone/training-data_01"
+      # The identifier of the photogrammetry parameterization
+      # The path to the photogrammetry files is expected to be s3:{{INPUT_S3_BUCKET}}/{{S3_MISSIONS_FOLDER}}/{{RUN_ID}}/{{PHOTOGRAMMETRY_ID}}/full/"
       - name: PHOTOGRAMMETRY_ID
         value: "photogrammetry_01"
       # Subfolder (under PHOTOGRAMMETRY_ID) where pre-computed tree detections are stored on S3.
       # Expected filenames: {photogrammetry_run_id}_detected-tree-crowns.gpkg and {photogrammetry_run_id}_detected-tree-tops.gpkg
+      # TODO these filenames may need to be changed in the future.
       - name: S3_DETECTED_TREES_SUBFOLDER
         value: "detected-trees_0001"
       # All per-pair temp products are saved under: TEMP_FOLDER/{{workflow.name}}/{{pair-name}}/
@@ -84,10 +87,14 @@ spec:
       # Minimum registration shift quality score; pairs scoring below this threshold fail the task
       - name: REGISTRATION_QUALITY_THRESHOLD
         value: 0.5  # TODO: Set appropriate threshold based on experiments (see issue #55)
+      # What CRS to interpret all meshes in.
+      # TODO this should be specified per dataset as it may vary in a large area.
       - name: MESH_CRS
         value: 26910
-      - name: N_WORKERS
+      # The number of workers used for image chipping
+      - name: N_CHIPPING_WORKERS
         value: 12
+      # All *_IMAGE_TAG arguments control which image on the github container registry is used
       - name: OFO_ARGO_UTILS_IMAGE_TAG
         value: "main"
       - name: GEOGRAYPHER_IMAGE_TAG
@@ -151,7 +158,7 @@ spec:
                 # subfolders (nadir + oblique), which this produces. photogrammetry-run-id is the
                 # composite "{mission_lo}_{mission_hi}" ID; split it to get each raw mission ID.
                 - name: imagery-zip-urls
-                  value: "[\"{{workflow.parameters.S3_BUCKET}}/{{workflow.parameters.S3_IMAGERY_FOLDER}}/{{=split(inputs.parameters['photogrammetry-run-id'], \"_\")[0]}}/images/{{=split(inputs.parameters['photogrammetry-run-id'], \"_\")[0]}}_images.zip\",\"{{workflow.parameters.S3_BUCKET}}/{{workflow.parameters.S3_IMAGERY_FOLDER}}/{{=split(inputs.parameters['photogrammetry-run-id'], \"_\")[1]}}/images/{{=split(inputs.parameters['photogrammetry-run-id'], \"_\")[1]}}_images.zip\"]"
+                  value: "[\"{{workflow.parameters.INPUT_S3_BUCKET}}/{{workflow.parameters.S3_IMAGERY_FOLDER}}/{{=split(inputs.parameters['photogrammetry-run-id'], \"_\")[0]}}/images/{{=split(inputs.parameters['photogrammetry-run-id'], \"_\")[0]}}_images.zip\",\"{{workflow.parameters.INPUT_S3_BUCKET}}/{{workflow.parameters.S3_IMAGERY_FOLDER}}/{{=split(inputs.parameters['photogrammetry-run-id'], \"_\")[1]}}/images/{{=split(inputs.parameters['photogrammetry-run-id'], \"_\")[1]}}_images.zip\"]"
                 - name: pair-name
                   value: "{{inputs.parameters.pair-name}}"
 
@@ -312,7 +319,7 @@ spec:
             mkdir -p "$PHOT_DIR" "$TREES_DIR" "$SHIFT_DIR"
 
             # --- Photogrammetry products ---
-            S3_PHOT="s3:{{workflow.parameters.S3_BUCKET}}/{{workflow.parameters.S3_MISSIONS_FOLDER}}/${RUN_ID}/{{workflow.parameters.PHOTOGRAMMETRY_ID}}/full/"
+            S3_PHOT="s3:{{workflow.parameters.INPUT_S3_BUCKET}}/{{workflow.parameters.S3_MISSIONS_FOLDER}}/${RUN_ID}/{{workflow.parameters.PHOTOGRAMMETRY_ID}}/full/"
             echo "[rclone] Downloading photogrammetry products: $S3_PHOT -> $PHOT_DIR"
             rclone copy "$S3_PHOT" "$PHOT_DIR" \
               --include "${RUN_ID}_cameras.xml" \
@@ -336,7 +343,7 @@ spec:
             echo "[download] All 4 photogrammetry files verified."
 
             # --- Detected tree crowns and tops ---
-            S3_TREES="s3:{{workflow.parameters.S3_BUCKET}}/{{workflow.parameters.S3_MISSIONS_FOLDER}}/${RUN_ID}/{{workflow.parameters.PHOTOGRAMMETRY_ID}}/{{workflow.parameters.S3_DETECTED_TREES_SUBFOLDER}}/"
+            S3_TREES="s3:{{workflow.parameters.INPUT_S3_BUCKET}}/{{workflow.parameters.S3_MISSIONS_FOLDER}}/${RUN_ID}/{{workflow.parameters.PHOTOGRAMMETRY_ID}}/{{workflow.parameters.S3_DETECTED_TREES_SUBFOLDER}}/"
             # TODO consider removing the "classified" part
             CROWNS_FILE="${RUN_ID}_detected-tree-crowns_classified.gpkg"
             TOPS_FILE="${RUN_ID}_detected-tree-tops_classified.gpkg"
@@ -357,7 +364,7 @@ spec:
 
             # --- Registration shift ---
             SHIFT_FILENAME="${PAIR_NAME}_ground-reference-shift.csv"
-            S3_SHIFT="s3:{{workflow.parameters.S3_BUCKET}}/{{workflow.parameters.S3_MISSIONS_FOLDER}}/${RUN_ID}/{{workflow.parameters.PHOTOGRAMMETRY_ID}}/ground-reference-shifts/${SHIFT_FILENAME}"
+            S3_SHIFT="s3:{{workflow.parameters.INPUT_S3_BUCKET}}/{{workflow.parameters.S3_MISSIONS_FOLDER}}/${RUN_ID}/{{workflow.parameters.PHOTOGRAMMETRY_ID}}/ground-reference-shifts/${SHIFT_FILENAME}"
             echo "[rclone] Downloading registration shift: $S3_SHIFT"
             rclone copyto "$S3_SHIFT" "${SHIFT_DIR}/${SHIFT_FILENAME}" \
               --retries 5 --retries-sleep=15s \
@@ -596,7 +603,7 @@ spec:
                   "{{inputs.parameters.images-folder}}",
                   "{{inputs.parameters.renders-folder}}",
                   "{{inputs.parameters.output-folder}}",
-                  "--n-workers", "{{workflow.parameters.N_WORKERS}}",
+                  "--n-workers", "{{workflow.parameters.N_CHIPPING_WORKERS}}",
                   "--n-chips-per-tree", "{{inputs.parameters.max-views-per-tree}}"
                   ]
 
@@ -717,8 +724,8 @@ spec:
     # Upload chips directory and matched crowns (with live/dead predictions) to S3, then
     # clean up the local temp directory.
     # Output S3 paths:
-    #   Chips:  {S3_BUCKET}/{S3_TRAINING_OUTPUT_FOLDER}/chips/{pair_name}/
-    #   Crowns: {S3_BUCKET}/{S3_TRAINING_OUTPUT_FOLDER}/crowns/{pair_name}_matched-trees.gpkg
+    #   Chips:  {INPUT_S3_BUCKET}/{S3_TRAINING_OUTPUT_FOLDER}/chips/{pair_name}/
+    #   Crowns: {INPUT_S3_BUCKET}/{S3_TRAINING_OUTPUT_FOLDER}/crowns/{pair_name}_matched-trees.gpkg
     - name: upload-training-data
       inputs:
         parameters:
@@ -739,7 +746,7 @@ spec:
 
             # Upload all chips (all trees retained; downstream handles dead-tree filtering)
             CHIPS_SRC="${DATASET_DIR}/chips/"
-            CHIPS_DST="s3:{{workflow.parameters.S3_BUCKET}}/{{workflow.parameters.S3_TRAINING_OUTPUT_FOLDER}}/chips/${PAIR_NAME}"
+            CHIPS_DST="s3:{{workflow.parameters.INPUT_S3_BUCKET}}/{{workflow.parameters.S3_TRAINING_OUTPUT_FOLDER}}/chips/${PAIR_NAME}"
             echo "[rclone] Uploading chips: $CHIPS_SRC -> $CHIPS_DST"
             rclone copy "$CHIPS_SRC" "$CHIPS_DST" \
               --transfers 8 --checkers 8 --retries 5 --retries-sleep=15s \
@@ -748,7 +755,7 @@ spec:
 
             # Upload matched crowns with species labels and live/dead predictions
             CROWNS_SRC="${DATASET_DIR}/${PAIR_NAME}_matched-tree-crowns_w-live-dead.gpkg"
-            CROWNS_DST="s3:{{workflow.parameters.S3_BUCKET}}/{{workflow.parameters.S3_TRAINING_OUTPUT_FOLDER}}/crowns/${PAIR_NAME}_matched-trees.gpkg"
+            CROWNS_DST="s3:{{workflow.parameters.INPUT_S3_BUCKET}}/{{workflow.parameters.S3_TRAINING_OUTPUT_FOLDER}}/crowns/${PAIR_NAME}_matched-trees.gpkg"
             echo "[rclone] Uploading matched crowns: $CROWNS_SRC -> $CROWNS_DST"
             rclone copyto "$CROWNS_SRC" "$CROWNS_DST" \
               --retries 5 --retries-sleep=15s \
