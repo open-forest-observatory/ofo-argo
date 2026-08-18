@@ -744,8 +744,8 @@ spec:
 
             # rename the metadata.xml file if present so it's identified by the project name in the flat S3 folder
             if [ -f "$SRC/metadata.xml" ]; then
-              mv "$SRC/metadata.xml" "$SRC/{{inputs.parameters.project-name}}_mesh_metadata.xml"
-              echo "Renamed metadata.xml to {{inputs.parameters.project-name}}_mesh_metadata.xml"
+              mv "$SRC/metadata.xml" "$SRC/{{inputs.parameters.project-name}}_mesh-metadata.xml"
+              echo "Renamed metadata.xml to {{inputs.parameters.project-name}}_mesh-metadata.xml"
             fi
 
             # Build S3 destination path with optional photogrammetry config subfolder
