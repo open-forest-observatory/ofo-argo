@@ -760,7 +760,7 @@ spec:
 
             # Upload all chips (all trees retained; downstream handles dead-tree filtering)
             CHIPS_SRC="${DATASET_DIR}/chips/"
-            CHIPS_DST="s3:{{workflow.parameters.INPUT_S3_BUCKET}}/{{workflow.parameters.S3_TRAINING_OUTPUT_FOLDER}}/chips/${PAIR_NAME}"
+            CHIPS_DST="s3:{{workflow.parameters.INPUT_S3_BUCKET}}/{{workflow.parameters.S3_TRAINING_OUTPUT_FOLDER}}/${PAIR_NAME}/chips"
             echo "[rclone] Uploading chips: $CHIPS_SRC -> $CHIPS_DST"
             rclone copy "$CHIPS_SRC" "$CHIPS_DST" \
               --transfers 8 --checkers 8 --retries 5 --retries-sleep=15s \
@@ -769,7 +769,7 @@ spec:
 
             # Upload matched crowns with species labels and live/dead predictions
             CROWNS_SRC="${DATASET_DIR}/${PAIR_NAME}_matched-tree-crowns_w-live-dead.gpkg"
-            CROWNS_DST="s3:{{workflow.parameters.INPUT_S3_BUCKET}}/{{workflow.parameters.S3_TRAINING_OUTPUT_FOLDER}}/crowns/${PAIR_NAME}_matched-trees.gpkg"
+            CROWNS_DST="s3:{{workflow.parameters.INPUT_S3_BUCKET}}/{{workflow.parameters.S3_TRAINING_OUTPUT_FOLDER}}/${PAIR_NAME}_matched-trees.gpkg"
             echo "[rclone] Uploading matched crowns: $CROWNS_SRC -> $CROWNS_DST"
             rclone copyto "$CROWNS_SRC" "$CROWNS_DST" \
               --retries 5 --retries-sleep=15s \
