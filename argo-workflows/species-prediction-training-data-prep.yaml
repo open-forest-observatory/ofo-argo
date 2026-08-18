@@ -759,15 +759,13 @@ spec:
             DATASET_DIR="{{workflow.parameters.TEMP_FOLDER}}/{{workflow.name}}/${PAIR_NAME}"
             S3_UPLOAD_FOLDER="s3:{{workflow.parameters.INPUT_S3_BUCKET}}/{{workflow.parameters.S3_TRAINING_OUTPUT_FOLDER}}/${PAIR_NAME}"
 
-            # Delete existing folder to ensure everything is in sync
-            echo "[rclone] deleting any old data from $S3_UPLOAD_FOLDER"
-            rclone delete "$S3_UPLOAD_FOLDER" --dry-run
-
-            # Upload all chips (all trees retained; downstream handles dead-tree filtering)
+            # Sync all chips (all trees retained; downstream handles dead-tree filtering)
+            # Note, sync enforces that all data in the destination is identical, so outdated files
+            # would be deleted.
             CHIPS_SRC="${DATASET_DIR}/chips/"
             CHIPS_DST="${S3_UPLOAD_FOLDER}/chips"
             echo "[rclone] Uploading chips: $CHIPS_SRC -> $CHIPS_DST"
-            rclone copy "$CHIPS_SRC" "$CHIPS_DST" \
+            rclone sync "$CHIPS_SRC" "$CHIPS_DST" \
               --transfers 8 --checkers 8 --retries 5 --retries-sleep=15s \
               --s3-upload-cutoff 200Mi --s3-chunk-size 100Mi --s3-upload-concurrency 4 \
               --stats 15s --stats-log-level NOTICE
