@@ -135,6 +135,8 @@ spec:
                   value: "{{item.pair-name}}"
                 - name: mesh-crs
                   value: "{{item.mesh_CRS}}"
+                - name: imagery-zip-urls
+                  value: "{{item.imagery-zip-urls}}"
             # Continue processing remaining pairs even if one fails
             withParam: "{{steps.determine-datasets.outputs.result}}"
 
@@ -146,6 +148,7 @@ spec:
           # Derived as "{photogrammetry-run-id}_{plot-id}"; used to name per-pair output files/folders.
           - name: pair-name
           - name: mesh-crs
+          - name: imagery-zip-urls
       dag:
         # failFast=false ensures other pairs continue if this one fails
         failFast: false
@@ -169,7 +172,7 @@ spec:
                 # subfolders (nadir + oblique), which this produces. photogrammetry-run-id is the
                 # composite "{mission_lo}_{mission_hi}" ID; split it to get each raw mission ID.
                 - name: imagery-zip-urls
-                  value: "[\"{{workflow.parameters.INPUT_S3_BUCKET}}/{{workflow.parameters.S3_IMAGERY_FOLDER}}/{{=split(inputs.parameters['photogrammetry-run-id'], \"_\")[0]}}/images/{{=split(inputs.parameters['photogrammetry-run-id'], \"_\")[0]}}_images.zip\",\"{{workflow.parameters.INPUT_S3_BUCKET}}/{{workflow.parameters.S3_IMAGERY_FOLDER}}/{{=split(inputs.parameters['photogrammetry-run-id'], \"_\")[1]}}/images/{{=split(inputs.parameters['photogrammetry-run-id'], \"_\")[1]}}_images.zip\"]"
+                  value: "{{inputs.parameters.imagery-zip-urls}}"
                 - name: pair-name
                   value: "{{inputs.parameters.pair-name}}"
 
@@ -285,11 +288,13 @@ spec:
                   if not line:
                       continue
                   photogrammetry_run_id, plot_id, mesh_CRS = [x.strip() for x in line.split(",")]
+                  imageset_ids = photogrammetry_run_id.split("_")
                   datasets.append({
                       "photogrammetry-run-id": photogrammetry_run_id,
                       "plot-id": plot_id,
                       "mesh_CRS": mesh_CRS,
                       "pair-name": f"{photogrammetry_run_id}_{plot_id}",
+                      "imagery-zip-urls": [f"{{workflow.parameters.INPUT_S3_BUCKET}}/{{workflow.parameters.S3_IMAGERY_FOLDER}}/{imageset_id}/images/{imageset_id}_images.zip" for imageset_id in imageset_ids]
                   })
           json.dump(datasets, sys.stdout)
 
