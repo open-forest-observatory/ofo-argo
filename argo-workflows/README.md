@@ -69,3 +69,14 @@ postprocessing_02:
     args:
       min_area_threshold: 25.0
 ```
+
+# Creating chips for model training
+The `species-prediction-training-data-prep.yaml` workflow is used to produce training data for tree-level attribute prediction tasks, such as species prediction.
+-Downloads the zipped imagery, detected trees (crowns and tops), and shift between the two.
+-Shifts the field trees to match the tree tops.
+-Matches the field trees to the tree tops. This in turn links to the tree crowns by way of the crown's tree_top_unique_id and the tree top's unique_id.
+-Renders the crown's unique_id to the perspective of each image.
+-Crops out each individual tree. This step also masks the background with gray.
+-Generate per-view predictions of live vs. dead with the provided pretrained computer vision model.
+-Aggregate predictions at the tree level to determine which trees are dead by a majority vote across all views of it.
+-Finally, the masked crops and the matched crowns (now with all information from the field trees and predicted live/dead status) are uploaded to S3.
