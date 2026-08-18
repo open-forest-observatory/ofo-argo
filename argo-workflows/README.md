@@ -80,3 +80,6 @@ The `species-prediction-training-data-prep.yaml` workflow is used to produce tra
 -Generate per-view predictions of live vs. dead with the provided pretrained computer vision model.
 -Aggregate predictions at the tree level to determine which trees are dead by a majority vote across all views of it.
 -Finally, the masked crops and the matched crowns (now with all information from the field trees and predicted live/dead status) are uploaded to S3.
+
+The main input is a comma-separated file which specifies which photogrammetry ID and plot ID pairs to run chipping on. The photogrammetry ID can be either a single drone mission ID or a pair, separated by an underscore. The final column is the CRS to interperet the mesh in. An example of this file is below.
+```001439_001440, 0045, 26910```
