@@ -738,8 +738,8 @@ spec:
     # Upload chips directory and matched crowns (with live/dead predictions) to S3, then
     # clean up the local temp directory.
     # Output S3 paths:
-    #   Chips:  {INPUT_S3_BUCKET}/{S3_TRAINING_OUTPUT_FOLDER}/chips/{pair_name}/
-    #   Crowns: {INPUT_S3_BUCKET}/{S3_TRAINING_OUTPUT_FOLDER}/crowns/{pair_name}_matched-trees.gpkg
+    #   Chips:  {INPUT_S3_BUCKET}/{S3_TRAINING_OUTPUT_FOLDER}/{pair_name}/chips/
+    #   Crowns: {INPUT_S3_BUCKET}/{S3_TRAINING_OUTPUT_FOLDER}/{pair_name}/{pair_name}_matched-trees.gpkg
     - name: upload-training-data
       inputs:
         parameters:
@@ -757,10 +757,15 @@ spec:
             set -euo pipefail
             PAIR_NAME="{{inputs.parameters.pair-name}}"
             DATASET_DIR="{{workflow.parameters.TEMP_FOLDER}}/{{workflow.name}}/${PAIR_NAME}"
+            S3_UPLOAD_FOLDER="s3:{{workflow.parameters.INPUT_S3_BUCKET}}/{{workflow.parameters.S3_TRAINING_OUTPUT_FOLDER}}/${PAIR_NAME}"
+
+            # Delete existing folder to ensure everything is in sync
+            echo "[rclone] deleting any old data from $S3_UPLOAD_FOLDER"
+            rclone delete "$S3_UPLOAD_FOLDER" --dry-run
 
             # Upload all chips (all trees retained; downstream handles dead-tree filtering)
             CHIPS_SRC="${DATASET_DIR}/chips/"
-            CHIPS_DST="s3:{{workflow.parameters.INPUT_S3_BUCKET}}/{{workflow.parameters.S3_TRAINING_OUTPUT_FOLDER}}/${PAIR_NAME}/chips"
+            CHIPS_DST="${S3_UPLOAD_FOLDER}/chips"
             echo "[rclone] Uploading chips: $CHIPS_SRC -> $CHIPS_DST"
             rclone copy "$CHIPS_SRC" "$CHIPS_DST" \
               --transfers 8 --checkers 8 --retries 5 --retries-sleep=15s \
@@ -769,7 +774,7 @@ spec:
 
             # Upload matched crowns with species labels and live/dead predictions
             CROWNS_SRC="${DATASET_DIR}/${PAIR_NAME}_matched-tree-crowns_w-live-dead.gpkg"
-            CROWNS_DST="s3:{{workflow.parameters.INPUT_S3_BUCKET}}/{{workflow.parameters.S3_TRAINING_OUTPUT_FOLDER}}/${PAIR_NAME}_matched-trees.gpkg"
+            CROWNS_DST="${S3_UPLOAD_FOLDER}/${PAIR_NAME}_matched-trees.gpkg"
             echo "[rclone] Uploading matched crowns: $CROWNS_SRC -> $CROWNS_DST"
             rclone copyto "$CROWNS_SRC" "$CROWNS_DST" \
               --retries 5 --retries-sleep=15s \
