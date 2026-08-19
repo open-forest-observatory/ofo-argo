@@ -71,15 +71,22 @@ postprocessing_02:
 ```
 
 # Creating chips for model training
-The `species-prediction-training-data-prep.yaml` workflow is used to produce training data for tree-level attribute prediction tasks, such as species prediction.
--Downloads the zipped imagery, detected trees (crowns and tops), and shift between the two.
--Shifts the field trees to match the tree tops.
--Matches the field trees to the tree tops. This in turn links to the tree crowns by way of the crown's tree_top_unique_id and the tree top's unique_id.
--Renders the crown's unique_id to the perspective of each image.
--Crops out each individual tree. This step also masks the background with gray.
--Generate per-view predictions of live vs. dead with the provided pretrained computer vision model.
--Aggregate predictions at the tree level to determine which trees are dead by a majority vote across all views of it.
--Finally, the masked crops and the matched crowns (now with all information from the field trees and predicted live/dead status) are uploaded to S3.
+The `species-prediction-training-data-prep.yaml` workflow is used to produce training data for tree-level attribute prediction tasks, such as species prediction. Conceptually, this workflow takes four main inputs.
+- **Field reference information**: You must provide two files on the `ofo-share` describing the field-surveyed trees and the corresponding bounds of the surveyed plots. These files should both contain the `plot_id` key, which describes which surveyed plot they correspond to.
+- **Detected trees**: Represents the paired tree top and tree crowns detected from the photogrammetry-derived products. One set of detected trees must be provided per drone mission.
+- **Plot-level spatial registration**: The spatial shift which aligns the photogrammetry data to the field survey data.
+- **Photogrammetry products**: The mesh file representing the 3D geometry of the scene and the cameras file representing the location and orientation of each camera is used. One set of photogrammetry data must be provided per drone mission.
+- **Live/dead classification model**: This generates predictions from individual cropped views of each tree of whether it is alive or not. This information can be later used to filter the training data only to live trees.
+
+The workflow completes the following steps.
+- Downloads the zipped imagery, detected trees (crowns and tops), and shift between the two.
+- Shifts the field trees to match the tree tops.
+- Matches the field trees to the tree tops. This in turn links to the tree crowns by way of the crown's tree_top_unique_id and the tree top's unique_id.
+- Renders the crown's unique_id to the perspective of each image.
+- Crops out each individual tree. This step also masks the background with gray.
+- Generate per-view predictions of live vs. dead with the provided pretrained computer vision model.
+- Aggregate predictions at the tree level to determine which trees are dead by a majority vote across all views of it.
+- Finally, the masked crops and the matched crowns (now with all information from the field trees and predicted live/dead status) are uploaded to S3.
 
 The main input is a comma-separated file which specifies which photogrammetry ID and plot ID pairs to run chipping on. The photogrammetry ID can be either a single drone mission ID or a pair, separated by an underscore. The final column is the CRS to interperet the mesh in. An example of this file is below.
 ```001439_001440, 0045, 26910```
