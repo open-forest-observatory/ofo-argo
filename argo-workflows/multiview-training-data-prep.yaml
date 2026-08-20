@@ -177,7 +177,7 @@ spec:
             arguments:
               parameters:
                 - name: chm-file
-                  value: '{{=jsonpath(tasks["download-input-data"].outputs.parameters["local-files"], "$.chm")}}'
+                  value: '{{=jsonpath(tasks["download-non-image-files"].outputs.parameters["local-files"], "$.chm")}}'
                 - name: detected-tree-tops-file
                   value: "{{workflow.parameters.TEMP_FOLDER}}/{{workflow.name}}/{{inputs.parameters.processed-drone-dataset-id}}/detected-tree-tops.gpkg"
                 - name: detected-tree-crowns-file
