@@ -41,9 +41,10 @@ spec:
   # These parameters can be referenced throughout the workflow templates using {{workflow.parameters.<name>}}
   arguments:
     parameters:
-      # Path to a newline-separated file with comma-separated "{processed-drone-dataset-id}, {ground-plot-id}, {mesh-crs}"
-      # triples to process, e.g. "000004_000005, 0010, 26910". processed-drone-dataset-id is itself the
+      # Path to a newline-separated file with comma-separated "{processed-drone-dataset-id}, {ground-plot-id}"
+      # pairs to process, e.g. "000004_000005, 0010". processed-drone-dataset-id is itself the
       # composite "{mission_lo}_{mission_hn}" ID for a paired photogrammetry run or the mission_id of a single drone dataset.
+      # The mesh CRS is parsed automatically from the photogrammetry log file and does not need to be provided.
       - name: DATASETS_FILE
       # Path to the file of field trees for all plots, with a `plot_id` column
       - name: FIELD_TREES_FILE
@@ -133,8 +134,6 @@ spec:
                   value: "{{item.processed-drone-dataset-id}}"
                 - name: drone-ground-pair-name
                   value: "{{item.drone-ground-pair-name}}"
-                - name: mesh-crs
-                  value: "{{item.mesh-crs}}"
                 - name: imagery-zip-urls
                   value: "{{item.imagery-zip-urls}}"
             # Continue processing remaining pairs even if one fails
@@ -147,7 +146,6 @@ spec:
           - name: processed-drone-dataset-id
           # Derived as "{processed-drone-dataset-id}_{ground-plot-id}"; used to name per-pair output files/folders.
           - name: drone-ground-pair-name
-          - name: mesh-crs
           - name: imagery-zip-urls
       dag:
         # failFast=false ensures other pairs continue if this one fails
@@ -213,7 +211,7 @@ spec:
                 - name: trees-file
                   value: "{{workflow.parameters.TEMP_FOLDER}}/{{workflow.name}}/{{inputs.parameters.drone-ground-pair-name}}/{{inputs.parameters.drone-ground-pair-name}}_matched-tree-crowns.gpkg"
                 - name: mesh-crs
-                  value: "{{inputs.parameters.mesh-crs}}"
+                  value: '{{=jsonpath(tasks["download-ground-reference-data"].outputs.parameters["local-files"], "$.mesh-crs")}}'
                 - name: original-image-folder
                   value: "{{workflow.parameters.PHOTOGRAMMETRY_IMAGERY_FOLDER}}/{{inputs.parameters.processed-drone-dataset-id}}/photogrammetry/downloaded-raw-imagery/"
                 - name: render-savefolder
@@ -269,8 +267,8 @@ spec:
 
 ## Definitions of individual step templates
 
-    # Parse the newline-separated datasets file (comma-separated "{processed-drone-dataset-id}, {ground-plot-id}, {mesh-crs}"
-    # per line) into a JSON array of {processed-drone-dataset-id, ground-plot-id, mesh-crs, drone-ground-pair-name} objects.
+    # Parse the newline-separated datasets file (comma-separated "{processed-drone-dataset-id}, {ground-plot-id}"
+    # per line) into a JSON array of {processed-drone-dataset-id, ground-plot-id, drone-ground-pair-name} objects.
     - name: determine-datasets
       script:
         image: python:3.9
@@ -287,23 +285,27 @@ spec:
                   line = line.strip()
                   if not line:
                       continue
-                  processed_drone_dataset_id, ground_plot_id, mesh_crs = [x.strip() for x in line.split(",")]
+                  processed_drone_dataset_id, ground_plot_id = [x.strip() for x in line.split(",")]
                   imageset_ids = processed_drone_dataset_id.split("_")
                   datasets.append({
                       "processed-drone-dataset-id": processed_drone_dataset_id,
                       "ground-plot-id": ground_plot_id,
-                      "mesh-crs": mesh_crs,
                       "drone-ground-pair-name": f"{processed_drone_dataset_id}_{ground_plot_id}",
                       "imagery-zip-urls": [f"{{workflow.parameters.INPUT_S3_BUCKET}}/{{workflow.parameters.S3_IMAGERY_FOLDER}}/{imageset_id}/images/{imageset_id}_images.zip" for imageset_id in imageset_ids]
                   })
           json.dump(datasets, sys.stdout)
 
-    # Download photogrammetry products (cameras, CHM, DTM, mesh), pre-computed detected tree
+    # Download photogrammetry products (cameras, CHM, DTM, mesh, log), pre-computed detected tree
     # crowns, and registration shift CSV for a plot-photogrammetry pair in a single rclone step.
-    # Returns a JSON dict of photogrammetry product paths via outputs.parameters.local-files.
-    # Keys: camera, chm, dtm, mesh. Fails if any expected file is missing.
+    # The mesh CRS is parsed from the "project_crs:" line of the log file, so it no longer needs
+    # to be supplied by the user.
+    # TODO in the future, the mesh-metadata.xml file should be downloaded instead, since this
+    # optionally includes a shift. But historical photogrammetry runs did not include it.
+    # Returns a JSON dict of photogrammetry product paths (plus the parsed mesh_crs) via
+    # outputs.parameters.local-files. Keys: camera, chm, dtm, mesh, mesh_crs. Fails if any
+    # expected file is missing or the mesh CRS can't be parsed.
     # Output directory structure:
-    #   {local-dir}/photogrammetry-products/  -- cameras, CHM, DTM, mesh
+    #   {local-dir}/photogrammetry-products/  -- cameras, CHM, DTM, mesh, log
     #   {local-dir}/detected-trees/           -- detected tree crowns gpkg
     #   {local-dir}/registration-shift/       -- ground-reference shift CSV
     - name: download-ground-reference-data
@@ -343,6 +345,7 @@ spec:
               --include "${PROCESSED_DRONE_DATASET_ID}_chm-mesh.tif" \
               --include "${PROCESSED_DRONE_DATASET_ID}_dtm-ptcloud.tif" \
               --include "${PROCESSED_DRONE_DATASET_ID}_mesh.ply" \
+              --include "${PROCESSED_DRONE_DATASET_ID}_log.txt" \
               --transfers 8 --checkers 8 --retries 5 --retries-sleep=15s \
               --stats 15s --stats-log-level NOTICE
 
@@ -358,6 +361,19 @@ spec:
               fi
             done
             echo "[download] All 4 photogrammetry files verified."
+
+            # --- Mesh CRS (parsed from the photogrammetry log) ---
+            LOG_FILE="${PHOT_DIR}/${PROCESSED_DRONE_DATASET_ID}_log.txt"
+            if [ ! -f "$LOG_FILE" ]; then
+              echo "[download] ERROR: Expected file not found: $LOG_FILE"
+              exit 1
+            fi
+            MESH_CRS=$(grep "project_crs:" "$LOG_FILE" | head -n1 | sed 's/.*EPSG::\([0-9]*\).*/\1/')
+            if [ -z "$MESH_CRS" ]; then
+              echo "[download] ERROR: Could not parse mesh CRS from log file: $LOG_FILE"
+              exit 1
+            fi
+            echo "[download] Parsed mesh CRS: $MESH_CRS"
 
             # --- Detected tree crowns and tops ---
             S3_TREES="s3:{{workflow.parameters.INPUT_S3_BUCKET}}/{{workflow.parameters.S3_MISSIONS_FOLDER}}/${PROCESSED_DRONE_DATASET_ID}/{{workflow.parameters.PHOTOGRAMMETRY_ID}}/{{workflow.parameters.S3_DETECTED_TREES_SUBFOLDER}}/"
@@ -394,8 +410,8 @@ spec:
             echo "[download] Registration shift file verified."
 
             # Write photogrammetry product paths for use by downstream steps
-            printf '{"camera":"%s","chm":"%s","dtm":"%s","mesh":"%s", "crowns": "%s", "treetops": "%s", "registration": "%s"}' \
-              "$CAMERA_FILE" "$CHM_FILE" "$DTM_FILE" "$MESH_FILE" "${TREES_DIR}/$CROWNS_FILE" "${TREES_DIR}/$TOPS_FILE" "${SHIFT_DIR}/$SHIFT_FILENAME" \
+            printf '{"camera":"%s","chm":"%s","dtm":"%s","mesh":"%s", "crowns": "%s", "treetops": "%s", "registration": "%s", "mesh-crs": "%s"}' \
+              "$CAMERA_FILE" "$CHM_FILE" "$DTM_FILE" "$MESH_FILE" "${TREES_DIR}/$CROWNS_FILE" "${TREES_DIR}/$TOPS_FILE" "${SHIFT_DIR}/$SHIFT_FILENAME" "$MESH_CRS" \
               > /tmp/file-paths.json
             echo "[download] File paths written to /tmp/file-paths.json"
         resources:
