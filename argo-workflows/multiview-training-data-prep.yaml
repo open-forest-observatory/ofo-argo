@@ -57,10 +57,11 @@ spec:
       ## Defaulted arguments follow
       - name: INPUT_S3_BUCKET
         value: "ofo-public"
-      # S3 folder containing per-mission photogrammetry products and pre-computed detections
+      # Folder within the INPUT_S3_BUCKET containing per-mission photogrammetry products and
+      # pre-computed detections
       - name: S3_MISSIONS_FOLDER
         value: "drone/mission-composites_01"
-      # Where the single-mission imagery is stored
+      # Where the single-mission imagery is stored within the INPUT_S3_BUCKET
       - name: S3_IMAGERY_FOLDER
         value: "drone/missions_03"
       # S3 folder where output training chips and matched crowns will be written
@@ -70,17 +71,15 @@ spec:
       # The path to the photogrammetry files is expected to be s3:{{INPUT_S3_BUCKET}}/{{S3_MISSIONS_FOLDER}}/{{PROCESSED_DRONE_DATASET_ID}}/{{PHOTOGRAMMETRY_ID}}/full/"
       - name: PHOTOGRAMMETRY_ID
         value: "photogrammetry_01"
-      # Subfolder (under PHOTOGRAMMETRY_ID) where pre-computed tree detections are stored on S3.
-      # Expected filenames: {processed-drone-dataset-id}_detected-tree-crowns.gpkg and {processed-drone-dataset-id}_detected-tree-tops.gpkg
-      # TODO these filenames may need to be changed in the future.
-      - name: S3_DETECTED_TREES_SUBFOLDER
-        value: "detected-trees_0001"
       # All per-pair temp products are saved under: TEMP_FOLDER/{{workflow.name}}/{{drone-ground-pair-name}}/
       - name: TEMP_FOLDER
         value: "/data/argo-output/temp-dir"
-      # Maximum number of image chips to save per tree (passed as --n-chips-per-tree to chip_images.py)
-      - name: MAX_VIEWS_PER_TREE
-        value: 10
+      # The size in pixels of each tree detection tile
+      - name: TREE_DETECTION_CHIP_SIZE
+        value: 4000
+      # The stride in pixels of the tree detection tiles
+      - name: TREE_DETECTION_CHIP_STRIDE
+        value: 3600
       # Minimum registration shift quality score; pairs scoring below this threshold fail the task
       - name: REGISTRATION_QUALITY_THRESHOLD
         value: 0.5  # TODO: Set appropriate threshold based on experiments (see issue #55)
@@ -96,6 +95,9 @@ spec:
       # The distances from the labels that the cameras are cropped to
       - name: RENDER_CAMERAS_ROI_BUFFER_RADIUS_METERS
         value: 100
+      # Maximum number of image chips to save per tree (passed as --n-chips-per-tree to chip_images.py)
+      - name: CHIPPING_MAX_VIEWS_PER_TREE
+        value: 10
       # The number of workers used for image chipping
       - name: CHIPPING_N_WORKERS
         value: 12
@@ -103,6 +105,8 @@ spec:
       - name: OFO_ARGO_UTILS_IMAGE_TAG
         value: "main"
       - name: GEOGRAYPHER_IMAGE_TAG
+        value: "main"
+      - name: TREE_DETECTION_FRAMEWORK_IMAGE_TAG
         value: "main"
       - name: TRAM_IMAGE_TAG
         value: "main"
@@ -147,6 +151,15 @@ spec:
         # failFast=false ensures other pairs continue if this one fails
         failFast: false
         tasks:
+          - name: download-raw-imagery
+            template: download-raw-imagery
+            arguments:
+              parameters:
+                - name: imagery-zip-urls
+                  value: "{{inputs.parameters.imagery-zip-urls}}"
+                - name: drone-ground-pair-name
+                  value: "{{inputs.parameters.drone-ground-pair-name}}"
+
           - name: download-non-image-files
             template: download-non-image-files
             arguments:
@@ -158,21 +171,25 @@ spec:
                 - name: local-dir
                   value: "{{workflow.parameters.TEMP_FOLDER}}/{{workflow.name}}/{{inputs.parameters.drone-ground-pair-name}}"
 
-          - name: download-raw-imagery
-            template: download-raw-imagery
+          - name: detect-trees
+            template: detect-trees
+            depends: "download-non-image-files.Succeeded"
             arguments:
               parameters:
-                # Pass both constituent mission zip files; chip_images.py expects exactly 2 top-level
-                # subfolders (nadir + oblique), which this produces. processed-drone-dataset-id is the
-                # composite "{mission_lo}_{mission_hi}" ID; split it to get each raw mission ID.
-                - name: imagery-zip-urls
-                  value: "{{inputs.parameters.imagery-zip-urls}}"
-                - name: drone-ground-pair-name
-                  value: "{{inputs.parameters.drone-ground-pair-name}}"
+                - name: chm-file
+                  value: '{{=jsonpath(tasks["download-input-data"].outputs.parameters["local-files"], "$.chm")}}'
+                - name: detected-tree-tops-file
+                  value: "{{workflow.parameters.TEMP_FOLDER}}/{{workflow.name}}/{{inputs.parameters.processed-drone-dataset-id}}/detected-tree-tops.gpkg"
+                - name: detected-tree-crowns-file
+                  value: "{{workflow.parameters.TEMP_FOLDER}}/{{workflow.name}}/{{inputs.parameters.processed-drone-dataset-id}}/detected-tree-crowns.gpkg"
+                - name: chip-size
+                  value: "{{workflow.parameters.TREE_DETECTION_CHIP_SIZE}}"
+                - name: chip-stride
+                  value: "{{workflow.parameters.TREE_DETECTION_CHIP_STRIDE}}"
 
           - name: match-field-attributes
             template: match-field-attributes
-            depends: "download-non-image-files.Succeeded"
+            depends: "detect-trees.Succeeded"
             arguments:
               parameters:
                 - name: drone-ground-pair-name
@@ -184,9 +201,9 @@ spec:
                 - name: field-bounds-file
                   value: "{{workflow.parameters.FIELD_PLOTS_FILE}}"
                 - name: drone-trees-file
-                  value: '{{=jsonpath(tasks["download-non-image-files"].outputs.parameters["local-files"], "$.treetops")}}'
+                  value: '{{tasks["detect-trees"].outputs.parameters.detected-tree-tops-file}}'
                 - name: drone-crowns-file
-                  value: '{{=jsonpath(tasks["download-non-image-files"].outputs.parameters["local-files"], "$.crowns")}}'
+                  value: '{{tasks["detect-trees"].outputs.parameters.detected-tree-crowns-file}}'
                 - name: registration-file
                   value: '{{=jsonpath(tasks["download-non-image-files"].outputs.parameters["local-files"], "$.registration")}}'
                 - name: output-file
@@ -225,7 +242,7 @@ spec:
                 - name: output-folder
                   value: "{{workflow.parameters.TEMP_FOLDER}}/{{workflow.name}}/{{inputs.parameters.drone-ground-pair-name}}/chips"
                 - name: max-views-per-tree
-                  value: "{{workflow.parameters.MAX_VIEWS_PER_TREE}}"
+                  value: "{{workflow.parameters.CHIPPING_MAX_VIEWS_PER_TREE}}"
 
           - name: classify-chips-live-dead
             template: classify-chips
@@ -291,20 +308,19 @@ spec:
                   })
           json.dump(datasets, sys.stdout)
 
-    # Download photogrammetry products (cameras, CHM, DTM, mesh, log), pre-computed detected tree
-    # crowns, and registration shift CSV for a plot-photogrammetry pair in a single rclone step.
+    # Download photogrammetry products (cameras, CHM, DTM, mesh, log) and registration shift CSV for
+    # a plot-photogrammetry pair in a single rclone step.
     # The mesh CRS is parsed from the "project_crs:" line of the log file, and the raw-imagery
     # download root is parsed from the first entry of the log's "photo_path" list, so neither
     # needs to be supplied by the user.
     # TODO in the future, the mesh-metadata.xml file should be downloaded instead, since this
     # optionally includes a shift. But historical photogrammetry runs did not include it.
     # Returns a JSON dict of photogrammetry product paths via outputs.parameters.local-files. Keys:
-    # camera, chm, dtm, mesh, crowns, treetops, registration. Also returns a JSON dict of constants
+    # camera, chm, dtm, mesh, registration. Also returns a JSON dict of constants
     # via outputs.parameters.constants. Keys: mesh_crs, original_photogrammetry_imagery_download_root.
     # Fails if any expected file is missing or either value can't be parsed.
     # Output directory structure:
     #   {local-dir}/photogrammetry-products/  -- cameras, CHM, DTM, mesh, log
-    #   {local-dir}/detected-trees/           -- detected tree crowns gpkg
     #   {local-dir}/registration-shift/       -- ground-reference shift CSV
     - name: download-non-image-files
       inputs:
@@ -399,26 +415,6 @@ spec:
             fi
             echo "[download] Parsed photogrammetry download root: $PHOTOGRAMMETRY_DOWNLOAD_ROOT"
 
-            # --- Detected tree crowns and tops ---
-            S3_TREES="s3:{{workflow.parameters.INPUT_S3_BUCKET}}/{{workflow.parameters.S3_MISSIONS_FOLDER}}/${PROCESSED_DRONE_DATASET_ID}/{{workflow.parameters.PHOTOGRAMMETRY_ID}}/{{workflow.parameters.S3_DETECTED_TREES_SUBFOLDER}}/"
-            # TODO consider removing the "classified" part
-            CROWNS_FILE="${PROCESSED_DRONE_DATASET_ID}_detected-tree-crowns_classified.gpkg"
-            TOPS_FILE="${PROCESSED_DRONE_DATASET_ID}_detected-tree-tops_classified.gpkg"
-            echo "[rclone] Downloading detected tree crowns and tops: $S3_TREES -> $TREES_DIR"
-            rclone copy "$S3_TREES" "$TREES_DIR" \
-              --include "$CROWNS_FILE" \
-              --include "$TOPS_FILE" \
-              --transfers 8 --checkers 8 --retries 5 --retries-sleep=15s \
-              --stats 15s --stats-log-level NOTICE
-
-            for f in "${TREES_DIR}/${CROWNS_FILE}" "${TREES_DIR}/${TOPS_FILE}"; do
-              if [ ! -f "$f" ]; then
-                echo "[download] ERROR: Expected file not found: $f"
-                exit 1
-              fi
-            done
-            echo "[download] Detected tree crowns and tops verified."
-
             # --- Registration shift ---
             SHIFT_FILENAME="${PAIR_NAME}_ground-reference-shift.csv"
             S3_SHIFT="s3:{{workflow.parameters.INPUT_S3_BUCKET}}/{{workflow.parameters.S3_MISSIONS_FOLDER}}/${PROCESSED_DRONE_DATASET_ID}/{{workflow.parameters.PHOTOGRAMMETRY_ID}}/ground-reference-shifts/${SHIFT_FILENAME}"
@@ -434,8 +430,8 @@ spec:
             echo "[download] Registration shift file verified."
 
             # Write downloaded file paths for use by downstream steps
-            printf '{"camera":"%s","chm":"%s","dtm":"%s","mesh":"%s", "crowns": "%s", "treetops": "%s", "registration": "%s"}' \
-              "$CAMERA_FILE" "$CHM_FILE" "$DTM_FILE" "$MESH_FILE" "${TREES_DIR}/$CROWNS_FILE" "${TREES_DIR}/$TOPS_FILE" "${SHIFT_DIR}/$SHIFT_FILENAME" \
+            printf '{"camera":"%s","chm":"%s","dtm":"%s","mesh":"%s", "registration": "%s"}' \
+              "$CAMERA_FILE" "$CHM_FILE" "$DTM_FILE" "$MESH_FILE" "${SHIFT_DIR}/$SHIFT_FILENAME" \
               > /tmp/local-files.json
             echo "[download] File paths written to /tmp/local-files.json"
 
@@ -519,6 +515,63 @@ spec:
           requests:
             cpu: "2"
             memory: "2Gi"
+
+    # Detect trees from the downloaded CHM. This consists both of detecting the tree tops and
+    # deliniating the tree crowns. These are saved as two separate files.
+    - name: detect-trees
+      inputs:
+        parameters:
+          - name: chm-file
+          - name: detected-tree-tops-file
+          - name: detected-tree-crowns-file
+          - name: edge-suppression-meters
+            value: "10"
+          - name: raster-blur-sigma
+            value: "0.333"
+          - name: "resolution"
+            value: "0.12"
+          - name: chip-size
+            value: "4000"
+          - name: chip-stride
+            value: "3600"
+      outputs:
+        # Pass on the input parameters to avoid having to reconstruct them and the ponential of
+        # conventions getting out of sync.
+        parameters:
+          - name: detected-tree-tops-file
+            value: "{{inputs.parameters.detected-tree-tops-file}}"
+          - name: detected-tree-crowns-file
+            value: "{{inputs.parameters.detected-tree-crowns-file}}"
+      container:
+        image: ghcr.io/open-forest-observatory/tree-detection-framework:{{workflow.parameters.TREE_DETECTION_FRAMEWORK_IMAGE_TAG}}
+        volumeMounts:
+          - name: data
+            mountPath: /data
+        resources:
+          requests:
+            cpu: "2"
+            memory: "8Gi"
+        command: [
+                  "python",
+                  "-m",
+                  "tree_detection_framework.entrypoints.detect_geometric_two_stage",
+                  "{{inputs.parameters.chm-file}}",
+                  "{{inputs.parameters.detected-tree-tops-file}}",
+                  "--tree-crowns-save-path",
+                  "{{inputs.parameters.detected-tree-crowns-file}}",
+                  "--chip-size",
+                  "{{inputs.parameters.chip-size}}",
+                  "--chip-stride",
+                  "{{inputs.parameters.chip-stride}}",
+                  "--edge-suppression-meters",
+                  "{{inputs.parameters.edge-suppression-meters}}",
+                  "--raster-blur-sigma",
+                  "{{inputs.parameters.raster-blur-sigma}}",
+                  "--resolution",
+                  "{{inputs.parameters.resolution}}",
+                  "--tree-top-detector-kwargs",
+                  "{\"b\": 0.025, \"c\": 0.0625}"
+                ]
 
     # Apply the registration shift to align field tree coordinates with the drone data, then
     # spatially join to match each field tree to a detected tree crown. The task fails if the
