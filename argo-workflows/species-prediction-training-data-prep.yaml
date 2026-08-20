@@ -50,10 +50,6 @@ spec:
       - name: FIELD_TREES_FILE
       # Path to the file of plot boundaries for all plots, with a `plot_id` column
       - name: FIELD_PLOTS_FILE
-      # The leading path to where images were located when photogrammetry was run. The overall
-      # path to the images is expected to be:
-      # {PHOTOGRAMMETRY_IMAGERY_FOLDER}/{processed-drone-dataset-id}/photogrammetry/downloaded-raw-imagery
-      - name: PHOTOGRAMMETRY_IMAGERY_FOLDER
       # The path to the live/dead classification model weights file
       - name: LD_MODEL_PATH
       # The path to the live/dead classification model config file (.py)
@@ -151,8 +147,8 @@ spec:
         # failFast=false ensures other pairs continue if this one fails
         failFast: false
         tasks:
-          - name: download-ground-reference-data
-            template: download-ground-reference-data
+          - name: download-non-image-files
+            template: download-non-image-files
             arguments:
               parameters:
                 - name: drone-ground-pair-name
@@ -176,7 +172,7 @@ spec:
 
           - name: match-field-attributes
             template: match-field-attributes
-            depends: "download-ground-reference-data.Succeeded"
+            depends: "download-non-image-files.Succeeded"
             arguments:
               parameters:
                 - name: drone-ground-pair-name
@@ -188,32 +184,32 @@ spec:
                 - name: field-bounds-file
                   value: "{{workflow.parameters.FIELD_PLOTS_FILE}}"
                 - name: drone-trees-file
-                  value: '{{=jsonpath(tasks["download-ground-reference-data"].outputs.parameters["local-files"], "$.treetops")}}'
+                  value: '{{=jsonpath(tasks["download-non-image-files"].outputs.parameters["local-files"], "$.treetops")}}'
                 - name: drone-crowns-file
-                  value: '{{=jsonpath(tasks["download-ground-reference-data"].outputs.parameters["local-files"], "$.crowns")}}'
+                  value: '{{=jsonpath(tasks["download-non-image-files"].outputs.parameters["local-files"], "$.crowns")}}'
                 - name: registration-file
-                  value: '{{=jsonpath(tasks["download-ground-reference-data"].outputs.parameters["local-files"], "$.registration")}}'
+                  value: '{{=jsonpath(tasks["download-non-image-files"].outputs.parameters["local-files"], "$.registration")}}'
                 - name: output-file
                   value: "{{workflow.parameters.TEMP_FOLDER}}/{{workflow.name}}/{{inputs.parameters.drone-ground-pair-name}}/{{inputs.parameters.drone-ground-pair-name}}_matched-tree-crowns.gpkg"
 
           - name: render-instance-labels
             template: render-instance-labels
-            depends: "download-ground-reference-data.Succeeded && match-field-attributes.Succeeded"
+            depends: "download-non-image-files.Succeeded && match-field-attributes.Succeeded"
             arguments:
               parameters:
                 - name: mesh-file
-                  value: '{{=jsonpath(tasks["download-ground-reference-data"].outputs.parameters["local-files"], "$.mesh")}}'
+                  value: '{{=jsonpath(tasks["download-non-image-files"].outputs.parameters["local-files"], "$.mesh")}}'
                 - name: cameras-file
-                  value: '{{=jsonpath(tasks["download-ground-reference-data"].outputs.parameters["local-files"], "$.camera")}}'
+                  value: '{{=jsonpath(tasks["download-non-image-files"].outputs.parameters["local-files"], "$.camera")}}'
                 - name: dtm-file
-                  value: '{{=jsonpath(tasks["download-ground-reference-data"].outputs.parameters["local-files"], "$.dtm")}}'
+                  value: '{{=jsonpath(tasks["download-non-image-files"].outputs.parameters["local-files"], "$.dtm")}}'
                 # Render only matched crowns (trees that have field species labels)
                 - name: trees-file
                   value: "{{workflow.parameters.TEMP_FOLDER}}/{{workflow.name}}/{{inputs.parameters.drone-ground-pair-name}}/{{inputs.parameters.drone-ground-pair-name}}_matched-tree-crowns.gpkg"
                 - name: mesh-crs
-                  value: '{{=jsonpath(tasks["download-ground-reference-data"].outputs.parameters["local-files"], "$.mesh-crs")}}'
+                  value: '{{=jsonpath(tasks["download-non-image-files"].outputs.parameters["local-files"], "$.mesh-crs")}}'
                 - name: original-image-folder
-                  value: "{{workflow.parameters.PHOTOGRAMMETRY_IMAGERY_FOLDER}}/{{inputs.parameters.processed-drone-dataset-id}}/photogrammetry/downloaded-raw-imagery/"
+                  value: '{{=jsonpath(tasks["download-non-image-files"].outputs.parameters["local-files"], "$.original-photogrammetry-imagery-download-root") + "/" + inputs.parameters["processed-drone-dataset-id"] + "/photogrammetry/downloaded-raw-imagery/"}}'
                 - name: render-savefolder
                   value: "{{workflow.parameters.TEMP_FOLDER}}/{{workflow.name}}/{{inputs.parameters.drone-ground-pair-name}}/renders"
 
@@ -297,18 +293,20 @@ spec:
 
     # Download photogrammetry products (cameras, CHM, DTM, mesh, log), pre-computed detected tree
     # crowns, and registration shift CSV for a plot-photogrammetry pair in a single rclone step.
-    # The mesh CRS is parsed from the "project_crs:" line of the log file, so it no longer needs
-    # to be supplied by the user.
+    # The mesh CRS is parsed from the "project_crs:" line of the log file, and the raw-imagery
+    # download root is parsed from the first entry of the log's "photo_path" list, so neither
+    # needs to be supplied by the user.
     # TODO in the future, the mesh-metadata.xml file should be downloaded instead, since this
     # optionally includes a shift. But historical photogrammetry runs did not include it.
-    # Returns a JSON dict of photogrammetry product paths (plus the parsed mesh_crs) via
-    # outputs.parameters.local-files. Keys: camera, chm, dtm, mesh, mesh_crs. Fails if any
-    # expected file is missing or the mesh CRS can't be parsed.
+    # Returns a JSON dict of photogrammetry product paths (plus the parsed mesh-crs and
+    # original-photogrammetry-imagery-download-root) via outputs.parameters.local-files. Keys: camera, chm, dtm,
+    # mesh, mesh-crs, original-photogrammetry-imagery-download-root. Fails if any expected file is missing or
+    # either value can't be parsed.
     # Output directory structure:
     #   {local-dir}/photogrammetry-products/  -- cameras, CHM, DTM, mesh, log
     #   {local-dir}/detected-trees/           -- detected tree crowns gpkg
     #   {local-dir}/registration-shift/       -- ground-reference shift CSV
-    - name: download-ground-reference-data
+    - name: download-non-image-files
       inputs:
         parameters:
           - name: drone-ground-pair-name
@@ -375,6 +373,29 @@ spec:
             fi
             echo "[download] Parsed mesh CRS: $MESH_CRS"
 
+            # --- Photogrammetry imagery download root (parsed from the log's YAML config) ---
+            # The log's "photo_path" list (under the "project:" key) holds the raw-imagery paths used
+            # when photogrammetry was run, of the form
+            # "{root}/${PROCESSED_DRONE_DATASET_ID}/photogrammetry/downloaded-raw-imagery/...". Read
+            # the config as YAML (list items only start capturing right after the "  photo_path:" key,
+            # so this can't be confused with the other "- " lists in the file, e.g. lower_offset_folders)
+            # and take the portion of its first entry before the processed-drone-dataset-id path segment.
+            FIRST_PHOTO_PATH=$(awk '
+              /^  photo_path:$/ { capture=1; next }
+              capture && /^  - / { sub(/^  - /, ""); print; exit }
+              capture { exit }
+            ' "$LOG_FILE")
+            if [ -z "$FIRST_PHOTO_PATH" ]; then
+              echo "[download] ERROR: Could not parse photo_path from log file: $LOG_FILE"
+              exit 1
+            fi
+            PHOTOGRAMMETRY_DOWNLOAD_ROOT="${FIRST_PHOTO_PATH%%/${PROCESSED_DRONE_DATASET_ID}/*}"
+            if [ "$PHOTOGRAMMETRY_DOWNLOAD_ROOT" = "$FIRST_PHOTO_PATH" ]; then
+              echo "[download] ERROR: '${PROCESSED_DRONE_DATASET_ID}' not found in photo_path: $FIRST_PHOTO_PATH"
+              exit 1
+            fi
+            echo "[download] Parsed photogrammetry download root: $PHOTOGRAMMETRY_DOWNLOAD_ROOT"
+
             # --- Detected tree crowns and tops ---
             S3_TREES="s3:{{workflow.parameters.INPUT_S3_BUCKET}}/{{workflow.parameters.S3_MISSIONS_FOLDER}}/${PROCESSED_DRONE_DATASET_ID}/{{workflow.parameters.PHOTOGRAMMETRY_ID}}/{{workflow.parameters.S3_DETECTED_TREES_SUBFOLDER}}/"
             # TODO consider removing the "classified" part
@@ -410,8 +431,8 @@ spec:
             echo "[download] Registration shift file verified."
 
             # Write photogrammetry product paths for use by downstream steps
-            printf '{"camera":"%s","chm":"%s","dtm":"%s","mesh":"%s", "crowns": "%s", "treetops": "%s", "registration": "%s", "mesh-crs": "%s"}' \
-              "$CAMERA_FILE" "$CHM_FILE" "$DTM_FILE" "$MESH_FILE" "${TREES_DIR}/$CROWNS_FILE" "${TREES_DIR}/$TOPS_FILE" "${SHIFT_DIR}/$SHIFT_FILENAME" "$MESH_CRS" \
+            printf '{"camera":"%s","chm":"%s","dtm":"%s","mesh":"%s", "crowns": "%s", "treetops": "%s", "registration": "%s", "mesh-crs": "%s", "original-photogrammetry-imagery-download-root": "%s"}' \
+              "$CAMERA_FILE" "$CHM_FILE" "$DTM_FILE" "$MESH_FILE" "${TREES_DIR}/$CROWNS_FILE" "${TREES_DIR}/$TOPS_FILE" "${SHIFT_DIR}/$SHIFT_FILENAME" "$MESH_CRS" "$PHOTOGRAMMETRY_DOWNLOAD_ROOT" \
               > /tmp/file-paths.json
             echo "[download] File paths written to /tmp/file-paths.json"
         resources:
