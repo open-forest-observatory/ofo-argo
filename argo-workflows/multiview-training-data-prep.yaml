@@ -201,9 +201,9 @@ spec:
                 - name: field-bounds-file
                   value: "{{workflow.parameters.FIELD_PLOTS_FILE}}"
                 - name: drone-trees-file
-                  value: '{{tasks["detect-trees"].outputs.parameters.detected-tree-tops-file}}'
+                  value: "{{tasks.detect-trees.outputs.parameters.detected-tree-tops-file}}"
                 - name: drone-crowns-file
-                  value: '{{tasks["detect-trees"].outputs.parameters.detected-tree-crowns-file}}'
+                  value: "{{tasks.detect-trees.outputs.parameters.detected-tree-crowns-file}}"
                 - name: registration-file
                   value: '{{=jsonpath(tasks["download-non-image-files"].outputs.parameters["local-files"], "$.registration")}}'
                 - name: output-file
