@@ -724,6 +724,8 @@ spec:
     # Assign per-chip live/dead predictions to tree crowns via majority vote, producing
     # a matched crowns file with a live_dead_prediction column. All trees are retained
     # regardless of their prediction; downstream workflows apply any desired filtering.
+    # Note that any existing information in the predicted column (currently "live_dead_prediction")
+    # will be dropped.
     - name: assign-live-dead-to-crowns
       inputs:
         parameters:
@@ -775,13 +777,17 @@ spec:
                   f"{column_name}_n_preds": n_preds,
               })
 
-          grouped = preds_df.groupby(["tree_ID"]).apply(
+          predictions = preds_df.groupby(["tree_ID"]).apply(
               lambda x: fair_mode(x[column_name]), include_groups=False
           ).reset_index().rename(columns={"tree_ID": "unique_ID"})
 
           crowns = gpd.read_file(input_crowns_path)
           crowns["unique_ID"] = crowns["unique_ID"].astype(str)
-          crowns = crowns.merge(grouped, on="unique_ID", how="left")
+
+          # Avoid collision with existing column by removing it if present
+          crowns.drop(columns=column_name, inplace=True, errors="ignore")
+          # Merge in the predictions
+          crowns = crowns.merge(predictions, on="unique_ID", how="left")
 
           output_crowns_path.parent.mkdir(parents=True, exist_ok=True)
           crowns.to_file(output_crowns_path)
