@@ -41,9 +41,9 @@ spec:
   # These parameters can be referenced throughout the workflow templates using {{workflow.parameters.<name>}}
   arguments:
     parameters:
-      # Path to a newline-separated file with comma-separated "{photogrammetry_run_id}, {plot_id}, {mesh_CRS}"
-      # pairs to process, e.g. "000004_000005, 0010, 26910". photogrammetry_run_id is itself the
-      # composite "{mission_lo}_{mission_hi}" ID for a paired photogrammetry run.
+      # Path to a newline-separated file with comma-separated "{processed-drone-dataset-id}, {ground-plot-id}, {mesh-crs}"
+      # triples to process, e.g. "000004_000005, 0010, 26910". processed-drone-dataset-id is itself the
+      # composite "{mission_lo}_{mission_hn}" ID for a paired photogrammetry run or the mission_id of a single drone dataset.
       - name: DATASETS_FILE
       # Path to the file of field trees for all plots, with a `plot_id` column
       - name: FIELD_TREES_FILE
@@ -51,7 +51,7 @@ spec:
       - name: FIELD_PLOTS_FILE
       # The leading path to where images were located when photogrammetry was run. The overall
       # path to the images is expected to be:
-      # {PHOTOGRAMMETRY_IMAGERY_FOLDER}/{photogrammetry_run_id}/photogrammetry/downloaded-raw-imagery
+      # {PHOTOGRAMMETRY_IMAGERY_FOLDER}/{processed-drone-dataset-id}/photogrammetry/downloaded-raw-imagery
       - name: PHOTOGRAMMETRY_IMAGERY_FOLDER
       # The path to the live/dead classification model weights file
       - name: LD_MODEL_PATH
@@ -70,15 +70,15 @@ spec:
       - name: S3_TRAINING_OUTPUT_FOLDER
         value: "drone/training-data_01"
       # The identifier of the photogrammetry parameterization
-      # The path to the photogrammetry files is expected to be s3:{{INPUT_S3_BUCKET}}/{{S3_MISSIONS_FOLDER}}/{{RUN_ID}}/{{PHOTOGRAMMETRY_ID}}/full/"
+      # The path to the photogrammetry files is expected to be s3:{{INPUT_S3_BUCKET}}/{{S3_MISSIONS_FOLDER}}/{{PROCESSED_DRONE_DATASET_ID}}/{{PHOTOGRAMMETRY_ID}}/full/"
       - name: PHOTOGRAMMETRY_ID
         value: "photogrammetry_01"
       # Subfolder (under PHOTOGRAMMETRY_ID) where pre-computed tree detections are stored on S3.
-      # Expected filenames: {photogrammetry_run_id}_detected-tree-crowns.gpkg and {photogrammetry_run_id}_detected-tree-tops.gpkg
+      # Expected filenames: {processed-drone-dataset-id}_detected-tree-crowns.gpkg and {processed-drone-dataset-id}_detected-tree-tops.gpkg
       # TODO these filenames may need to be changed in the future.
       - name: S3_DETECTED_TREES_SUBFOLDER
         value: "detected-trees_0001"
-      # All per-pair temp products are saved under: TEMP_FOLDER/{{workflow.name}}/{{pair-name}}/
+      # All per-pair temp products are saved under: TEMP_FOLDER/{{workflow.name}}/{{drone-ground-pair-name}}/
       - name: TEMP_FOLDER
         value: "/data/argo-output/temp-dir"
       # Maximum number of image chips to save per tree (passed as --n-chips-per-tree to chip_images.py)
@@ -127,14 +127,14 @@ spec:
             template: process-pair-workflow
             arguments:
               parameters:
-                - name: plot-id
-                  value: "{{item.plot-id}}"
-                - name: photogrammetry-run-id
-                  value: "{{item.photogrammetry-run-id}}"
-                - name: pair-name
-                  value: "{{item.pair-name}}"
+                - name: ground-plot-id
+                  value: "{{item.ground-plot-id}}"
+                - name: processed-drone-dataset-id
+                  value: "{{item.processed-drone-dataset-id}}"
+                - name: drone-ground-pair-name
+                  value: "{{item.drone-ground-pair-name}}"
                 - name: mesh-crs
-                  value: "{{item.mesh_CRS}}"
+                  value: "{{item.mesh-crs}}"
                 - name: imagery-zip-urls
                   value: "{{item.imagery-zip-urls}}"
             # Continue processing remaining pairs even if one fails
@@ -143,10 +143,10 @@ spec:
     - name: process-pair-workflow
       inputs:
         parameters:
-          - name: plot-id
-          - name: photogrammetry-run-id
-          # Derived as "{photogrammetry-run-id}_{plot-id}"; used to name per-pair output files/folders.
-          - name: pair-name
+          - name: ground-plot-id
+          - name: processed-drone-dataset-id
+          # Derived as "{processed-drone-dataset-id}_{ground-plot-id}"; used to name per-pair output files/folders.
+          - name: drone-ground-pair-name
           - name: mesh-crs
           - name: imagery-zip-urls
       dag:
@@ -157,34 +157,34 @@ spec:
             template: download-ground-reference-data
             arguments:
               parameters:
-                - name: pair-name
-                  value: "{{inputs.parameters.pair-name}}"
-                - name: photogrammetry-run-id
-                  value: "{{inputs.parameters.photogrammetry-run-id}}"
+                - name: drone-ground-pair-name
+                  value: "{{inputs.parameters.drone-ground-pair-name}}"
+                - name: processed-drone-dataset-id
+                  value: "{{inputs.parameters.processed-drone-dataset-id}}"
                 - name: local-dir
-                  value: "{{workflow.parameters.TEMP_FOLDER}}/{{workflow.name}}/{{inputs.parameters.pair-name}}"
+                  value: "{{workflow.parameters.TEMP_FOLDER}}/{{workflow.name}}/{{inputs.parameters.drone-ground-pair-name}}"
 
           - name: download-raw-imagery
             template: download-raw-imagery
             arguments:
               parameters:
                 # Pass both constituent mission zip files; chip_images.py expects exactly 2 top-level
-                # subfolders (nadir + oblique), which this produces. photogrammetry-run-id is the
+                # subfolders (nadir + oblique), which this produces. processed-drone-dataset-id is the
                 # composite "{mission_lo}_{mission_hi}" ID; split it to get each raw mission ID.
                 - name: imagery-zip-urls
                   value: "{{inputs.parameters.imagery-zip-urls}}"
-                - name: pair-name
-                  value: "{{inputs.parameters.pair-name}}"
+                - name: drone-ground-pair-name
+                  value: "{{inputs.parameters.drone-ground-pair-name}}"
 
           - name: match-field-attributes
             template: match-field-attributes
             depends: "download-ground-reference-data.Succeeded"
             arguments:
               parameters:
-                - name: pair-name
-                  value: "{{inputs.parameters.pair-name}}"
-                - name: plot-id
-                  value: "{{inputs.parameters.plot-id}}"
+                - name: drone-ground-pair-name
+                  value: "{{inputs.parameters.drone-ground-pair-name}}"
+                - name: ground-plot-id
+                  value: "{{inputs.parameters.ground-plot-id}}"
                 - name: field-trees-file
                   value: "{{workflow.parameters.FIELD_TREES_FILE}}"
                 - name: field-bounds-file
@@ -196,7 +196,7 @@ spec:
                 - name: registration-file
                   value: '{{=jsonpath(tasks["download-ground-reference-data"].outputs.parameters["local-files"], "$.registration")}}'
                 - name: output-file
-                  value: "{{workflow.parameters.TEMP_FOLDER}}/{{workflow.name}}/{{inputs.parameters.pair-name}}/{{inputs.parameters.pair-name}}_matched-tree-crowns.gpkg"
+                  value: "{{workflow.parameters.TEMP_FOLDER}}/{{workflow.name}}/{{inputs.parameters.drone-ground-pair-name}}/{{inputs.parameters.drone-ground-pair-name}}_matched-tree-crowns.gpkg"
 
           - name: render-instance-labels
             template: render-instance-labels
@@ -211,13 +211,13 @@ spec:
                   value: '{{=jsonpath(tasks["download-ground-reference-data"].outputs.parameters["local-files"], "$.dtm")}}'
                 # Render only matched crowns (trees that have field species labels)
                 - name: trees-file
-                  value: "{{workflow.parameters.TEMP_FOLDER}}/{{workflow.name}}/{{inputs.parameters.pair-name}}/{{inputs.parameters.pair-name}}_matched-tree-crowns.gpkg"
+                  value: "{{workflow.parameters.TEMP_FOLDER}}/{{workflow.name}}/{{inputs.parameters.drone-ground-pair-name}}/{{inputs.parameters.drone-ground-pair-name}}_matched-tree-crowns.gpkg"
                 - name: mesh-crs
                   value: "{{inputs.parameters.mesh-crs}}"
                 - name: original-image-folder
-                  value: "{{workflow.parameters.PHOTOGRAMMETRY_IMAGERY_FOLDER}}/{{inputs.parameters.photogrammetry-run-id}}/photogrammetry/downloaded-raw-imagery/"
+                  value: "{{workflow.parameters.PHOTOGRAMMETRY_IMAGERY_FOLDER}}/{{inputs.parameters.processed-drone-dataset-id}}/photogrammetry/downloaded-raw-imagery/"
                 - name: render-savefolder
-                  value: "{{workflow.parameters.TEMP_FOLDER}}/{{workflow.name}}/{{inputs.parameters.pair-name}}/renders"
+                  value: "{{workflow.parameters.TEMP_FOLDER}}/{{workflow.name}}/{{inputs.parameters.drone-ground-pair-name}}/renders"
 
           - name: chip-images
             template: chip-images
@@ -225,11 +225,11 @@ spec:
             arguments:
               parameters:
                 - name: images-folder
-                  value: "{{workflow.parameters.TEMP_FOLDER}}/{{workflow.name}}/{{inputs.parameters.pair-name}}/imagery-downloads"
+                  value: "{{workflow.parameters.TEMP_FOLDER}}/{{workflow.name}}/{{inputs.parameters.drone-ground-pair-name}}/imagery-downloads"
                 - name: renders-folder
-                  value: "{{workflow.parameters.TEMP_FOLDER}}/{{workflow.name}}/{{inputs.parameters.pair-name}}/renders"
+                  value: "{{workflow.parameters.TEMP_FOLDER}}/{{workflow.name}}/{{inputs.parameters.drone-ground-pair-name}}/renders"
                 - name: output-folder
-                  value: "{{workflow.parameters.TEMP_FOLDER}}/{{workflow.name}}/{{inputs.parameters.pair-name}}/chips"
+                  value: "{{workflow.parameters.TEMP_FOLDER}}/{{workflow.name}}/{{inputs.parameters.drone-ground-pair-name}}/chips"
                 - name: max-views-per-tree
                   value: "{{workflow.parameters.MAX_VIEWS_PER_TREE}}"
 
@@ -239,13 +239,13 @@ spec:
             arguments:
               parameters:
                 - name: chips-folder
-                  value: "{{workflow.parameters.TEMP_FOLDER}}/{{workflow.name}}/{{inputs.parameters.pair-name}}/chips"
+                  value: "{{workflow.parameters.TEMP_FOLDER}}/{{workflow.name}}/{{inputs.parameters.drone-ground-pair-name}}/chips"
                 - name: model-path
                   value: "{{workflow.parameters.LD_MODEL_PATH}}"
                 - name: config-path
                   value: "{{workflow.parameters.LD_CONFIG_PATH}}"
                 - name: output-path
-                  value: "{{workflow.parameters.TEMP_FOLDER}}/{{workflow.name}}/{{inputs.parameters.pair-name}}/classified-chips-LD.json"
+                  value: "{{workflow.parameters.TEMP_FOLDER}}/{{workflow.name}}/{{inputs.parameters.drone-ground-pair-name}}/classified-chips-LD.json"
 
           - name: assign-live-dead-to-crowns
             template: assign-live-dead-to-crowns
@@ -253,24 +253,24 @@ spec:
             arguments:
               parameters:
                 - name: input-crowns-file
-                  value: "{{workflow.parameters.TEMP_FOLDER}}/{{workflow.name}}/{{inputs.parameters.pair-name}}/{{inputs.parameters.pair-name}}_matched-tree-crowns.gpkg"
+                  value: "{{workflow.parameters.TEMP_FOLDER}}/{{workflow.name}}/{{inputs.parameters.drone-ground-pair-name}}/{{inputs.parameters.drone-ground-pair-name}}_matched-tree-crowns.gpkg"
                 - name: image-level-predictions-file
-                  value: "{{workflow.parameters.TEMP_FOLDER}}/{{workflow.name}}/{{inputs.parameters.pair-name}}/classified-chips-LD.json"
+                  value: "{{workflow.parameters.TEMP_FOLDER}}/{{workflow.name}}/{{inputs.parameters.drone-ground-pair-name}}/classified-chips-LD.json"
                 - name: output-crowns-file
-                  value: "{{workflow.parameters.TEMP_FOLDER}}/{{workflow.name}}/{{inputs.parameters.pair-name}}/{{inputs.parameters.pair-name}}_matched-tree-crowns_w-live-dead.gpkg"
+                  value: "{{workflow.parameters.TEMP_FOLDER}}/{{workflow.name}}/{{inputs.parameters.drone-ground-pair-name}}/{{inputs.parameters.drone-ground-pair-name}}_matched-tree-crowns_w-live-dead.gpkg"
 
           - name: upload-training-data
             template: upload-training-data
             depends: "chip-images.Succeeded && assign-live-dead-to-crowns.Succeeded"
             arguments:
               parameters:
-                - name: pair-name
-                  value: "{{inputs.parameters.pair-name}}"
+                - name: drone-ground-pair-name
+                  value: "{{inputs.parameters.drone-ground-pair-name}}"
 
 ## Definitions of individual step templates
 
-    # Parse the newline-separated datasets file (comma-separated "{photogrammetry_run_id}, {plot_id}, {mesh_CRS}"
-    # per line) into a JSON array of {photogrammetry-run-id, plot-id, mesh_CRS, pair-name} objects.
+    # Parse the newline-separated datasets file (comma-separated "{processed-drone-dataset-id}, {ground-plot-id}, {mesh-crs}"
+    # per line) into a JSON array of {processed-drone-dataset-id, ground-plot-id, mesh-crs, drone-ground-pair-name} objects.
     - name: determine-datasets
       script:
         image: python:3.9
@@ -287,13 +287,13 @@ spec:
                   line = line.strip()
                   if not line:
                       continue
-                  photogrammetry_run_id, plot_id, mesh_CRS = [x.strip() for x in line.split(",")]
-                  imageset_ids = photogrammetry_run_id.split("_")
+                  processed_drone_dataset_id, ground_plot_id, mesh_crs = [x.strip() for x in line.split(",")]
+                  imageset_ids = processed_drone_dataset_id.split("_")
                   datasets.append({
-                      "photogrammetry-run-id": photogrammetry_run_id,
-                      "plot-id": plot_id,
-                      "mesh_CRS": mesh_CRS,
-                      "pair-name": f"{photogrammetry_run_id}_{plot_id}",
+                      "processed-drone-dataset-id": processed_drone_dataset_id,
+                      "ground-plot-id": ground_plot_id,
+                      "mesh-crs": mesh_crs,
+                      "drone-ground-pair-name": f"{processed_drone_dataset_id}_{ground_plot_id}",
                       "imagery-zip-urls": [f"{{workflow.parameters.INPUT_S3_BUCKET}}/{{workflow.parameters.S3_IMAGERY_FOLDER}}/{imageset_id}/images/{imageset_id}_images.zip" for imageset_id in imageset_ids]
                   })
           json.dump(datasets, sys.stdout)
@@ -309,8 +309,8 @@ spec:
     - name: download-ground-reference-data
       inputs:
         parameters:
-          - name: pair-name
-          - name: photogrammetry-run-id
+          - name: drone-ground-pair-name
+          - name: processed-drone-dataset-id
           - name: local-dir
       outputs:
         parameters:
@@ -326,8 +326,8 @@ spec:
         args:
           - |
             set -euo pipefail
-            PAIR_NAME="{{inputs.parameters.pair-name}}"
-            RUN_ID="{{inputs.parameters.photogrammetry-run-id}}"
+            PAIR_NAME="{{inputs.parameters.drone-ground-pair-name}}"
+            PROCESSED_DRONE_DATASET_ID="{{inputs.parameters.processed-drone-dataset-id}}"
             BASE_DIR="{{inputs.parameters.local-dir}}"
             PHOT_DIR="${BASE_DIR}/photogrammetry-products"
             TREES_DIR="${BASE_DIR}/detected-trees"
@@ -336,20 +336,20 @@ spec:
             mkdir -p "$PHOT_DIR" "$TREES_DIR" "$SHIFT_DIR"
 
             # --- Photogrammetry products ---
-            S3_PHOT="s3:{{workflow.parameters.INPUT_S3_BUCKET}}/{{workflow.parameters.S3_MISSIONS_FOLDER}}/${RUN_ID}/{{workflow.parameters.PHOTOGRAMMETRY_ID}}/full/"
+            S3_PHOT="s3:{{workflow.parameters.INPUT_S3_BUCKET}}/{{workflow.parameters.S3_MISSIONS_FOLDER}}/${PROCESSED_DRONE_DATASET_ID}/{{workflow.parameters.PHOTOGRAMMETRY_ID}}/full/"
             echo "[rclone] Downloading photogrammetry products: $S3_PHOT -> $PHOT_DIR"
             rclone copy "$S3_PHOT" "$PHOT_DIR" \
-              --include "${RUN_ID}_cameras.xml" \
-              --include "${RUN_ID}_chm-mesh.tif" \
-              --include "${RUN_ID}_dtm-ptcloud.tif" \
-              --include "${RUN_ID}_mesh.ply" \
+              --include "${PROCESSED_DRONE_DATASET_ID}_cameras.xml" \
+              --include "${PROCESSED_DRONE_DATASET_ID}_chm-mesh.tif" \
+              --include "${PROCESSED_DRONE_DATASET_ID}_dtm-ptcloud.tif" \
+              --include "${PROCESSED_DRONE_DATASET_ID}_mesh.ply" \
               --transfers 8 --checkers 8 --retries 5 --retries-sleep=15s \
               --stats 15s --stats-log-level NOTICE
 
-            CAMERA_FILE="${PHOT_DIR}/${RUN_ID}_cameras.xml"
-            CHM_FILE="${PHOT_DIR}/${RUN_ID}_chm-mesh.tif"
-            DTM_FILE="${PHOT_DIR}/${RUN_ID}_dtm-ptcloud.tif"
-            MESH_FILE="${PHOT_DIR}/${RUN_ID}_mesh.ply"
+            CAMERA_FILE="${PHOT_DIR}/${PROCESSED_DRONE_DATASET_ID}_cameras.xml"
+            CHM_FILE="${PHOT_DIR}/${PROCESSED_DRONE_DATASET_ID}_chm-mesh.tif"
+            DTM_FILE="${PHOT_DIR}/${PROCESSED_DRONE_DATASET_ID}_dtm-ptcloud.tif"
+            MESH_FILE="${PHOT_DIR}/${PROCESSED_DRONE_DATASET_ID}_mesh.ply"
 
             for f in "$CAMERA_FILE" "$CHM_FILE" "$DTM_FILE" "$MESH_FILE"; do
               if [ ! -f "$f" ]; then
@@ -360,10 +360,10 @@ spec:
             echo "[download] All 4 photogrammetry files verified."
 
             # --- Detected tree crowns and tops ---
-            S3_TREES="s3:{{workflow.parameters.INPUT_S3_BUCKET}}/{{workflow.parameters.S3_MISSIONS_FOLDER}}/${RUN_ID}/{{workflow.parameters.PHOTOGRAMMETRY_ID}}/{{workflow.parameters.S3_DETECTED_TREES_SUBFOLDER}}/"
+            S3_TREES="s3:{{workflow.parameters.INPUT_S3_BUCKET}}/{{workflow.parameters.S3_MISSIONS_FOLDER}}/${PROCESSED_DRONE_DATASET_ID}/{{workflow.parameters.PHOTOGRAMMETRY_ID}}/{{workflow.parameters.S3_DETECTED_TREES_SUBFOLDER}}/"
             # TODO consider removing the "classified" part
-            CROWNS_FILE="${RUN_ID}_detected-tree-crowns_classified.gpkg"
-            TOPS_FILE="${RUN_ID}_detected-tree-tops_classified.gpkg"
+            CROWNS_FILE="${PROCESSED_DRONE_DATASET_ID}_detected-tree-crowns_classified.gpkg"
+            TOPS_FILE="${PROCESSED_DRONE_DATASET_ID}_detected-tree-tops_classified.gpkg"
             echo "[rclone] Downloading detected tree crowns and tops: $S3_TREES -> $TREES_DIR"
             rclone copy "$S3_TREES" "$TREES_DIR" \
               --include "$CROWNS_FILE" \
@@ -381,7 +381,7 @@ spec:
 
             # --- Registration shift ---
             SHIFT_FILENAME="${PAIR_NAME}_ground-reference-shift.csv"
-            S3_SHIFT="s3:{{workflow.parameters.INPUT_S3_BUCKET}}/{{workflow.parameters.S3_MISSIONS_FOLDER}}/${RUN_ID}/{{workflow.parameters.PHOTOGRAMMETRY_ID}}/ground-reference-shifts/${SHIFT_FILENAME}"
+            S3_SHIFT="s3:{{workflow.parameters.INPUT_S3_BUCKET}}/{{workflow.parameters.S3_MISSIONS_FOLDER}}/${PROCESSED_DRONE_DATASET_ID}/{{workflow.parameters.PHOTOGRAMMETRY_ID}}/ground-reference-shifts/${SHIFT_FILENAME}"
             echo "[rclone] Downloading registration shift: $S3_SHIFT"
             rclone copyto "$S3_SHIFT" "${SHIFT_DIR}/${SHIFT_FILENAME}" \
               --retries 5 --retries-sleep=15s \
@@ -435,7 +435,7 @@ spec:
       inputs:
         parameters:
           - name: imagery-zip-urls
-          - name: pair-name
+          - name: drone-ground-pair-name
       nodeSelector:
         feature.node.kubernetes.io/workload-type: cpu
       container:
@@ -448,7 +448,7 @@ spec:
           - name: IMAGERY_ZIP_URLS
             value: "{{inputs.parameters.imagery-zip-urls}}"
           - name: DOWNLOAD_DIR
-            value: "{{workflow.parameters.TEMP_FOLDER}}/{{workflow.name}}/{{inputs.parameters.pair-name}}/imagery-downloads"
+            value: "{{workflow.parameters.TEMP_FOLDER}}/{{workflow.name}}/{{inputs.parameters.drone-ground-pair-name}}/imagery-downloads"
           - name: S3_PROVIDER
             valueFrom:
               secretKeyRef:
@@ -481,8 +481,8 @@ spec:
     - name: match-field-attributes
       inputs:
         parameters:
-          - name: pair-name
-          - name: plot-id
+          - name: drone-ground-pair-name
+          - name: ground-plot-id
           - name: field-trees-file
           - name: field-bounds-file
           - name: drone-trees-file
@@ -509,8 +509,8 @@ spec:
           from tree_registration_and_matching.add_attributes import match_field_and_drone_trees
 
           # Input variables
-          pair_name = "{{inputs.parameters.pair-name}}"
-          plot_id = "{{inputs.parameters.plot-id}}"
+          pair_name = "{{inputs.parameters.drone-ground-pair-name}}"
+          ground_plot_id = "{{inputs.parameters.ground-plot-id}}"
           field_trees_file = "{{inputs.parameters.field-trees-file}}"
           field_bounds_file = "{{inputs.parameters.field-bounds-file}}"
           drone_trees_file = "{{inputs.parameters.drone-trees-file}}"
@@ -527,8 +527,8 @@ spec:
           drone_crowns = gpd.read_file(drone_crowns_file)
 
           # Subset to the specified plot
-          field_trees = field_trees.query("plot_id==@plot_id")
-          field_bounds = field_bounds.query("plot_id==@plot_id")
+          field_trees = field_trees.query("plot_id==@ground_plot_id")
+          field_bounds = field_bounds.query("plot_id==@ground_plot_id")
 
           registration = pd.read_csv(registration_file)
 
@@ -748,7 +748,7 @@ spec:
     - name: upload-training-data
       inputs:
         parameters:
-          - name: pair-name
+          - name: drone-ground-pair-name
       nodeSelector:
         feature.node.kubernetes.io/workload-type: cpu
       container:
@@ -760,7 +760,7 @@ spec:
         args:
           - |
             set -euo pipefail
-            PAIR_NAME="{{inputs.parameters.pair-name}}"
+            PAIR_NAME="{{inputs.parameters.drone-ground-pair-name}}"
             DATASET_DIR="{{workflow.parameters.TEMP_FOLDER}}/{{workflow.name}}/${PAIR_NAME}"
             S3_UPLOAD_FOLDER="s3:{{workflow.parameters.INPUT_S3_BUCKET}}/{{workflow.parameters.S3_TRAINING_OUTPUT_FOLDER}}/${PAIR_NAME}"
 
