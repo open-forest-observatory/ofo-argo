@@ -226,7 +226,7 @@ spec:
                 - name: mesh-crs
                   value: '{{=jsonpath(tasks["download-non-image-files"].outputs.parameters["constants"], "$.mesh_crs")}}'
                 - name: original-image-folder
-                  value: '{{=jsonpath(tasks["download-non-image-files"].outputs.parameters["constants"], "$.original_photogrammetry_imagery_download_root") + "/" + inputs.parameters["processed-drone-dataset-id"] + "/photogrammetry/downloaded-raw-imagery/"}}'
+                  value: '{{=jsonpath(tasks["download-non-image-files"].outputs.parameters["constants"], "$.original_photogrammetry_imagery_download_root")}}'
                 - name: render-savefolder
                   value: "{{workflow.parameters.TEMP_FOLDER}}/{{workflow.name}}/{{inputs.parameters.drone-ground-pair-name}}/renders"
 
@@ -408,9 +408,9 @@ spec:
               echo "[download] ERROR: Could not parse photo_path from log file: $LOG_FILE"
               exit 1
             fi
-            PHOTOGRAMMETRY_DOWNLOAD_ROOT="${FIRST_PHOTO_PATH%%/${PROCESSED_DRONE_DATASET_ID}/*}"
+            PHOTOGRAMMETRY_DOWNLOAD_ROOT="${FIRST_PHOTO_PATH%%downloaded-raw-imagery/*}downloaded-raw-imagery"
             if [ "$PHOTOGRAMMETRY_DOWNLOAD_ROOT" = "$FIRST_PHOTO_PATH" ]; then
-              echo "[download] ERROR: '${PROCESSED_DRONE_DATASET_ID}' not found in photo_path: $FIRST_PHOTO_PATH"
+              echo "[download] ERROR: 'downloaded-raw-imagery' not found in photo_path: $FIRST_PHOTO_PATH"
               exit 1
             fi
             echo "[download] Parsed photogrammetry download root: $PHOTOGRAMMETRY_DOWNLOAD_ROOT"
