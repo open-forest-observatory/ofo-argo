@@ -207,9 +207,9 @@ spec:
                 - name: trees-file
                   value: "{{workflow.parameters.TEMP_FOLDER}}/{{workflow.name}}/{{inputs.parameters.drone-ground-pair-name}}/{{inputs.parameters.drone-ground-pair-name}}_matched-tree-crowns.gpkg"
                 - name: mesh-crs
-                  value: '{{=jsonpath(tasks["download-non-image-files"].outputs.parameters["local-files"], "$.mesh-crs")}}'
+                  value: '{{=jsonpath(tasks["download-non-image-files"].outputs.parameters["constants"], "$.mesh_crs")}}'
                 - name: original-image-folder
-                  value: '{{=jsonpath(tasks["download-non-image-files"].outputs.parameters["local-files"], "$.original-photogrammetry-imagery-download-root") + "/" + inputs.parameters["processed-drone-dataset-id"] + "/photogrammetry/downloaded-raw-imagery/"}}'
+                  value: '{{=jsonpath(tasks["download-non-image-files"].outputs.parameters["constants"], "$.original_photogrammetry_imagery_download_root") + "/" + inputs.parameters["processed-drone-dataset-id"] + "/photogrammetry/downloaded-raw-imagery/"}}'
                 - name: render-savefolder
                   value: "{{workflow.parameters.TEMP_FOLDER}}/{{workflow.name}}/{{inputs.parameters.drone-ground-pair-name}}/renders"
 
@@ -298,10 +298,10 @@ spec:
     # needs to be supplied by the user.
     # TODO in the future, the mesh-metadata.xml file should be downloaded instead, since this
     # optionally includes a shift. But historical photogrammetry runs did not include it.
-    # Returns a JSON dict of photogrammetry product paths (plus the parsed mesh-crs and
-    # original-photogrammetry-imagery-download-root) via outputs.parameters.local-files. Keys: camera, chm, dtm,
-    # mesh, mesh-crs, original-photogrammetry-imagery-download-root. Fails if any expected file is missing or
-    # either value can't be parsed.
+    # Returns a JSON dict of photogrammetry product paths via outputs.parameters.local-files. Keys:
+    # camera, chm, dtm, mesh, crowns, treetops, registration. Also returns a JSON dict of constants
+    # via outputs.parameters.constants. Keys: mesh_crs, original_photogrammetry_imagery_download_root.
+    # Fails if any expected file is missing or either value can't be parsed.
     # Output directory structure:
     #   {local-dir}/photogrammetry-products/  -- cameras, CHM, DTM, mesh, log
     #   {local-dir}/detected-trees/           -- detected tree crowns gpkg
@@ -316,7 +316,10 @@ spec:
         parameters:
           - name: local-files
             valueFrom:
-              path: /tmp/file-paths.json
+              path: /tmp/local-files.json
+          - name: constants
+            valueFrom:
+              path: /tmp/constants.json
       container:
         image: rclone/rclone:sha-7a53f24
         volumeMounts:
@@ -430,11 +433,17 @@ spec:
             fi
             echo "[download] Registration shift file verified."
 
-            # Write photogrammetry product paths for use by downstream steps
-            printf '{"camera":"%s","chm":"%s","dtm":"%s","mesh":"%s", "crowns": "%s", "treetops": "%s", "registration": "%s", "mesh-crs": "%s", "original-photogrammetry-imagery-download-root": "%s"}' \
-              "$CAMERA_FILE" "$CHM_FILE" "$DTM_FILE" "$MESH_FILE" "${TREES_DIR}/$CROWNS_FILE" "${TREES_DIR}/$TOPS_FILE" "${SHIFT_DIR}/$SHIFT_FILENAME" "$MESH_CRS" "$PHOTOGRAMMETRY_DOWNLOAD_ROOT" \
-              > /tmp/file-paths.json
-            echo "[download] File paths written to /tmp/file-paths.json"
+            # Write downloaded file paths for use by downstream steps
+            printf '{"camera":"%s","chm":"%s","dtm":"%s","mesh":"%s", "crowns": "%s", "treetops": "%s", "registration": "%s"}' \
+              "$CAMERA_FILE" "$CHM_FILE" "$DTM_FILE" "$MESH_FILE" "${TREES_DIR}/$CROWNS_FILE" "${TREES_DIR}/$TOPS_FILE" "${SHIFT_DIR}/$SHIFT_FILENAME" \
+              > /tmp/local-files.json
+            echo "[download] File paths written to /tmp/local-files.json"
+
+            # Write constants extracted from the log file for downstream steps
+            printf '{"mesh_crs": "%s", "original_photogrammetry_imagery_download_root": "%s"}' \
+              "$MESH_CRS" "$PHOTOGRAMMETRY_DOWNLOAD_ROOT" \
+              > /tmp/constants.json
+            echo "[download] Parsed parameters written to /tmp/constants.json"
         resources:
           requests:
             cpu: 1
