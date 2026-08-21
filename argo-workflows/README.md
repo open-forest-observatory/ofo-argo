@@ -71,13 +71,21 @@ postprocessing_02:
 ```
 
 # Creating chips for model training
-The `species-prediction-training-data-prep.yaml` workflow is used to produce training data for tree-level attribute prediction tasks, such as species prediction. Conceptually, this workflow takes four main inputs.
-- **Field reference information**: You must provide two files on the `ofo-share` describing the field-surveyed trees and the corresponding bounds of the surveyed plots. These files should both contain the `plot_id` key, which describes which surveyed plot they correspond to.
+The `species-prediction-training-data-prep.yaml` workflow is used to produce training data for tree-level attribute prediction tasks, such as species prediction. Specifically, the model operates on each individual view of a given tree, taken from the raw drone images captured by the survey. This process begins with manually collected field reference data and drone crowns detected from photogrammetry products. Then, the drone and field trees are matched and the matched drone crowns are rendered to the perspective of each image. These renders are then chipped to provided one image per view of each matched trees. These chips can be linked back to the attributes of the field tree and used to train a model for any attribute which was surveyed. Additionally, this workflow predicts a live/dead status for each view and adds the predicted status to the tree-level metadata. All data is uploaded to `S3` and can be downloaded to train models. A publication summarizing this workflow can be found [here](https://ecoevorxiv.org/repository/view/13675).
+
+## Inputs
+The user directly specifies which field-drone pairs to process in a csv file. The file should not contain a header. The first field is represents which drone data to use. This can either be the `ofo_drone_mission_id` (padded to six digits) or a concatenation of two `id`s separated by an `_` when oblique and nadir data is processed together. The second field is the `ofo_plot_id` (padded to four digits). An example is below.
+```001439_001440, 0045```
+
+### Per-pairing inputs:
+- **Field reference information**: You must provide two files on the `ofo-share` describing the field-surveyed tree points and the corresponding bounds of the surveyed plots. These files should both contain the `plot_id` key, which describes which surveyed plot they correspond to.
 - **Detected trees**: Represents the paired tree top and tree crowns detected from the photogrammetry-derived products. One set of detected trees must be provided per drone mission.
-- **Plot-level spatial registration**: The spatial shift which aligns the photogrammetry data to the field survey data.
+- **Plot-drone spatial registration**: The spatial shift which aligns the photogrammetry data to the field survey data. This is represented as an x-y shift associated with a specific projected CRS.
 - **Photogrammetry products**: The mesh file representing the 3D geometry of the scene and the cameras file representing the location and orientation of each camera is used. One set of photogrammetry data must be provided per drone mission.
+- **Raw images**: The multiview drone images.
 - **Live/dead classification model**: This generates predictions from individual cropped views of each tree of whether it is alive or not. This information can be later used to filter the training data only to live trees.
 
+## Steps
 The workflow completes the following steps.
 - Downloads the zipped imagery, detected trees (crowns and tops), and shift between the two.
 - Shifts the field trees to match the tree tops.
@@ -88,5 +96,4 @@ The workflow completes the following steps.
 - Aggregate predictions at the tree level to determine which trees are dead by a majority vote across all views of it.
 - Finally, the masked crops and the matched crowns (now with all information from the field trees and predicted live/dead status) are uploaded to S3.
 
-The main input is a comma-separated file which specifies which photogrammetry ID and plot ID pairs to run chipping on. The photogrammetry ID can be either a single drone mission ID or a pair, separated by an underscore. The final column is the CRS to interperet the mesh in. An example of this file is below.
-```001439_001440, 0045, 26910```
+## Outputs
