@@ -182,9 +182,9 @@ spec:
                 - name: chm-file
                   value: '{{=jsonpath(tasks["download-non-image-files"].outputs.parameters["local-files"], "$.chm")}}'
                 - name: detected-tree-tops-file
-                  value: "{{workflow.parameters.TEMP_FOLDER}}/{{workflow.name}}/{{inputs.parameters.processed-drone-dataset-id}}/detected-tree-tops.gpkg"
+                  value: "{{workflow.parameters.TEMP_FOLDER}}/{{workflow.name}}/{{inputs.parameters.drone-ground-pair-name}}/detected-tree-tops.gpkg"
                 - name: detected-tree-crowns-file
-                  value: "{{workflow.parameters.TEMP_FOLDER}}/{{workflow.name}}/{{inputs.parameters.processed-drone-dataset-id}}/detected-tree-crowns.gpkg"
+                  value: "{{workflow.parameters.TEMP_FOLDER}}/{{workflow.name}}/{{inputs.parameters.drone-ground-pair-name}}/detected-tree-crowns.gpkg"
                 - name: chip-size
                   value: "{{workflow.parameters.TREE_DETECTION_CHIP_SIZE}}"
                 - name: chip-stride
