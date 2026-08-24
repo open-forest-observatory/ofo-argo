@@ -56,9 +56,14 @@ spec:
       - name: LD_CONFIG_PATH
       # Folder on S3 (starting with the bucket) containing per-mission photogrammetry products and
       # pre-computed plot-to-drone spatial alignment shift.
+      # The photogrammetry products should be at the following path:
+      # s3:{S3_PROCESSED_MISSIONS_FOLDER}/{PROCESSED_DRONE_DATASET_ID}/{PHOTOGRAMMETRY_ID}/full/
+      # And the shift files should be at the following path:
+      # s3:{S3_PROCESSED_MISSIONS_FOLDER}/{PROCESSED_DRONE_DATASET_ID}/{PHOTOGRAMMETRY_ID}/ground-reference-shifts/{PAIR_NAME}_ground-reference-shift.csv
       - name: S3_PROCESSED_MISSIONS_FOLDER
         value: "ofo-public/drone/mission-composites_01"
-      # Folder on S3 (starting with the bucket) where the single-mission imagery is stored
+      # Folder on S3 (starting with the bucket) where the single-mission imagery is stored. The full
+      # path to the images should be `s3:{S3_IMAGERY_FOLDER}}/{ofo_drone_mission_id}/images/{ofo_drone_mission_id}_images.zip"
       - name: S3_IMAGERY_FOLDER
         value: "ofo-public/drone/missions_03"
       # Folder on S3 (starting with the bucket) where output training chips and matched crowns will
@@ -297,12 +302,12 @@ spec:
                   if not line:
                       continue
                   processed_drone_dataset_id, ground_plot_id = [x.strip() for x in line.split(",")]
-                  imageset_ids = processed_drone_dataset_id.split("_")
+                  ofo_drone_mission_ids = processed_drone_dataset_id.split("_")
                   datasets.append({
                       "processed-drone-dataset-id": processed_drone_dataset_id,
                       "ground-plot-id": ground_plot_id,
                       "drone-ground-pair-name": f"{processed_drone_dataset_id}_{ground_plot_id}",
-                      "imagery-zip-urls": [f"{{workflow.parameters.S3_IMAGERY_FOLDER}}/{imageset_id}/images/{imageset_id}_images.zip" for imageset_id in imageset_ids]
+                      "imagery-zip-urls": [f"{{workflow.parameters.S3_IMAGERY_FOLDER}}/{ofo_drone_mission_id}/images/{ofo_drone_mission_id}_images.zip" for ofo_drone_mission_id in ofo_drone_mission_ids]
                   })
           json.dump(datasets, sys.stdout)
 
