@@ -288,6 +288,8 @@ spec:
     # Parse the newline-separated datasets file (comma-separated "{processed-drone-dataset-id}, {ground-plot-id}"
     # per line) into a JSON array of {processed-drone-dataset-id, ground-plot-id, drone-ground-pair-name} objects.
     - name: determine-datasets
+      nodeSelector:
+        feature.node.kubernetes.io/workload-type: cpu
       script:
         image: python:3.9
         volumeMounts:
@@ -341,6 +343,8 @@ spec:
           - name: constants
             valueFrom:
               path: /tmp/constants.json
+      nodeSelector:
+        feature.node.kubernetes.io/workload-type: cpu
       container:
         image: rclone/rclone:sha-7a53f24
         volumeMounts:
@@ -528,7 +532,7 @@ spec:
             value: "10"
           - name: raster-blur-sigma
             value: "0.333"
-          - name: "resolution"
+          - name: resolution
             value: "0.12"
           - name: chip-size
             value: "4000"
@@ -542,6 +546,8 @@ spec:
             value: "{{inputs.parameters.detected-tree-tops-file}}"
           - name: detected-tree-crowns-file
             value: "{{inputs.parameters.detected-tree-crowns-file}}"
+      nodeSelector:
+        feature.node.kubernetes.io/workload-type: cpu
       container:
         image: ghcr.io/open-forest-observatory/tree-detection-framework:{{workflow.parameters.TREE_DETECTION_FRAMEWORK_IMAGE_TAG}}
         volumeMounts:
@@ -589,6 +595,8 @@ spec:
           - name: registration-file
           - name: output-file
           - name: registration-quality-threshold
+      nodeSelector:
+        feature.node.kubernetes.io/workload-type: cpu
       script:
         image: ghcr.io/open-forest-observatory/tree-registration-and-matching:{{workflow.parameters.TRAM_IMAGE_TAG}}
         volumeMounts:
@@ -679,6 +687,8 @@ spec:
           - name: mesh-crs
           - name: original-image-folder
           - name: render-savefolder
+      nodeSelector:
+        feature.node.kubernetes.io/workload-type: cpu
       container:
         image: ghcr.io/open-forest-observatory/geograypher:{{workflow.parameters.GEOGRAYPHER_IMAGE_TAG}}
         volumeMounts:
@@ -713,6 +723,8 @@ spec:
           - name: renders-folder
           - name: output-folder
           - name: max-views-per-tree
+      nodeSelector:
+        feature.node.kubernetes.io/workload-type: cpu
       container:
         image: ghcr.io/open-forest-observatory/cv-utils:{{workflow.parameters.CV_UTILS_IMAGE_TAG}}
         volumeMounts:
@@ -792,6 +804,8 @@ spec:
           - name: input-crowns-file
           - name: image-level-predictions-file
           - name: output-crowns-file
+      nodeSelector:
+        feature.node.kubernetes.io/workload-type: cpu
       script:
         image: uhoosborne/geopandas@sha256:42bdd13882321a2647668446dae9ee1a8d76f2ac95aa8c3cb4e8eacadd5070d9
         volumeMounts:
