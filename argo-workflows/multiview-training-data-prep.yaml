@@ -54,21 +54,19 @@ spec:
       - name: LD_MODEL_PATH
       # The path to the live/dead classification model config file (.py)
       - name: LD_CONFIG_PATH
-      ## Defaulted arguments follow
-      - name: INPUT_S3_BUCKET
-        value: "ofo-public"
-      # Folder within the INPUT_S3_BUCKET containing per-mission photogrammetry products and
-      # pre-computed detections
-      - name: S3_MISSIONS_FOLDER
-        value: "drone/mission-composites_01"
-      # Where the single-mission imagery is stored within the INPUT_S3_BUCKET
+      # Folder on S3 (starting with the bucket) containing per-mission photogrammetry products and
+      # pre-computed plot-to-drone spatial alignment shift.
+      - name: S3_PROCESSED_MISSIONS_FOLDER
+        value: "ofo-public/drone/mission-composites_01"
+      # Folder on S3 (starting with the bucket) where the single-mission imagery is stored
       - name: S3_IMAGERY_FOLDER
-        value: "drone/missions_03"
-      # S3 folder where output training chips and matched crowns will be written
+        value: "ofo-public/drone/missions_03"
+      # Folder on S3 (starting with the bucket) where output training chips and matched crowns will
+      # be written
       - name: S3_TRAINING_OUTPUT_FOLDER
-        value: "drone/training-data_01"
+        value: "ofo-public/drone/training-data_01"
       # The identifier of the photogrammetry parameterization
-      # The path to the photogrammetry files is expected to be s3:{{INPUT_S3_BUCKET}}/{{S3_MISSIONS_FOLDER}}/{{PROCESSED_DRONE_DATASET_ID}}/{{PHOTOGRAMMETRY_ID}}/full/"
+      # The path to the photogrammetry files is expected to be s3:{{S3_PROCESSED_MISSIONS_FOLDER}}/{{PROCESSED_DRONE_DATASET_ID}}/{{PHOTOGRAMMETRY_ID}}/full/"
       - name: PHOTOGRAMMETRY_ID
         value: "photogrammetry_01"
       # All per-pair temp products are saved under: TEMP_FOLDER/{{workflow.name}}/{{drone-ground-pair-name}}/
@@ -304,7 +302,7 @@ spec:
                       "processed-drone-dataset-id": processed_drone_dataset_id,
                       "ground-plot-id": ground_plot_id,
                       "drone-ground-pair-name": f"{processed_drone_dataset_id}_{ground_plot_id}",
-                      "imagery-zip-urls": [f"{{workflow.parameters.INPUT_S3_BUCKET}}/{{workflow.parameters.S3_IMAGERY_FOLDER}}/{imageset_id}/images/{imageset_id}_images.zip" for imageset_id in imageset_ids]
+                      "imagery-zip-urls": [f"{{workflow.parameters.S3_IMAGERY_FOLDER}}/{imageset_id}/images/{imageset_id}_images.zip" for imageset_id in imageset_ids]
                   })
           json.dump(datasets, sys.stdout)
 
@@ -355,7 +353,7 @@ spec:
             mkdir -p "$PHOT_DIR" "$TREES_DIR" "$SHIFT_DIR"
 
             # --- Photogrammetry products ---
-            S3_PHOT="s3:{{workflow.parameters.INPUT_S3_BUCKET}}/{{workflow.parameters.S3_MISSIONS_FOLDER}}/${PROCESSED_DRONE_DATASET_ID}/{{workflow.parameters.PHOTOGRAMMETRY_ID}}/full/"
+            S3_PHOT="s3:{{workflow.parameters.S3_PROCESSED_MISSIONS_FOLDER}}/${PROCESSED_DRONE_DATASET_ID}/{{workflow.parameters.PHOTOGRAMMETRY_ID}}/full/"
             echo "[rclone] Downloading photogrammetry products: $S3_PHOT -> $PHOT_DIR"
             rclone copy "$S3_PHOT" "$PHOT_DIR" \
               --include "${PROCESSED_DRONE_DATASET_ID}_cameras.xml" \
@@ -370,21 +368,17 @@ spec:
             CHM_FILE="${PHOT_DIR}/${PROCESSED_DRONE_DATASET_ID}_chm-mesh.tif"
             DTM_FILE="${PHOT_DIR}/${PROCESSED_DRONE_DATASET_ID}_dtm-ptcloud.tif"
             MESH_FILE="${PHOT_DIR}/${PROCESSED_DRONE_DATASET_ID}_mesh.ply"
+            LOG_FILE="${PHOT_DIR}/${PROCESSED_DRONE_DATASET_ID}_log.txt"
 
-            for f in "$CAMERA_FILE" "$CHM_FILE" "$DTM_FILE" "$MESH_FILE"; do
+            for f in "$CAMERA_FILE" "$CHM_FILE" "$DTM_FILE" "$MESH_FILE" "$LOG_FILE"; do
               if [ ! -f "$f" ]; then
                 echo "[download] ERROR: Expected file not found: $f"
                 exit 1
               fi
             done
-            echo "[download] All 4 photogrammetry files verified."
+            echo "[download] All 5 photogrammetry files verified."
 
             # --- Mesh CRS (parsed from the photogrammetry log) ---
-            LOG_FILE="${PHOT_DIR}/${PROCESSED_DRONE_DATASET_ID}_log.txt"
-            if [ ! -f "$LOG_FILE" ]; then
-              echo "[download] ERROR: Expected file not found: $LOG_FILE"
-              exit 1
-            fi
             MESH_CRS=$(grep "project_crs:" "$LOG_FILE" | head -n1 | sed 's/.*EPSG::\([0-9]*\).*/\1/')
             if [ -z "$MESH_CRS" ]; then
               echo "[download] ERROR: Could not parse mesh CRS from log file: $LOG_FILE"
@@ -417,7 +411,7 @@ spec:
 
             # --- Registration shift ---
             SHIFT_FILENAME="${PAIR_NAME}_ground-reference-shift.csv"
-            S3_SHIFT="s3:{{workflow.parameters.INPUT_S3_BUCKET}}/{{workflow.parameters.S3_MISSIONS_FOLDER}}/${PROCESSED_DRONE_DATASET_ID}/{{workflow.parameters.PHOTOGRAMMETRY_ID}}/ground-reference-shifts/${SHIFT_FILENAME}"
+            S3_SHIFT="s3:{{workflow.parameters.S3_PROCESSED_MISSIONS_FOLDER}}/${PROCESSED_DRONE_DATASET_ID}/{{workflow.parameters.PHOTOGRAMMETRY_ID}}/ground-reference-shifts/${SHIFT_FILENAME}"
             echo "[rclone] Downloading registration shift: $S3_SHIFT"
             rclone copyto "$S3_SHIFT" "${SHIFT_DIR}/${SHIFT_FILENAME}" \
               --retries 5 --retries-sleep=15s \
@@ -848,8 +842,8 @@ spec:
     # Upload chips directory and matched crowns (with live/dead predictions) to S3, then
     # clean up the local temp directory.
     # Output S3 paths:
-    #   Chips:  {INPUT_S3_BUCKET}/{S3_TRAINING_OUTPUT_FOLDER}/{pair_name}/chips/
-    #   Crowns: {INPUT_S3_BUCKET}/{S3_TRAINING_OUTPUT_FOLDER}/{pair_name}/{pair_name}_matched-trees.gpkg
+    #   Chips:  s3:{S3_TRAINING_OUTPUT_FOLDER}/{pair_name}/chips/
+    #   Crowns: s3:{S3_TRAINING_OUTPUT_FOLDER}/{pair_name}/{pair_name}_matched-trees.gpkg
     - name: upload-training-data
       inputs:
         parameters:
@@ -867,11 +861,11 @@ spec:
             set -euo pipefail
             PAIR_NAME="{{inputs.parameters.drone-ground-pair-name}}"
             DATASET_DIR="{{workflow.parameters.TEMP_FOLDER}}/{{workflow.name}}/${PAIR_NAME}"
-            S3_UPLOAD_FOLDER="s3:{{workflow.parameters.INPUT_S3_BUCKET}}/{{workflow.parameters.S3_TRAINING_OUTPUT_FOLDER}}/${PAIR_NAME}"
+            S3_UPLOAD_FOLDER="s3:{{workflow.parameters.S3_TRAINING_OUTPUT_FOLDER}}/${PAIR_NAME}"
 
             # Sync all chips (all trees retained; downstream handles dead-tree filtering)
             # Note, sync enforces that all data in the destination is identical, so outdated files
-            # would be deleted.
+            # would be deleted if they exist.
             CHIPS_SRC="${DATASET_DIR}/chips/"
             CHIPS_DST="${S3_UPLOAD_FOLDER}/chips"
             echo "[rclone] Uploading chips: $CHIPS_SRC -> $CHIPS_DST"
