@@ -211,6 +211,8 @@ spec:
                   value: '{{=jsonpath(tasks["download-non-image-files"].outputs.parameters["local-files"], "$.registration")}}'
                 - name: output-file
                   value: "{{workflow.parameters.TEMP_FOLDER}}/{{workflow.name}}/{{inputs.parameters.drone-ground-pair-name}}/{{inputs.parameters.drone-ground-pair-name}}_matched-tree-crowns.gpkg"
+                - name: registration-quality-threshold
+                  value: "{{workflow.parameters.REGISTRATION_QUALITY_THRESHOLD}}"
 
           - name: render-instance-labels
             template: render-instance-labels
@@ -586,6 +588,7 @@ spec:
           - name: drone-crowns-file
           - name: registration-file
           - name: output-file
+          - name: registration-quality-threshold
       script:
         image: ghcr.io/open-forest-observatory/tree-registration-and-matching:{{workflow.parameters.TRAM_IMAGE_TAG}}
         volumeMounts:
@@ -613,6 +616,7 @@ spec:
           drone_trees_file = "{{inputs.parameters.drone-trees-file}}"
           drone_crowns_file = "{{inputs.parameters.drone-crowns-file}}"
           registration_file = "{{inputs.parameters.registration-file}}"
+          registration_quality_threshold = float("{{inputs.parameters.registration-quality-threshold}}")
 
           output_file = Path("{{inputs.parameters.output-file}}")
 
@@ -628,6 +632,11 @@ spec:
           field_bounds = field_bounds.query("plot_id==@ground_plot_id")
 
           registration = pd.read_csv(registration_file)
+
+          # See if it passes the quality threshold
+          ratio_quality_metric = registration["ratio_quality_metric"].iloc[0]
+          if ratio_quality_metric < registration_quality_threshold:
+              raise ValueError(f"The quality metric ({ratio_quality_metric}) is less than the threshold ({registration_quality_threshold})")
 
           # Determine the shift that the CRS needs to be interpreted in
           working_CRS = registration["shift_CRS"].iloc[0]
