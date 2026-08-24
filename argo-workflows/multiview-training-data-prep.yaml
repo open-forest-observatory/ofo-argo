@@ -63,7 +63,7 @@ spec:
       - name: S3_PROCESSED_MISSIONS_FOLDER
         value: "ofo-public/drone/mission-composites_01"
       # Folder on S3 (starting with the bucket) where the single-mission imagery is stored. The full
-      # path to the images should be `s3:{S3_IMAGERY_FOLDER}}/{ofo_drone_mission_id}/images/{ofo_drone_mission_id}_images.zip"
+      # path to the images should be s3:{S3_IMAGERY_FOLDER}/{ofo_drone_mission_id}/images/{ofo_drone_mission_id}_images.zip
       - name: S3_IMAGERY_FOLDER
         value: "ofo-public/drone/missions_03"
       # Folder on S3 (starting with the bucket) where output training chips and matched crowns will
@@ -71,7 +71,7 @@ spec:
       - name: S3_TRAINING_OUTPUT_FOLDER
         value: "ofo-public/drone/training-data_01"
       # The identifier of the photogrammetry parameterization
-      # The path to the photogrammetry files is expected to be s3:{{S3_PROCESSED_MISSIONS_FOLDER}}/{{PROCESSED_DRONE_DATASET_ID}}/{{PHOTOGRAMMETRY_ID}}/full/"
+      # The path to the photogrammetry files is expected to be s3:{S3_PROCESSED_MISSIONS_FOLDER}/{PROCESSED_DRONE_DATASET_ID}/{PHOTOGRAMMETRY_ID}/full/
       - name: PHOTOGRAMMETRY_ID
         value: "photogrammetry_01"
       # All per-pair temp products are saved under: TEMP_FOLDER/{{workflow.name}}/{{drone-ground-pair-name}}/
@@ -352,10 +352,9 @@ spec:
             PROCESSED_DRONE_DATASET_ID="{{inputs.parameters.processed-drone-dataset-id}}"
             BASE_DIR="{{inputs.parameters.local-dir}}"
             PHOT_DIR="${BASE_DIR}/photogrammetry-products"
-            TREES_DIR="${BASE_DIR}/detected-trees"
             SHIFT_DIR="${BASE_DIR}/registration-shift"
 
-            mkdir -p "$PHOT_DIR" "$TREES_DIR" "$SHIFT_DIR"
+            mkdir -p "$PHOT_DIR" "$SHIFT_DIR"
 
             # --- Photogrammetry products ---
             S3_PHOT="s3:{{workflow.parameters.S3_PROCESSED_MISSIONS_FOLDER}}/${PROCESSED_DRONE_DATASET_ID}/{{workflow.parameters.PHOTOGRAMMETRY_ID}}/full/"
