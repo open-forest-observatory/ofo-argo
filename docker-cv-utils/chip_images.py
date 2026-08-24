@@ -383,22 +383,35 @@ def process_folder(
         ]
     )
     unique_folders = np.unique(top_level_folder)
-    if len(unique_folders) != 2:
-        raise ValueError("For the paired missions, there should be two unique folders")
 
-    all_dimensions_subsetted = []
-    # Iterate over the folders corresponding to oblique and nadir
-    for unique_folder in unique_folders:
-        all_dimensions_subsetted.append(
-            subset_shapes(
-                all_dimensions[top_level_folder == unique_folder],
-                int(n_chips_per_tree / 2),
-                image_res_min_size,
-                image_res_sufficient_size,
-            )
+    # Single mission case
+    if len(unique_folders) == 1:
+        all_dimensions = subset_shapes(
+            all_dimensions,
+            n_chips_per_tree,
+            image_res_min_size,
+            image_res_sufficient_size,
         )
+    # Paired (oblique + nadir) missions
+    elif len(unique_folders) == 2:
+        all_dimensions_subsetted = []
+        # Iterate over the folders corresponding to oblique and nadir, selected up to half of
+        # n_chips_per_tree from each
+        for unique_folder in unique_folders:
+            all_dimensions_subsetted.append(
+                subset_shapes(
+                    all_dimensions[top_level_folder == unique_folder],
+                    int(n_chips_per_tree / 2),
+                    image_res_min_size,
+                    image_res_sufficient_size,
+                )
+            )
 
-    all_dimensions = pd.concat(all_dimensions_subsetted)
+        all_dimensions = pd.concat(all_dimensions_subsetted)
+    else:
+        raise ValueError(
+            f"Expected one or two unique folders but got {len(unique_folders)}"
+        )
 
     # Group the dimensions by filename to process each image independently
     dimensions_by_file = dict(tuple(all_dimensions.groupby("filename")))
