@@ -99,8 +99,10 @@ spec:
       - name: RENDER_CAMERAS_ROI_BUFFER_RADIUS_METERS
         value: 100
       # Maximum number of image chips to save per tree (passed as --n-chips-per-tree to chip_images.py)
+      # Note this should be set very high for most training workflows, to include as wide a diversity
+      # of views as possible. Unless you want to balance the number of training images across trees.
       - name: CHIPPING_MAX_VIEWS_PER_TREE
-        value: 10
+        value: 1000
       # The number of workers used for image chipping
       - name: CHIPPING_N_WORKERS
         value: 12
