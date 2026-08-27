@@ -57,7 +57,7 @@ spec:
       - name: S3_BUCKET
         value: "ofo-public"
       - name: S3_BASE_FOLDER
-        value: "gopro"
+        value: "under-canopy"
       # ingest-data-under-canopy Docker image tag (built from ingest-data/under-canopy/Dockerfile)
       - name: INGEST_IMAGE_TAG
         value: "main"
