@@ -1,0 +1,101 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Workflow
+metadata:
+  generateName: species-prediction-training-data-prep-
+spec:
+  serviceAccountName: argo
+  entrypoint: main
+  # Max concurrent pairs to process in parallel. Edit this value directly to change.
+  # (Argo doesn't support parameter substitution for integer fields like parallelism)
+  parallelism: 18
+
+  # Set imagePullPolicy for all containers in the workflow
+  podSpecPatch: |
+    containers:
+      - name: main
+        imagePullPolicy: Always
+
+  # Affinity rules for workflow pods:
+  # 1. nodeAffinity: Schedule on non-GPU nodes by default (GPU tasks override with affinity: {})
+  # 2. podAffinity: Prefer nodes with other running workflow pods to minimize autoscaler evictions
+  affinity:
+    nodeAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        nodeSelectorTerms:
+          - matchExpressions:
+              - key: nvidia.com/gpu.present
+                operator: DoesNotExist
+    podAffinity:
+      preferredDuringSchedulingIgnoredDuringExecution:
+        - weight: 100
+          podAffinityTerm:
+            labelSelector:
+              matchExpressions:
+                - key: workflows.argoproj.io/completed
+                  operator: In
+                  values:
+                    - "false"
+            topologyKey: kubernetes.io/hostname
+
+  # A list of input parameters available to the workflow at runtime.
+  # These parameters can be referenced throughout the workflow templates using {{workflow.parameters.<name>}}
+  arguments:
+    parameters:
+      # Path to a file on the mounted volume which specifies what data to train on.
+      # This should specify each dataset in the format it appears on S3, e.g. either
+      # <drone_mission_id>_<plot_id> or <drone_mission_id_oblique>_<drone_mission_id_nadir>_<plot_id>
+      # based on whether it's the paired or single mission case.
+      # TODO check the order of th determine whether any addition information should be included
+      - name: DATASETS_FILE
+      # A .json file specifying how to remap from the included attributes to final classes. If not
+      # provided, all classes will be kept.
+      - name: CLASS_REMAPPING_FILE
+      # What column of the downloaded geopackages to use as the class
+      - name: ATTRIBUTE_TO_TRAIN_ON
+      # Where on S3 should the model be uploaded. This path should include the bucket name.
+      - name: MODEL_UPLOAD_PATH
+      # Where the data on S3 is stored. This path should include the bucket name.
+      - name: TRAINING_DATA_PATH_S3
+        value: "ofo-public/drone/training-data_01/"
+      # The number of iterations to train for
+      - name: TRAINING_ITERATIONS
+        value: 10000
+      # TODO consider learning rate or other parameters the user might want to specify
+      # The class names (and therefore number of classes) can be extracted from the input data.
+
+
+
+
+  volumes:
+    - name: data
+      persistentVolumeClaim:
+        claimName: ceph-share-rw-pvc2
+
+  templates:
+    # The 'main' template reads the datasets file and fans out to process each pair in parallel.
+    - name: main
+      steps:
+        - - name: determine-datasets
+            template: determine-datasets
+
+## Definitions of individual step templates
+
+    # Parse the newline-separated datasets file (comma-separated "{processed-drone-dataset-id}, {ground-plot-id}"
+    # per line) into a JSON array of {processed-drone-dataset-id, ground-plot-id, drone-ground-pair-name} objects.
+    - name: determine-datasets
+      nodeSelector:
+        feature.node.kubernetes.io/workload-type: cpu
+      script:
+        image: python:3.9
+        volumeMounts:
+          - name: data
+            mountPath: /data
+        command: ["python3"]
+        source: |
+          import json, sys
+
+          datasets = []
+          with open("{{workflow.parameters.DATASETS_FILE}}", "r") as f:
+              # TODO fix this
+              datasets.append(None)
+          json.dump(datasets, sys.stdout)
