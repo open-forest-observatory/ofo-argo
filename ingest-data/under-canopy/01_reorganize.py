@@ -61,9 +61,11 @@ def main(
         file_prefixes (str): A space-separated list of file prefixes to include
         date (str): A YYYY-MM-DD date that the the included files must match based on the DateTimeOriginal attribute.
     """
+    print("Searching for files")
     # Find all files in the folder
     matching_files = list(input_data_folder.rglob("*"))
 
+    print(f"Found {len(matching_files)}")
     # Find files matching any of the prefixes
     # Split the space-separated prefixes into individual prefixes
     file_prefixes = file_prefixes.split()
@@ -76,6 +78,7 @@ def main(
         )
     ]
 
+    print(f"Found {len(matching_files)} files which matched the file prefixes")
     # Parse the exif to determine the timestamp
     cmd = ["exiftool", "-DateTimeOriginal", "-json", "-n"] + matching_files
 
@@ -95,6 +98,7 @@ def main(
 
     # TODO check that the maximum gap is less than a specified threshold and error if not
     matching_files = exif.SourceFile.to_list()
+    print(f"Found {len(matching_files)} files which matched the specified date")
 
     # Create an output folder based on the output folder / collect_id
     output_folder = Path(
