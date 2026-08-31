@@ -398,7 +398,11 @@ spec:
             fi
             echo "[download] Parsed mesh CRS: $MESH_CRS"
 
-            # --- Photogrammetry imagery download root (parsed from the log's YAML config) ---
+            # --- Determine the folder where images was located when photogrammetry was run ---
+            # Photogrammetry exports a camera file which includes absolute paths to the images.
+            # These are based on where the images were located for the photogrammetry processing
+            # workflow. We must extract this initial path so it can be replaced with one that is
+            # appropriate for this workflow.
             # The log's "photo_path" list (under the "project:" key) holds the raw-imagery paths used
             # when photogrammetry was run, of the form
             # "{root}/${PROCESSED_DRONE_DATASET_ID}/photogrammetry/downloaded-raw-imagery/...". Read
