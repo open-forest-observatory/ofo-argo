@@ -41,6 +41,12 @@ def parse_args():
         required=True,
         help="Date to restrict images to in the YYYY-MM-DD format",
     )
+    parser.add_argument(
+        "--max-allowable-delta",
+        type=float,
+        default=120.0,
+        help="Fail if the max delta between image timestamps is greater than this number of seconds.",
+    )
 
     return parser.parse_args()
 
@@ -51,8 +57,9 @@ def main(
     collect_id: int,
     file_prefixes: str,
     date: str,
+    max_allowable_delta: float = 120.0,
 ):
-    """_summary_
+    """Subset images based on file_prefixes and date and hardlink to an output folder named based on the collect_id
 
     Args:
         input_data_folder (Path): Where to search for matching files
@@ -60,6 +67,10 @@ def main(
         collect_id (int): The output images are written to {output_data_folder}/{collect_id:06d}/{collect_id:06d}_images"
         file_prefixes (str): A space-separated list of file prefixes to include
         date (str): A YYYY-MM-DD date that the the included files must match based on the DateTimeOriginal attribute.
+        max_allowable_delta (float): Fail if the difference in timestamps between any pair of consecutive images is larger than this number of seconds.
+
+    Raises:
+        ValueError: if the maximum delta between timestamps is larger than max_allowable_delta
     """
     print("Searching for files")
     # Find all files in the folder
@@ -97,9 +108,12 @@ def main(
     ]
 
     # Check for large gaps in the timestamps
-    # TODO consider erroring based on a threshold value
     max_delta_seconds = exif.DateTimeOriginal.diff().dt.total_seconds().max()
 
+    if max_delta_seconds > max_allowable_delta:
+        raise ValueError(
+            "The maximum difference in timestamp was {max_delta_seconds} which is greater than the allowable {max_allowable_delta}"
+        )
     print(
         f"The maximum time difference between consecutive images was {max_delta_seconds} seconds"
     )
