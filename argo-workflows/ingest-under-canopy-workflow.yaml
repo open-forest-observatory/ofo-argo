@@ -45,7 +45,6 @@ spec:
       # Folder of raw GoPro files to search (recursively) for each mission's images, with respect
       # to the mounted file system.
       - name: INPUT_DATA_FOLDER
-        value: "/data/argo-input/under-canopy-imagery-organization/0_raw"
       # Per-mission working directories (reorganized images + metadata, deleted after upload) are
       # created under: TEMP_FOLDER/{{workflow.name}}/{collect_id}/
       - name: TEMP_FOLDER

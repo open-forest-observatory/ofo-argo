@@ -96,6 +96,14 @@ def main(
         exif.DateTimeOriginal.dt.date == datetime.strptime(date, "%Y-%m-%d").date()
     ]
 
+    # Check for large gaps in the timestamps
+    # TODO consider erroring based on a threshold value
+    max_delta_seconds = exif.DateTimeOriginal.diff().dt.total_seconds().max()
+
+    print(
+        f"The maximum time difference between consecutive images was {max_delta_seconds} seconds"
+    )
+
     # TODO check that the maximum gap is less than a specified threshold and error if not
     matching_files = exif.SourceFile.to_list()
     print(f"Found {len(matching_files)} files which matched the specified date")
