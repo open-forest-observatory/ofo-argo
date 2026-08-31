@@ -39,8 +39,8 @@ spec:
 
   arguments:
     parameters:
-      # Path on the shared volume to a CSV with columns: collect_id_under_canopy, gopro_file_prefix
-      # gopro_file_prefix may contain multiple space-separated prefixes for a single mission.
+      # Path on the shared volume to a CSV with columns: collect_id, file_prefixes, date
+      # file_prefixes may contain multiple space-separated prefixes for a single mission.
       - name: MISSIONS_FILE
       # Folder of raw GoPro files to search (recursively) for each mission's images, with respect
       # to the mounted file system.
@@ -83,10 +83,10 @@ spec:
                   value: "{{item.collect-id}}"
                 - name: collect-id-padded
                   value: "{{item.collect-id-padded}}"
-                - name: sd-card-id
-                  value: "{{item.sd-card-id}}"
-                - name: gopro-file-prefix
-                  value: "{{item.gopro-file-prefix}}"
+                - name: date
+                  value: "{{item.date}}"
+                - name: file-prefixes
+                  value: "{{item.file-prefixes}}"
             withParam: "{{tasks.determine-missions.outputs.result}}"
 
     # process-mission-workflow: DAG for a single mission. Reorganizes the raw images, extracts
@@ -96,8 +96,8 @@ spec:
         parameters:
           - name: collect-id
           - name: collect-id-padded
-          - name: sd-card-id
-          - name: gopro-file-prefix
+          - name: date
+          - name: file-prefixes
       dag:
         # failFast=false ensures other missions continue processing if this one fails
         failFast: false
@@ -108,10 +108,10 @@ spec:
               parameters:
                 - name: collect-id
                   value: "{{inputs.parameters.collect-id}}"
-                - name: sd-card-id
-                  value: "{{inputs.parameters.sd-card-id}}"
-                - name: gopro-file-prefix
-                  value: "{{inputs.parameters.gopro-file-prefix}}"
+                - name: date
+                  value: "{{inputs.parameters.date}}"
+                - name: file-prefixes
+                  value: "{{inputs.parameters.file-prefixes}}"
 
           - name: extract-metadata
             template: extract-metadata
@@ -140,7 +140,7 @@ spec:
 ## Definitions of individual steps (templates)
 
     # determine-missions: reads MISSIONS_FILE and emits a JSON array of
-    # {collect-id, collect-id-padded, sd-card-id, gopro-file-prefix} objects, one per CSV row.
+    # {collect-id, collect-id-padded, file-prefixes, date} objects, one per CSV row.
     - name: determine-missions
       script:
         image: ghcr.io/open-forest-observatory/ingest-data-under-canopy:{{workflow.parameters.INGEST_IMAGE_TAG}}
@@ -163,16 +163,16 @@ spec:
           missions_file = "{{workflow.parameters.MISSIONS_FILE}}"
 
           # skipinitialspace handles ", "-separated headers/values; dtype=str preserves
-          # values like a zero-padded collect_id_under_canopy.
+          # values like a zero-padded collect_id.
           missions = pd.read_csv(missions_file, dtype=str, skipinitialspace=True)
           missions.columns = missions.columns.str.strip()
 
           result = [
               {
-                  "collect-id": row["collect_id_under_canopy"],
-                  "collect-id-padded": f"{int(row['collect_id_under_canopy']):06d}",
-                  "sd-card-id": row["sd_card_id"],
-                  "gopro-file-prefix": row["gopro_file_prefix"],
+                  "collect-id": row["collect_id"],
+                  "collect-id-padded": f"{int(row['collect_id']):06d}",
+                  "file-prefixes": row["file_prefixes"],
+                  "date": row["date"],
               }
               for _, row in missions.iterrows()
           ]
@@ -185,8 +185,8 @@ spec:
       inputs:
         parameters:
           - name: collect-id
-          - name: sd-card-id
-          - name: gopro-file-prefix
+          - name: file-prefixes
+          - name: date
       container:
         image: ghcr.io/open-forest-observatory/ingest-data-under-canopy:{{workflow.parameters.INGEST_IMAGE_TAG}}
         volumeMounts:
@@ -204,10 +204,10 @@ spec:
           - "{{workflow.parameters.TEMP_FOLDER}}/{{workflow.name}}"
           - "--collect-id"
           - "{{inputs.parameters.collect-id}}"
-          - "--sd-card-id"
-          - "{{inputs.parameters.sd-card-id}}"
-          - "--gopro-file-prefix"
-          - "{{inputs.parameters.gopro-file-prefix}}"
+          - "--file-prefixes"
+          - "{{inputs.parameters.file-prefixes}}"
+          - "--date"
+          - "{{inputs.parameters.date}}"
 
     # extract-metadata: builds the per-image metadata GeoPackage for one mission's reorganized
     # images, via 02_extract_metadata.py, and uploads it to S3.

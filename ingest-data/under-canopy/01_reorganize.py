@@ -4,6 +4,9 @@ import re
 import os
 import json
 import shutil
+import subprocess
+import pandas as pd
+from datetime import datetime
 
 
 def parse_args():
@@ -27,41 +30,76 @@ def parse_args():
         help="The OFO collect ID for this dataset.",
     )
     parser.add_argument(
-        "--sd-card-id",
-        type=int,
-        required=True,
-        help="The SD card ID for this dataset.",
-    )
-    parser.add_argument(
-        "--gopro-file-prefix",
+        "--file-prefixes",
         type=str,
         required=True,
-        help="One or more space-separated GoPro file prefixes for this mission.",
+        help="One or more space-separated file prefixes for this mission.",
+    )
+    parser.add_argument(
+        "--date",
+        type=str,
+        required=True,
+        help="Date to restrict images to in the YYYY-MM-DD format",
     )
 
     return parser.parse_args()
 
 
-def main(input_data_folder, output_data_folder, collect_id, sd_card_id, gopro_file_prefix):
+def main(
+    input_data_folder: Path,
+    output_data_folder: Path,
+    collect_id: int,
+    file_prefixes: str,
+    date: str,
+):
+    """_summary_
 
-    # Find files matching the card
-    card_search_str = f"**/card_{sd_card_id:02}/**/*"
-    matching_files = list(input_data_folder.rglob(card_search_str))
+    Args:
+        input_data_folder (Path): Where to search for matching files
+        output_data_folder (Path): Where to write the subset of matching images.
+        collect_id (int): The output images are written to {output_data_folder}/{collect_id:06d}/{collect_id:06d}_images"
+        file_prefixes (str): A space-separated list of file prefixes to include
+        date (str): A YYYY-MM-DD date that the the included files must match based on the DateTimeOriginal attribute.
+    """
+    # Find all files in the folder
+    matching_files = list(input_data_folder.rglob("*"))
 
     # Find files matching any of the prefixes
     # Split the space-separated prefixes into individual prefixes
-    gopro_file_prefixes = gopro_file_prefix.split()
-    matching_files = [f for f in matching_files if re.match("|".join(re.escape(p) for p in gopro_file_prefixes), f.name)]
+    file_prefixes = file_prefixes.split()
+    matching_files = [
+        str(f)
+        for f in matching_files
+        if (
+            re.match("|".join(re.escape(p) for p in file_prefixes), f.name)
+            and f.is_file()
+        )
+    ]
 
-    # Sort files by name.
-    # TODO we might want to parse the timestamp in the future but the names should be consecutive in time.
-    matching_files = sorted(matching_files)
+    # Parse the exif to determine the timestamp
+    cmd = ["exiftool", "-DateTimeOriginal", "-json", "-n"] + matching_files
 
-    # TODO: Consider a check to see whether this is within the start/end timestamps and/or if there are timestamp gaps
-    # This would require first parsing the metadata
+    result = subprocess.run(cmd, check=True, capture_output=True, text=True)
+    # Convert to a dataframe with just the filename and datetime
+    exif = pd.DataFrame(json.loads(result.stdout))[["SourceFile", "DateTimeOriginal"]]
+    exif["DateTimeOriginal"] = pd.to_datetime(
+        exif["DateTimeOriginal"], format="%Y:%m:%d %H:%M:%S"
+    )
+
+    # Sort by time
+    exif = exif.sort_values(by="DateTimeOriginal")
+    # Extact only the rows matching the requested date
+    exif = exif[
+        exif.DateTimeOriginal.dt.date == datetime.strptime(date, "%Y-%m-%d").date()
+    ]
+
+    # TODO check that the maximum gap is less than a specified threshold and error if not
+    matching_files = exif.SourceFile.to_list()
 
     # Create an output folder based on the output folder / collect_id
-    output_folder = Path(output_data_folder, f"{collect_id:06d}/{collect_id:06d}_images")
+    output_folder = Path(
+        output_data_folder, f"{collect_id:06d}/{collect_id:06d}_images"
+    )
     # remove old folder, if present
     shutil.rmtree(output_folder, ignore_errors=True)
     # And recreate
@@ -74,6 +112,7 @@ def main(input_data_folder, output_data_folder, collect_id, sd_card_id, gopro_fi
         for i, in_f in enumerate(matching_files)
     }
 
+    # Perform the hardlinking
     for in_f, out_f in filename_remapping.items():
         os.link(in_f, out_f)
 
