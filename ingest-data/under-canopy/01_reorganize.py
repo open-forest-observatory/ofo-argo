@@ -112,7 +112,7 @@ def main(
 
     if max_delta_seconds > max_allowable_delta:
         raise ValueError(
-            "The maximum difference in timestamp was {max_delta_seconds} which is greater than the allowable {max_allowable_delta}"
+            f"The maximum difference in timestamp was {max_delta_seconds} which is greater than the allowable {max_allowable_delta}"
         )
     print(
         f"The maximum time difference between consecutive images was {max_delta_seconds} seconds"
