@@ -69,3 +69,35 @@ postprocessing_02:
     args:
       min_area_threshold: 25.0
 ```
+
+# Creating chips for model training
+The `species-prediction-training-data-prep.yaml` workflow is used to produce training data for tree-level attribute prediction tasks, such as predicting tree species. Specifically, the model operates (both for training and inference) on each individual view of a given tree, taken from the raw drone images captured by the survey. This process begins with manually collected field reference data and predicted tree crowns detected from drone-derived photogrammetry products. Then, the drone and field trees are matched and the matched drone crowns are rendered to the perspective of each image. These renders are then chipped to provided one image per view of each matched trees. These chips can be linked back to the attributes of the field tree and used to train a model for any attribute which was surveyed. Additionally, this workflow predicts a live/dead status for each view and adds the predicted status to the tree-level metadata. All data is uploaded to `S3` and can be downloaded to train models. A publication summarizing this workflow can be found [here](https://ecoevorxiv.org/repository/view/13675).
+
+## Inputs
+### Workflow level-inputs
+- **Which datasets to run**
+You directly specifies which field-drone pairs to process in a two column csv file. The file should not contain a header. The first field represents which drone dataset to use. This can either be the `ofo_drone_mission_id` (padded to six digits) or a concatenation of two `id`s separated by an `_`, such as when oblique and nadir data is processed together. The second field is the `ofo_plot_id` (padded to four digits). This file is pointed to by the `DATASETS_FILE` workflow parameter. An example row of the file for a paired mission is `001439_001440, 0045` and for a single mission,`001439, 0045`. In almost all cases, the file should only contain one format of missions (either paired or single) since this workflow expects all photogrammetry products to be uploaded to the same `S3_PROCESSED_MISSIONS_FOLDER` folder, which has only one format of mission.
+- **Field reference information**: You must provide two files on the `ofo-share` describing the field-surveyed tree points and the corresponding bounds of the surveyed plots. These files should both contain the `plot_id` key, which describes which surveyed plot they correspond to. The workflow parameters that control these inputs are `FIELD_TREES_FILE` and `FIELD_PLOTS_FILE`.
+- **Live/dead classification model**: This generates predictions from individual cropped views of each tree of whether it is alive or not. This information can be later used to filter the training data only to live trees. The workflow parameters that control this are `LD_MODEL_PATH` and `LD_CONFIG_PATH`.
+
+### Per-pairing inputs:
+- **Photogrammetry products**: The mesh file representing the 3D geometry of the scene and the cameras file representing the location and orientation of each camera is used for rendering and the CHM is used for tree detection. One set of photogrammetry data must be provided per drone mission. The photogrammetry files should be at the following path `s3:{S3_PROCESSED_MISSIONS_FOLDER}/{PROCESSED_DRONE_DATASET_ID}/{PHOTOGRAMMETRY_ID}/full/`. In this path, `PROCESSED_DRONE_DATASET_ID` represents the `ofo_drone_mission_id` or concatenation thereof provided as the first input column and `S3_PROCESSED_MISSIONS_FOLDER` and `PHOTOGRAMMETRY_ID` are workflow-level parameters.
+- **Plot-drone spatial registration**: The spatial shift which aligns the photogrammetry data to the field survey data. This is represented as an x-y shift associated with a specific projected CRS. The shift file should be at `s3:{S3_PROCESSED_MISSIONS_FOLDER}/{PROCESSED_DRONE_DATASET_ID}/{PHOTOGRAMMETRY_ID}/ground-reference-shifts/{PAIR_NAME}_ground-reference-shift.csv`. In this path, `PROCESSED_DRONE_DATASET_ID` represents the `ofo_drone_mission_id` or concatenation thereof provided as the first input column and `S3_PROCESSED_MISSIONS_FOLDER` and `PHOTOGRAMMETRY_ID` are workflow-level parameters. The `PAIR_NAME` represents the concatenation of the `PROCESSED_DRONE_DATASET_ID` and `ofo_plot_id`.
+- **Raw images**: The multiview drone images. The zipped folders of images should be found at `s3:{S3_IMAGERY_FOLDER}/{ofo_drone_mission_id}/images/{ofo_drone_mission_id}_images.zip`. The `S3_IMAGERY_FOLDER` is a workflow-level parameter and the `ofo_drone_mission_id` is parsed (potentially split) from the input file.
+
+## Steps
+The workflow completes the following steps.
+- Downloads the zipped imagery, photogrammetry products, and the shift between the photogrammetry and field data.
+- Detect the tree tops and tree crowns from the drone CHM.
+- Shifts the field trees to match the tree tops.
+- Matches the field trees to the tree tops. This in turn links to the tree crowns by way of the crown's `tree_top_unique_id` and the tree top's `unique_id`.
+- Renders the crown's `unique_id` to the perspective of each image.
+- Crops out each individual tree. This step also masks the background with gray.
+- Generate per-view predictions of live vs. dead with the provided pretrained computer vision model.
+- Aggregate predictions at the tree level to determine which trees are dead by a majority vote across all views of it.
+- Finally, the masked crops and the matched crowns (now with all information from the field trees and predicted live/dead status) are uploaded to S3.
+
+## Outputs
+For each line in the input, a separate training dataset is uploaded. In the following lines, the `pair_name` parameter represents the concatenation of the two columns in the input file. The `S3_TRAINING_OUTPUT_FOLDER` is a workflow-level parameter.
+- The geospatial crown delineations can be found at `s3:{S3_TRAINING_OUTPUT_FOLDER}/{pair_name}/{pair_name}_matched-trees.gpkg`. The `unique_ID` field matches to the rendered chips in the next bullet and the `live_dead` field represents whether it was predicted as live or dead based on the multiview crops and provided model. This file contains all the columns from the field reference trees that were matched to the crowns.
+- The chips can be found at `s3:{S3_TRAINING_OUTPUT_FOLDER}/{pair_name}/chips/` in a nested folder structure. The folders structure represents the structure of the input images, with the leaf folders corresponding to an individual image (minus the suffix). Within each folder, the individual images are named based on the `unique_ID` from the bullet above, padded to five digits. Using this linking, a model could be trained for any attribute provided in the initial field reference data.
