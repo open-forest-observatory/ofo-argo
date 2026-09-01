@@ -39,11 +39,12 @@ spec:
 
   arguments:
     parameters:
-      # Path on the shared volume to a CSV with columns: collect_id, file_prefixes, date
-      # collect_id is an integer
+      # Path on the shared volume to a CSV with at least the following columns: collect_id,
+      # file_prefixes, and date. All others are ignored.
+      # collect_id is an integer which is used to name the output data.
       # file_prefixes are the start of the filenames to include (e.g. GSAO) and may contain multiple
       # space-separated prefixes for a single collect.
-      # date is a YYYY-MM-DD string
+      # date is a YYYY-MM-DD string specifying when the data for that collect was collected.
       - name: COLLECTS_FILE
       # Folder of raw GoPro files to search (recursively) for each collect's images, with respect
       # to the mounted file system.

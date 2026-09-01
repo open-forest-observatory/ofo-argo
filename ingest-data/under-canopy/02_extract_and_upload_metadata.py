@@ -100,6 +100,7 @@ def stringify_nested_fields(df):
 
 def build_geometry(df):
     """Build a GPS point geometry column, leaving rows without GPS as null geometry."""
+    # TODO consider using a list of candidate column names to be more flexible
     if "GPSLongitude" not in df.columns or "GPSLatitude" not in df.columns:
         return [None] * len(df)
 

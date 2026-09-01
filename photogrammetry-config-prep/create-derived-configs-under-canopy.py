@@ -16,17 +16,17 @@ import yaml
 import pandas as pd
 
 # =============================================================================
-# Configuration Constants
+# Configuration Defaults (used when no values are provided via command-line arguments)
 # =============================================================================
 
 # Path to the GeoPackage containing drone mission polygons and metadata
-MISSIONS_LIST_PATH = "/home/derek/repos/ofo-argo/photogrammetry-config-prep/config-prep-runs/run-03/input/ofo-all-missions-metadata-curated.gpkg"
+MISSIONS_LIST_PATH_DEFAULT = "/home/derek/repos/ofo-argo/photogrammetry-config-prep/config-prep-runs/run-03/input/ofo-all-missions-metadata-curated.gpkg"
 
 # Path to the base automate-metashape configuration YAML
-BASE_CONFIG_PATH = "/home/derek/repos/ofo-argo/photogrammetry-config-prep/config-prep-runs/run-03/input/config-base.yml"
+BASE_CONFIG_PATH_DEFAULT = "/home/derek/repos/ofo-argo/photogrammetry-config-prep/config-prep-runs/run-03/input/config-base.yml"
 
 # Output directory for derived config files
-OUTPUT_DIR = "/home/derek/repos/ofo-argo/photogrammetry-config-prep/config-prep-runs/run-03/derived-configs"
+OUTPUT_DIR_DEFAULT = "/home/derek/repos/ofo-argo/photogrammetry-config-prep/config-prep-runs/run-03/derived-configs"
 
 # S3 path prefix for drone mission imagery downloads.
 # The full path will be: {S3_DRONE_MISSIONS_PATH}/{mission_id}/images/{mission_id}_images.zip
@@ -34,7 +34,7 @@ OUTPUT_DIR = "/home/derek/repos/ofo-argo/photogrammetry-config-prep/config-prep-
 # containing a zip file named {mission_id}_images.zip
 # Note: No remote prefix needed - just bucket/path format. The S3 credentials come from the
 # cluster's s3-credentials Kubernetes secret.
-S3_DRONE_MISSIONS_PATH = "ofo-public/gopro"
+S3_DRONE_MISSIONS_PATH_DEFAULT = "ofo-public/gopro"
 
 
 # =============================================================================
@@ -47,39 +47,39 @@ def parse_args():
     parser.add_argument(
         "missions_list_path",
         type=Path,
-        default=Path(MISSIONS_LIST_PATH),
+        default=Path(MISSIONS_LIST_PATH_DEFAULT),
         help="Path to the csv file with mission_id and crs columns.",
     )
     parser.add_argument(
         "base_config_path",
         type=Path,
-        default=Path(BASE_CONFIG_PATH),
+        default=Path(BASE_CONFIG_PATH_DEFAULT),
         help="Path to the base automate-metashape configuration YAML.",
     )
     parser.add_argument(
         "output_dir",
         type=Path,
-        default=Path(OUTPUT_DIR),
+        default=Path(OUTPUT_DIR_DEFAULT),
         help="Output directory for derived config files.",
     )
     parser.add_argument(
         "--s3-drone-missions-path",
         type=str,
-        default=S3_DRONE_MISSIONS_PATH,
+        default=S3_DRONE_MISSIONS_PATH_DEFAULT,
         help="S3 path prefix for drone mission imagery downloads.",
     )
 
     return parser.parse_args()
 
 
-def create_derived_config(
+def create_derived_config_dict(
     base_config: dict,
     photo_paths: list[str],
     project_crs: str,
     s3_download_path: str,
 ) -> dict:
     """
-    Create a derived config by applying mission-specific overrides to the base config.
+    Create a derived config dict by applying mission-specific overrides to the base config dict.
 
     Args:
         base_config: The base configuration dictionary
@@ -134,7 +134,7 @@ def main(
         photo_paths = [f"__DOWNLOADED__/{mission_id}_images"]
 
         # Create derived config
-        derived_config = create_derived_config(
+        derived_config = create_derived_config_dict(
             base_config,
             photo_paths,
             project_crs,

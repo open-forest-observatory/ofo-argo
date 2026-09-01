@@ -102,7 +102,7 @@ def main(
 
     # Sort by time
     exif = exif.sort_values(by="DateTimeOriginal")
-    # Extact only the rows matching the requested date
+    # Extract only the rows matching the requested date
     exif = exif[
         exif.DateTimeOriginal.dt.date == datetime.strptime(date, "%Y-%m-%d").date()
     ]
@@ -113,7 +113,7 @@ def main(
     # Error if the gap is too large
     if max_delta_seconds > max_allowable_delta:
         raise ValueError(
-            f"The maximum difference in timestamps was {max_delta_seconds} which is greater than the allowable {max_allowable_delta}"
+            f"The maximum difference in consecutive timestamps was {max_delta_seconds} which is greater than the allowable {max_allowable_delta}"
         )
     print(
         f"The maximum time difference between consecutive images was {max_delta_seconds} seconds"
@@ -132,7 +132,7 @@ def main(
     output_folder.mkdir(parents=True, exist_ok=True)
 
     # Hardlink all files to that location
-    # The output format should be <collect_id>/<collect_id>-<image_id>.JPG
+    # The output format should be {collect_id:06d}/{collect_id:06d}_images/{collect_id:06d}_{image_id:06d}.JPG
     filename_remapping = {
         str(in_f): str(Path(output_folder, f"{collect_id:06d}_{i:06d}.JPG"))
         for i, in_f in enumerate(matching_files)
