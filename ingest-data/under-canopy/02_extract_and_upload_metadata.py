@@ -23,6 +23,7 @@ import json
 import re
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 import geopandas as gpd
@@ -72,8 +73,12 @@ def run_exiftool(input_data_folder):
         cmd += ["-ext", ext]
     cmd.append(str(input_data_folder))
 
+    start = time.time()
     result = subprocess.run(cmd, check=True, capture_output=True, text=True)
-    return json.loads(result.stdout)
+    result_dict = json.loads(result.stdout)
+    print(f"Parsing exif took {time.time() - start} seconds")
+    print(f"Result_dict size (bytes): {sys.getsizeof(result_dict)}")
+    return result_dict
 
 
 def drop_binary_fields(df):
@@ -89,9 +94,13 @@ def drop_binary_fields(df):
 
 
 def stringify_nested_fields(df):
-    """GeoPackage columns must hold scalar values; JSON-encode any list/dict fields."""
+    """
+    GeoPackage columns must hold scalar values; JSON-encode any list/dict fields.
+    An example is the GPS5 field which contains the [lat, lon, alt, speed, timestamp]
+    """
     for col in df.columns:
         if df[col].apply(lambda v: isinstance(v, (list, dict))).any():
+            print(f"Applying stringify to nested field {col}")
             df[col] = df[col].apply(
                 lambda v: json.dumps(v) if isinstance(v, (list, dict)) else v
             )

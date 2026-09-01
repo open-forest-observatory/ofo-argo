@@ -80,8 +80,6 @@ spec:
             depends: "determine-collects.Succeeded"
             arguments:
               parameters:
-                - name: collect-id
-                  value: "{{item.collect-id}}"
                 - name: collect-id-padded
                   value: "{{item.collect-id-padded}}"
                 - name: date
@@ -95,7 +93,6 @@ spec:
     - name: process-collects-workflow
       inputs:
         parameters:
-          - name: collect-id
           - name: collect-id-padded
           - name: date
           - name: file-prefixes
@@ -107,8 +104,8 @@ spec:
             template: reorganize
             arguments:
               parameters:
-                - name: collect-id
-                  value: "{{inputs.parameters.collect-id}}"
+                - name: collect-id-padded
+                  value: "{{inputs.parameters.collect-id-padded}}"
                 - name: date
                   value: "{{inputs.parameters.date}}"
                 - name: file-prefixes
@@ -169,7 +166,6 @@ spec:
 
           result = [
               {
-                  "collect-id": row["collect_id"],
                   "collect-id-padded": f"{int(row['collect_id']):06d}",
                   "file-prefixes": row["file_prefixes"],
                   "date": row["date"],
@@ -184,7 +180,7 @@ spec:
     - name: reorganize
       inputs:
         parameters:
-          - name: collect-id
+          - name: collect-id-padded
           - name: file-prefixes
           - name: date
       container:
@@ -203,7 +199,7 @@ spec:
           - "{{workflow.parameters.INPUT_DATA_FOLDER}}"
           - "{{workflow.parameters.TEMP_FOLDER}}/{{workflow.name}}"
           - "--collect-id"
-          - "{{inputs.parameters.collect-id}}"
+          - "{{inputs.parameters.collect-id-padded}}"
           - "--file-prefixes"
           - "{{inputs.parameters.file-prefixes}}"
           - "--date"

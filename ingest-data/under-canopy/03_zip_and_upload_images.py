@@ -44,11 +44,14 @@ def parse_args():
     return parser.parse_args()
 
 
-def rclone_copyto(src, dst):
-    """Run an rclone copyto command (single file)."""
-    cmd = ["rclone", "copyto", src, dst]
-    print(f"  rclone copyto {src} -> {dst}", file=sys.stderr)
-    subprocess.run(cmd, check=True)
+def rclone_moveto(src, dst):
+    """Run an rclone moveto command (single file)."""
+    cmd = ["rclone", "moveto", src, dst]
+    print(f"  rclone moveto {src} -> {dst}", file=sys.stderr)
+    try:
+        subprocess.run(cmd, check=True)
+    except subprocess.CalledProcessError as e:
+        print(f"  rclone failed (exit {e.returncode}): {e.stderr}")
 
 
 def zip_folder(input_data_folder, output_zip_file):
@@ -72,7 +75,7 @@ def main():
     print(f"Wrote {archive_path}")
 
     if args.s3_dest:
-        rclone_copyto(str(archive_path), f"{RCLONE_REMOTE}:{args.s3_dest}")
+        rclone_moveto(str(archive_path), f"{RCLONE_REMOTE}:{args.s3_dest}")
         archive_path.unlink()
 
 

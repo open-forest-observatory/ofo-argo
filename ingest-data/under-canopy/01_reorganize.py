@@ -25,9 +25,9 @@ def parse_args():
     )
     parser.add_argument(
         "--collect-id",
-        type=int,
+        type=str,
         required=True,
-        help="The OFO collect ID for this dataset.",
+        help="The OFO collect ID for this dataset, zero-padded to six digits.",
     )
     parser.add_argument(
         "--file-prefixes",
@@ -54,7 +54,7 @@ def parse_args():
 def main(
     input_data_folder: Path,
     output_data_folder: Path,
-    collect_id: int,
+    collect_id: str,
     file_prefixes: str,
     date: str,
     max_allowable_delta: float = 120.0,
@@ -64,7 +64,7 @@ def main(
     Args:
         input_data_folder (Path): Where to search for matching files
         output_data_folder (Path): Where to write the subset of matching images.
-        collect_id (int): The output images are written to {output_data_folder}/{collect_id:06d}/{collect_id:06d}_images"
+        collect_id (str): A six character string representing a zero-padded integer. The output images are written to {output_data_folder}/{collect_id}/{collect_id}_images"
         file_prefixes (str): A space-separated list of file prefixes to include
         date (str): A YYYY-MM-DD date that the the included files must match based on the DateTimeOriginal attribute.
         max_allowable_delta (float): Fail if the difference in timestamps between any pair of consecutive images is larger than this number of seconds.
@@ -123,18 +123,16 @@ def main(
     print(f"Found {len(matching_files)} files which matched the specified date")
 
     # Create an output folder based on the output folder / collect_id
-    output_folder = Path(
-        output_data_folder, f"{collect_id:06d}/{collect_id:06d}_images"
-    )
+    output_folder = Path(output_data_folder, f"{collect_id}/images")
     # remove old folder, if present
     shutil.rmtree(output_folder, ignore_errors=True)
     # And recreate
     output_folder.mkdir(parents=True, exist_ok=True)
 
     # Hardlink all files to that location
-    # The output format should be {collect_id:06d}/{collect_id:06d}_images/{collect_id:06d}_{image_id:06d}.JPG
+    # The output format should be {collect_id}/images/{collect_id}_{image_id:06d}.JPG
     filename_remapping = {
-        str(in_f): str(Path(output_folder, f"{collect_id:06d}_{i:06d}.JPG"))
+        str(in_f): str(Path(output_folder, f"{collect_id}_{i:06d}.JPG"))
         for i, in_f in enumerate(matching_files)
     }
 
