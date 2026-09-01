@@ -5,7 +5,7 @@ metadata:
 spec:
   serviceAccountName: argo
   entrypoint: main
-  # Max concurrent missions to process in parallel. Edit this value directly to change.
+  # Max concurrent collects to process in parallel. Edit this value directly to change.
   # (Argo doesn't support parameter substitution for integer fields like parallelism)
   parallelism: 18
 
@@ -42,13 +42,13 @@ spec:
       # Path on the shared volume to a CSV with columns: collect_id, file_prefixes, date
       # collect_id is an integer
       # file_prefixes are the start of the filenames to include (e.g. GSAO) and may contain multiple
-      # space-separated prefixes for a single mission.
+      # space-separated prefixes for a single collect.
       # date is a YYYY-MM-DD string
-      - name: MISSIONS_FILE
-      # Folder of raw GoPro files to search (recursively) for each mission's images, with respect
+      - name: COLLECTS_FILE
+      # Folder of raw GoPro files to search (recursively) for each collect's images, with respect
       # to the mounted file system.
       - name: INPUT_DATA_FOLDER
-      # Per-mission working directories (reorganized images + metadata, deleted after upload) are
+      # Per-collect working directories (reorganized images + metadata, deleted after upload) are
       # created under: TEMP_FOLDER/{{workflow.name}}/{collect_id}/
       - name: TEMP_FOLDER
         value: "/data/argo-output/temp-dir"
@@ -68,15 +68,15 @@ spec:
         claimName: ceph-share-rw-pvc2
 
   templates:
-    # main: reads MISSIONS_FILE and fans out to one process-mission DAG per mission.
+    # main: reads COLLECTS_FILE and fans out to one process-collect DAG per collect.
     - name: main
       dag:
         tasks:
-          - name: determine-missions
-            template: determine-missions
-          - name: process-missions
-            template: process-mission-workflow
-            depends: "determine-missions.Succeeded"
+          - name: determine-collects
+            template: determine-collects
+          - name: process-collects
+            template: process-collects-workflow
+            depends: "determine-collects.Succeeded"
             arguments:
               parameters:
                 - name: collect-id
@@ -87,11 +87,11 @@ spec:
                   value: "{{item.date}}"
                 - name: file-prefixes
                   value: "{{item.file-prefixes}}"
-            withParam: "{{tasks.determine-missions.outputs.result}}"
+            withParam: "{{tasks.determine-collects.outputs.result}}"
 
-    # process-mission-workflow: DAG for a single mission. Reorganizes the raw images, extracts
+    # process-collects-workflow: DAG for a single collect. Reorganizes the raw images, extracts
     # metadata, zips and uploads the images, then cleans up the local working directory.
-    - name: process-mission-workflow
+    - name: process-collects-workflow
       inputs:
         parameters:
           - name: collect-id
@@ -99,7 +99,7 @@ spec:
           - name: date
           - name: file-prefixes
       dag:
-        # failFast=false ensures other missions continue processing if this one fails
+        # failFast=false ensures other collects continue processing if this one fails
         failFast: false
         tasks:
           - name: reorganize
@@ -139,9 +139,9 @@ spec:
 
 ## Definitions of individual steps (templates)
 
-    # determine-missions: reads MISSIONS_FILE and emits a JSON array of
+    # determine-collects: reads COLLECTS_FILE and emits a JSON array of
     # {collect-id, collect-id-padded, file-prefixes, date} objects, one per CSV row.
-    - name: determine-missions
+    - name: determine-collects
       script:
         image: ghcr.io/open-forest-observatory/ingest-data-under-canopy:{{workflow.parameters.INGEST_IMAGE_TAG}}
         volumeMounts:
@@ -160,11 +160,11 @@ spec:
 
           import pandas as pd
 
-          missions_file = "{{workflow.parameters.MISSIONS_FILE}}"
+          collects_file = "{{workflow.parameters.COLLECTS_FILE}}"
 
           # skipinitialspace handles ", "-separated headers/values
-          missions = pd.read_csv(missions_file, skipinitialspace=True)
-          missions.columns = missions.columns.str.strip()
+          collects = pd.read_csv(collects_file, skipinitialspace=True)
+          collects.columns = collects.columns.str.strip()
 
           result = [
               {
@@ -173,12 +173,12 @@ spec:
                   "file-prefixes": row["file_prefixes"],
                   "date": row["date"],
               }
-              for _, row in missions.iterrows()
+              for _, row in collects.iterrows()
           ]
 
           json.dump(result, sys.stdout)
 
-    # reorganize: hardlinks the raw images for one mission into
+    # reorganize: hardlinks the raw images for one collect into
     # TEMP_FOLDER/{{workflow.name}}/{collect-id-padded}/, via 01_reorganize.py.
     - name: reorganize
       inputs:
@@ -208,7 +208,7 @@ spec:
           - "--date"
           - "{{inputs.parameters.date}}"
 
-    # extract-metadata: builds the per-image metadata GeoPackage for one mission's reorganized
+    # extract-metadata: builds the per-image metadata GeoPackage for one collect's reorganized
     # images, via 02_extract_metadata.py, and uploads it to S3.
     - name: extract-metadata
       inputs:
@@ -255,7 +255,7 @@ spec:
                 name: s3-credentials
                 key: secret_key
 
-    # zip-and-upload: zips one mission's reorganized images and uploads the archive to S3, via
+    # zip-and-upload: zips one collect's reorganized images and uploads the archive to S3, via
     # 03_zip_and_upload_images.py. The script deletes the local zip once the upload succeeds.
     - name: zip-and-upload
       inputs:
@@ -302,7 +302,7 @@ spec:
                 name: s3-credentials
                 key: secret_key
 
-    # cleanup: removes the mission's local working directory (reorganized images, filename
+    # cleanup: removes the collect's local working directory (reorganized images, filename
     # remapping, and metadata gpkg) now that both uploads have succeeded.
     - name: cleanup
       inputs:
