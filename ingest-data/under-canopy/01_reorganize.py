@@ -110,15 +110,15 @@ def main(
     # Check for large gaps in the timestamps
     max_delta_seconds = exif.DateTimeOriginal.diff().dt.total_seconds().max()
 
+    # Error if the gap is too large
     if max_delta_seconds > max_allowable_delta:
         raise ValueError(
-            f"The maximum difference in timestamp was {max_delta_seconds} which is greater than the allowable {max_allowable_delta}"
+            f"The maximum difference in timestamps was {max_delta_seconds} which is greater than the allowable {max_allowable_delta}"
         )
     print(
         f"The maximum time difference between consecutive images was {max_delta_seconds} seconds"
     )
 
-    # TODO check that the maximum gap is less than a specified threshold and error if not
     matching_files = exif.SourceFile.to_list()
     print(f"Found {len(matching_files)} files which matched the specified date")
 
@@ -142,6 +142,7 @@ def main(
     for in_f, out_f in filename_remapping.items():
         os.link(in_f, out_f)
 
+    # Write out the file summarizing the renaming
     with open(Path(output_folder, "filename-remapping.json"), "w") as outfile_h:
         json.dump(filename_remapping, outfile_h)
 

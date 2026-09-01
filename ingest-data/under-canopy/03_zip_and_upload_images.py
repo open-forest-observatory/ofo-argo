@@ -10,7 +10,7 @@ Usage:
 
     # Also upload the result to S3:
     python 03_zip_and_upload_images.py <input_data_folder> <output_zip_file> \
-        --s3-dest ofo-public/under-canopy/mission_01/mission_01_images.zip
+        --s3-dest <path_on_s3>
 """
 
 import argparse
@@ -54,8 +54,14 @@ def rclone_copyto(src, dst):
 def zip_folder(input_data_folder, output_zip_file):
     """Zip the contents of input_data_folder into output_zip_file."""
     output_zip_file.parent.mkdir(parents=True, exist_ok=True)
-    archive_base = output_zip_file.with_suffix("") if output_zip_file.suffix == ".zip" else output_zip_file
-    archive_path = shutil.make_archive(str(archive_base), "zip", root_dir=input_data_folder)
+    archive_base = (
+        output_zip_file.with_suffix("")
+        if output_zip_file.suffix == ".zip"
+        else output_zip_file
+    )
+    archive_path = shutil.make_archive(
+        str(archive_base), "zip", root_dir=input_data_folder
+    )
     return Path(archive_path)
 
 

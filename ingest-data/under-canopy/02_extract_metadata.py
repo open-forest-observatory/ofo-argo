@@ -15,7 +15,7 @@ Usage:
 
     # Also upload the result to S3:
     python 02_extract_metadata.py <input_data_folder> <output_file.gpkg> \
-        --s3-dest ofo-public/under-canopy/mission_01/mission_01_image-metadata.gpkg
+        --s3-dest <path_on_s3>
 """
 
 import argparse
@@ -92,7 +92,9 @@ def stringify_nested_fields(df):
     """GeoPackage columns must hold scalar values; JSON-encode any list/dict fields."""
     for col in df.columns:
         if df[col].apply(lambda v: isinstance(v, (list, dict))).any():
-            df[col] = df[col].apply(lambda v: json.dumps(v) if isinstance(v, (list, dict)) else v)
+            df[col] = df[col].apply(
+                lambda v: json.dumps(v) if isinstance(v, (list, dict)) else v
+            )
     return df
 
 
