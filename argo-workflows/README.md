@@ -109,7 +109,7 @@ The input arguments are described in comments in detail in the `arguments -> par
 - `collect_id` is an integer representing the newly-assigned collect ID. All outputs contain this value.
 - `file_prefixes` is a string that contains one or more space-separated file prefix strings to include in this collect.
 - `date` is a YYYY-MM-DD string specifying the collection date of the images in the collect (a collect being defined by the file prefixes and this date).
-In many cases for internal users, the collects file should be downloaded from baserow (table `datasets-imagery-under-canopy`) and subset to the appropriate rows. To do this, go to `export view -> Export to CSV -> Download`.
+In many cases for internal users, the collects file should be downloaded from Baserow (table `datasets-imagery-under-canopy`) and subset to the appropriate rows. To do this, go to `export view -> Export to CSV -> Download`.
 
 The current testing command is:
 ```

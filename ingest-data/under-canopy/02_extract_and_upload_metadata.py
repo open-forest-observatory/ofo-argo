@@ -11,10 +11,10 @@ Requires the `exiftool` binary and the `pandas` / `geopandas` / `shapely`
 Python packages (see the `exif-parsing` conda environment).
 
 Usage:
-    python 02_extract_metadata.py <input_data_folder> <output_file.gpkg>
+    python 02_extract_and_upload_metadata.py <input_data_folder> <output_file.gpkg>
 
     # Also upload the result to S3:
-    python 02_extract_metadata.py <input_data_folder> <output_file.gpkg> \
+    python 02_extract_and_upload_metadata.py <input_data_folder> <output_file.gpkg> \
         --s3-dest <path_on_s3>
 """
 

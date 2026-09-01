@@ -206,7 +206,7 @@ spec:
           - "{{inputs.parameters.date}}"
 
     # extract-metadata: builds the per-image metadata GeoPackage for one collect's reorganized
-    # images, via 02_extract_metadata.py, and uploads it to S3.
+    # images, via 02_extract_and_upload_metadata.py, and uploads it to S3.
     - name: extract-metadata
       inputs:
         parameters:
@@ -222,7 +222,7 @@ spec:
             memory: "4Gi"
           limits:
             memory: "8Gi"
-        command: ["python", "02_extract_metadata.py"]
+        command: ["python", "02_extract_and_upload_metadata.py"]
         args:
           - "{{workflow.parameters.TEMP_FOLDER}}/{{workflow.name}}/{{inputs.parameters.collect-id-padded}}"
           - "{{workflow.parameters.TEMP_FOLDER}}/{{workflow.name}}/{{inputs.parameters.collect-id-padded}}/{{inputs.parameters.collect-id-padded}}_image-metadata.gpkg"
