@@ -166,7 +166,7 @@ def main(
         for i, in_f in enumerate(matching_files)
     }
 
-    # Perform the hardlinking
+    # Perform the hardlinking to a standardized format
     for in_f, out_f in filename_remapping.items():
         os.link(in_f, out_f)
 
