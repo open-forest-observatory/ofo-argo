@@ -39,13 +39,13 @@ def parse_args():
         "--collect-start-datetime",
         type=str,
         required=True,
-        help="Start of the inclusive datetime range to include, in YYYYMMDD-HHMM format (e.g. 20260815-0930).",
+        help="Start of the inclusive datetime range to include, in 'YYYY-MM-DD HH:MM' format (e.g. '2026-08-15 09:30').",
     )
     parser.add_argument(
         "--collect-end-datetime",
         type=str,
         required=True,
-        help="End of the inclusive datetime range to include, in YYYYMMDD-HHMM format (e.g. 20260815-1130).",
+        help="End of the inclusive datetime range to include, in 'YYYY-MM-DD HH:MM' format (e.g. '2026-08-15 11:30').",
     )
     parser.add_argument(
         "--max-allowable-delta",
@@ -73,8 +73,8 @@ def main(
         output_data_folder (Path): Where to write the subset of matching images.
         collect_id (str): A six character string representing a zero-padded integer. The output images are written to {output_data_folder}/{collect_id}/images/
         file_prefixes (str): A space-separated list of file prefixes to include
-        collect_start_datetime (str): Start of the inclusive datetime range in YYYYMMDD-HHMM format.
-        collect_end_datetime (str): End of the inclusive datetime range in YYYYMMDD-HHMM format.
+        collect_start_datetime (str): Start of the inclusive datetime range in 'YYYY-MM-DD HH:MM' format.
+        collect_end_datetime (str): End of the inclusive datetime range in 'YYYY-MM-DD HH:MM' format.
         max_allowable_delta (float): Fail if the difference in timestamps between any pair of consecutive images is larger than this number of seconds.
 
     Raises:
@@ -111,8 +111,8 @@ def main(
     # Sort by time
     exif = exif.sort_values(by="DateTimeOriginal")
     # Extract only the rows within the requested datetime range (inclusive)
-    start_dt = datetime.strptime(collect_start_datetime, "%Y%m%d-%H%M")
-    end_dt = datetime.strptime(collect_end_datetime, "%Y%m%d-%H%M")
+    start_dt = datetime.strptime(collect_start_datetime, "%Y-%m-%d %H:%M")
+    end_dt = datetime.strptime(collect_end_datetime, "%Y-%m-%d %H:%M")
     exif = exif[
         (exif.DateTimeOriginal >= start_dt) & (exif.DateTimeOriginal <= end_dt)
     ]

@@ -108,8 +108,8 @@ This workflow (`ingest-under-canopy-workflow.yaml`) is designed to standardize u
 The input arguments are described in comments in detail in the `arguments -> parameters` section of the workflow file. The most important one is `COLLECTS_FILE`. This is a `.csv` that contains the per-collect information required to perform the standardization. As described in the workflow file, this input file should have at least the following four columns (others will be ignored):
 - `collect_id` is an integer representing the newly-assigned collect ID. All outputs contain this value.
 - `file_prefixes` is a string that contains one or more space-separated file prefix strings to include in this collect.
-- `collect_start_datetime` is a `YYYYMMDD-HHMM` string (e.g. `20260815-0930`) specifying the start of the inclusive datetime range of images to include for this collect.
-- `collect_end_datetime` is a `YYYYMMDD-HHMM` string (e.g. `20260815-1130`) specifying the end of the inclusive datetime range.
+- `collect_start_datetime` is a `YYYY-MM-DD HH:MM` string (e.g. `2026-08-15 09:30`) specifying the start of the inclusive datetime range of images to include for this collect.
+- `collect_end_datetime` is a `YYYY-MM-DD HH:MM` string (e.g. `2026-08-15 11:30`) specifying the end of the inclusive datetime range.
 In many cases for internal users, the collects file should be downloaded from Baserow (table `datasets-imagery-under-canopy`) and subset to the appropriate rows. To do this, go to `export view -> Export to CSV -> Download`.
 
 The current testing command is:

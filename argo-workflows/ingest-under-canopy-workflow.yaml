@@ -44,7 +44,7 @@ spec:
       # collect_id is an integer which is used to name the output data.
       # file_prefixes are the start of the filenames to include (e.g. GSAO) and may contain multiple
       # space-separated prefixes for a single collect.
-      # collect_start_datetime and collect_end_datetime are YYYYMMDD-HHMM strings (e.g. 20260815-0930)
+      # collect_start_datetime and collect_end_datetime are "YYYY-MM-DD HH:MM" strings (e.g. "2026-08-15 09:30")
       # specifying the inclusive datetime range of images to include for that collect.
       - name: COLLECTS_FILE
       # Folder of raw GoPro files to search (recursively) for each collect's images, with respect
