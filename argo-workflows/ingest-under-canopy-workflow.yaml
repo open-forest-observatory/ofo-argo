@@ -234,7 +234,7 @@ spec:
             memory: "8Gi"
         command: ["python", "02_extract_and_upload_metadata.py"]
         args:
-          - "{{workflow.parameters.TEMP_FOLDER}}/{{workflow.name}}/{{inputs.parameters.collect-id-padded}}"
+          - "{{workflow.parameters.TEMP_FOLDER}}/{{workflow.name}}/{{inputs.parameters.collect-id-padded}}/images"
           - "{{workflow.parameters.TEMP_FOLDER}}/{{workflow.name}}/{{inputs.parameters.collect-id-padded}}/{{inputs.parameters.collect-id-padded}}_image-metadata.gpkg"
           - "--s3-dest"
           - "{{workflow.parameters.S3_OUTPUT_FOLDER}}/{{inputs.parameters.collect-id-padded}}/{{inputs.parameters.collect-id-padded}}_image-metadata.gpkg"
@@ -281,8 +281,8 @@ spec:
             memory: "4Gi"
         command: ["python", "03_zip_and_upload_images.py"]
         args:
-          - "{{workflow.parameters.TEMP_FOLDER}}/{{workflow.name}}/{{inputs.parameters.collect-id-padded}}"
-          - "{{workflow.parameters.TEMP_FOLDER}}/{{workflow.name}}/{{inputs.parameters.collect-id-padded}}_images.zip"
+          - "{{workflow.parameters.TEMP_FOLDER}}/{{workflow.name}}/{{inputs.parameters.collect-id-padded}}/images"
+          - "{{workflow.parameters.TEMP_FOLDER}}/{{workflow.name}}/{{inputs.parameters.collect-id-padded}}/images.zip"
           - "--s3-dest"
           - "{{workflow.parameters.S3_OUTPUT_FOLDER}}/{{inputs.parameters.collect-id-padded}}/images/{{inputs.parameters.collect-id-padded}}_images.zip"
         env:
