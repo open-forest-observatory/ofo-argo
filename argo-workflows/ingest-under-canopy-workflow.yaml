@@ -359,7 +359,7 @@ spec:
           from pathlib import Path
 
           workflow_temp = Path("{{workflow.parameters.TEMP_FOLDER}}/{{workflow.name}}")
-          warning_files = sorted(workflow_temp.glob("*/timestamp-gap-warning.json"))
+          warning_files = sorted(workflow_temp.glob("timestamp-gap-warnings/*.json"))
 
           if not warning_files:
               print("No timestamp gap warnings.")

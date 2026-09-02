@@ -132,10 +132,12 @@ def main(
     max_delta_seconds = exif.DateTimeOriginal.diff().dt.total_seconds().max()
     print(f"Max delta {max_delta_seconds}")
 
-    # Write a warning file if the gap is too large so the workflow can aggregate it
+    # Write a warning file if the gap is too large so the workflow can aggregate it.
+    # Written to a sibling directory (not inside the per-collect folder) so the cleanup
+    # step, which removes only the per-collect folder, doesn't delete it.
     if max_delta_seconds > max_allowable_delta:
         warning_file = Path(
-            output_data_folder, collect_id, "timestamp-gap-warning.json"
+            output_data_folder, "timestamp-gap-warnings", f"{collect_id}.json"
         )
         warning_file.parent.mkdir(parents=True, exist_ok=True)
         with open(warning_file, "w") as outfile:
