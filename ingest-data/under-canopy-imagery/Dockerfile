@@ -24,4 +24,4 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
 
-CMD ["python", "-c", "import sys; print('under-canopy ingest scripts, reference a specific script')"]
+CMD ["python", "-c", "import sys; print('under-canopy-imagery ingest scripts, reference a specific script')"]

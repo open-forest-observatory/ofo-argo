@@ -1,7 +1,7 @@
 apiVersion: argoproj.io/v1alpha1
 kind: Workflow
 metadata:
-  generateName: ingest-under-canopy-workflow-
+  generateName: ingest-under-canopy-imagery-workflow-
 spec:
   serviceAccountName: argo
   entrypoint: main
@@ -59,8 +59,8 @@ spec:
       #   {S3_OUTPUT_FOLDER}/{collect_id}/{collect_id}_image-metadata.gpkg
       #   {S3_OUTPUT_FOLDER}/{collect_id}/images/{collect_id}_images.zip
       - name: S3_OUTPUT_FOLDER
-        value: "ofo-public/under-canopy"
-      # ingest-data-under-canopy Docker image tag (built from ingest-data/under-canopy/Dockerfile)
+        value: "ofo-public/under-canopy-imagery"
+      # ingest-data-under-canopy-imagery Docker image tag (built from ingest-data/under-canopy-imagery/Dockerfile)
       - name: INGEST_IMAGE_TAG
         value: "main"
 
@@ -153,7 +153,7 @@ spec:
       script:
         # Only pandas is needed but we can use an image we'll otherwise use later to avoid pulling
         # two distinct ones, since images are cached by the kubernetes runtime.
-        image: ghcr.io/open-forest-observatory/ingest-data-under-canopy:{{workflow.parameters.INGEST_IMAGE_TAG}}
+        image: ghcr.io/open-forest-observatory/ingest-data-under-canopy-imagery:{{workflow.parameters.INGEST_IMAGE_TAG}}
         volumeMounts:
           - name: data
             mountPath: /data
@@ -198,7 +198,7 @@ spec:
           - name: collect-start-datetime
           - name: collect-end-datetime
       container:
-        image: ghcr.io/open-forest-observatory/ingest-data-under-canopy:{{workflow.parameters.INGEST_IMAGE_TAG}}
+        image: ghcr.io/open-forest-observatory/ingest-data-under-canopy-imagery:{{workflow.parameters.INGEST_IMAGE_TAG}}
         volumeMounts:
           - name: data
             mountPath: /data
@@ -228,7 +228,7 @@ spec:
         parameters:
           - name: collect-id-padded
       container:
-        image: ghcr.io/open-forest-observatory/ingest-data-under-canopy:{{workflow.parameters.INGEST_IMAGE_TAG}}
+        image: ghcr.io/open-forest-observatory/ingest-data-under-canopy-imagery:{{workflow.parameters.INGEST_IMAGE_TAG}}
         volumeMounts:
           - name: data
             mountPath: /data
@@ -275,7 +275,7 @@ spec:
         parameters:
           - name: collect-id-padded
       container:
-        image: ghcr.io/open-forest-observatory/ingest-data-under-canopy:{{workflow.parameters.INGEST_IMAGE_TAG}}
+        image: ghcr.io/open-forest-observatory/ingest-data-under-canopy-imagery:{{workflow.parameters.INGEST_IMAGE_TAG}}
         volumeMounts:
           - name: data
             mountPath: /data
@@ -343,7 +343,7 @@ spec:
     - name: report-warnings
       script:
         # Use the same image as elsewhere to avoid another image pull, though only python is required
-        image: ghcr.io/open-forest-observatory/ingest-data-under-canopy:{{workflow.parameters.INGEST_IMAGE_TAG}}
+        image: ghcr.io/open-forest-observatory/ingest-data-under-canopy-imagery:{{workflow.parameters.INGEST_IMAGE_TAG}}
         volumeMounts:
           - name: data
             mountPath: /data

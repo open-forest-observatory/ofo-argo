@@ -51,7 +51,7 @@ def parse_args():
         default=None,
         help=(
             "S3 path to upload the output file to, without the rclone remote "
-            f"prefix (e.g. 'ofo-public/under-canopy/mission_01/image-metadata.gpkg'). "
+            f"prefix (e.g. 'ofo-public/under-canopy-imagery/mission_01/image-metadata.gpkg'). "
             f"Uploaded via the '{RCLONE_REMOTE}' rclone remote. If omitted, no upload "
             "is performed."
         ),
