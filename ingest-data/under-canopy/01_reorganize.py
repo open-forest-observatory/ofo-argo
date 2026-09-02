@@ -120,23 +120,29 @@ def main(
     exif = exif.sort_values(by="DateTimeOriginal")
     # Extract only the rows within the requested datetime range (inclusive)
     # This step adds the time_bound_tolerance to the window to make it more permissive
-    start_dt = datetime.strptime(
-        collect_start_datetime, "%Y-%m-%d %H:%M"
-    ) - timedelta(seconds=time_bounds_tolerance)
-    end_dt = (
-        datetime.strptime(collect_end_datetime, "%Y-%m-%d %H:%M")
-    ) + timedelta(seconds=time_bounds_tolerance)
+    start_dt = datetime.strptime(collect_start_datetime, "%Y-%m-%d %H:%M") - timedelta(
+        seconds=time_bounds_tolerance
+    )
+    end_dt = (datetime.strptime(collect_end_datetime, "%Y-%m-%d %H:%M")) + timedelta(
+        seconds=time_bounds_tolerance
+    )
     exif = exif[(exif.DateTimeOriginal >= start_dt) & (exif.DateTimeOriginal <= end_dt)]
 
     # Check for large gaps in the timestamps
     max_delta_seconds = exif.DateTimeOriginal.diff().dt.total_seconds().max()
+    print(f"Max delta {max_delta_seconds}")
 
     # Write a warning file if the gap is too large so the workflow can aggregate it
     if max_delta_seconds > max_allowable_delta:
-        warning_file = Path(output_data_folder, collect_id, "timestamp-gap-warning.json")
+        warning_file = Path(
+            output_data_folder, collect_id, "timestamp-gap-warning.json"
+        )
         warning_file.parent.mkdir(parents=True, exist_ok=True)
         with open(warning_file, "w") as outfile:
-            json.dump({"collect_id": collect_id, "max_delta_seconds": max_delta_seconds}, outfile)
+            json.dump(
+                {"collect_id": collect_id, "max_delta_seconds": max_delta_seconds},
+                outfile,
+            )
     print(
         f"The maximum time difference between consecutive images was {max_delta_seconds} seconds"
     )
