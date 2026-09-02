@@ -76,7 +76,9 @@ def main():
 
     if args.s3_dest:
         rclone_moveto(str(archive_path), f"{RCLONE_REMOTE}:{args.s3_dest}")
-        archive_path.unlink()
+        # Remove the archive if the upload fails
+        if archive_path.is_file():
+            archive_path.unlink()
 
 
 if __name__ == "__main__":

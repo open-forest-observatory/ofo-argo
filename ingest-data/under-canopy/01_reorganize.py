@@ -36,10 +36,16 @@ def parse_args():
         help="One or more space-separated file prefixes for this mission.",
     )
     parser.add_argument(
-        "--date",
+        "--collect-start-datetime",
         type=str,
         required=True,
-        help="Date to restrict images to in the YYYY-MM-DD format",
+        help="Start of the inclusive datetime range to include, in YYYYMMDD-HHMM format (e.g. 20260815-0930).",
+    )
+    parser.add_argument(
+        "--collect-end-datetime",
+        type=str,
+        required=True,
+        help="End of the inclusive datetime range to include, in YYYYMMDD-HHMM format (e.g. 20260815-1130).",
     )
     parser.add_argument(
         "--max-allowable-delta",
@@ -56,17 +62,19 @@ def main(
     output_data_folder: Path,
     collect_id: str,
     file_prefixes: str,
-    date: str,
+    collect_start_datetime: str,
+    collect_end_datetime: str,
     max_allowable_delta: float = 120.0,
 ):
-    """Subset images based on file_prefixes and date and hardlink to an output folder named based on the collect_id
+    """Subset images based on file_prefixes and a datetime range and hardlink to an output folder named based on the collect_id
 
     Args:
         input_data_folder (Path): Where to search for matching files
         output_data_folder (Path): Where to write the subset of matching images.
-        collect_id (str): A six character string representing a zero-padded integer. The output images are written to {output_data_folder}/{collect_id}/{collect_id}_images"
+        collect_id (str): A six character string representing a zero-padded integer. The output images are written to {output_data_folder}/{collect_id}/images/
         file_prefixes (str): A space-separated list of file prefixes to include
-        date (str): A YYYY-MM-DD date that the the included files must match based on the DateTimeOriginal attribute.
+        collect_start_datetime (str): Start of the inclusive datetime range in YYYYMMDD-HHMM format.
+        collect_end_datetime (str): End of the inclusive datetime range in YYYYMMDD-HHMM format.
         max_allowable_delta (float): Fail if the difference in timestamps between any pair of consecutive images is larger than this number of seconds.
 
     Raises:
@@ -102,9 +110,11 @@ def main(
 
     # Sort by time
     exif = exif.sort_values(by="DateTimeOriginal")
-    # Extract only the rows matching the requested date
+    # Extract only the rows within the requested datetime range (inclusive)
+    start_dt = datetime.strptime(collect_start_datetime, "%Y%m%d-%H%M")
+    end_dt = datetime.strptime(collect_end_datetime, "%Y%m%d-%H%M")
     exif = exif[
-        exif.DateTimeOriginal.dt.date == datetime.strptime(date, "%Y-%m-%d").date()
+        (exif.DateTimeOriginal >= start_dt) & (exif.DateTimeOriginal <= end_dt)
     ]
 
     # Check for large gaps in the timestamps
@@ -120,7 +130,7 @@ def main(
     )
 
     matching_files = exif.SourceFile.to_list()
-    print(f"Found {len(matching_files)} files which matched the specified date")
+    print(f"Found {len(matching_files)} files within the specified datetime range")
 
     # Create an output folder based on the output folder / collect_id
     output_folder = Path(output_data_folder, f"{collect_id}/images")

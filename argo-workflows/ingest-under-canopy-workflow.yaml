@@ -40,11 +40,12 @@ spec:
   arguments:
     parameters:
       # Path on the shared volume to a CSV with at least the following columns: collect_id,
-      # file_prefixes, and date. All others are ignored.
+      # file_prefixes, collect_start_datetime, and collect_end_datetime. All others are ignored.
       # collect_id is an integer which is used to name the output data.
       # file_prefixes are the start of the filenames to include (e.g. GSAO) and may contain multiple
       # space-separated prefixes for a single collect.
-      # date is a YYYY-MM-DD string specifying when the data for that collect was collected.
+      # collect_start_datetime and collect_end_datetime are YYYYMMDD-HHMM strings (e.g. 20260815-0930)
+      # specifying the inclusive datetime range of images to include for that collect.
       - name: COLLECTS_FILE
       # Folder of raw GoPro files to search (recursively) for each collect's images, with respect
       # to the mounted file system.
@@ -82,8 +83,10 @@ spec:
               parameters:
                 - name: collect-id-padded
                   value: "{{item.collect-id-padded}}"
-                - name: date
-                  value: "{{item.date}}"
+                - name: collect-start-datetime
+                  value: "{{item.collect-start-datetime}}"
+                - name: collect-end-datetime
+                  value: "{{item.collect-end-datetime}}"
                 - name: file-prefixes
                   value: "{{item.file-prefixes}}"
             withParam: "{{tasks.determine-collects.outputs.result}}"
@@ -94,7 +97,8 @@ spec:
       inputs:
         parameters:
           - name: collect-id-padded
-          - name: date
+          - name: collect-start-datetime
+          - name: collect-end-datetime
           - name: file-prefixes
       dag:
         # failFast=false ensures other collects continue processing if this one fails
@@ -106,8 +110,10 @@ spec:
               parameters:
                 - name: collect-id-padded
                   value: "{{inputs.parameters.collect-id-padded}}"
-                - name: date
-                  value: "{{inputs.parameters.date}}"
+                - name: collect-start-datetime
+                  value: "{{inputs.parameters.collect-start-datetime}}"
+                - name: collect-end-datetime
+                  value: "{{inputs.parameters.collect-end-datetime}}"
                 - name: file-prefixes
                   value: "{{inputs.parameters.file-prefixes}}"
 
@@ -138,7 +144,7 @@ spec:
 ## Definitions of individual steps (templates)
 
     # determine-collects: reads COLLECTS_FILE and emits a JSON array of
-    # {collect-id, collect-id-padded, file-prefixes, date} objects, one per CSV row.
+    # {collect-id-padded, file-prefixes, collect-start-datetime, collect-end-datetime} objects, one per CSV row.
     - name: determine-collects
       script:
         image: ghcr.io/open-forest-observatory/ingest-data-under-canopy:{{workflow.parameters.INGEST_IMAGE_TAG}}
@@ -168,7 +174,8 @@ spec:
               {
                   "collect-id-padded": f"{int(row['collect_id']):06d}",
                   "file-prefixes": row["file_prefixes"],
-                  "date": row["date"],
+                  "collect-start-datetime": row["collect_start_datetime"],
+                  "collect-end-datetime": row["collect_end_datetime"],
               }
               for _, row in collects.iterrows()
           ]
@@ -182,7 +189,8 @@ spec:
         parameters:
           - name: collect-id-padded
           - name: file-prefixes
-          - name: date
+          - name: collect-start-datetime
+          - name: collect-end-datetime
       container:
         image: ghcr.io/open-forest-observatory/ingest-data-under-canopy:{{workflow.parameters.INGEST_IMAGE_TAG}}
         volumeMounts:
@@ -202,8 +210,10 @@ spec:
           - "{{inputs.parameters.collect-id-padded}}"
           - "--file-prefixes"
           - "{{inputs.parameters.file-prefixes}}"
-          - "--date"
-          - "{{inputs.parameters.date}}"
+          - "--collect-start-datetime"
+          - "{{inputs.parameters.collect-start-datetime}}"
+          - "--collect-end-datetime"
+          - "{{inputs.parameters.collect-end-datetime}}"
 
     # extract-metadata: builds the per-image metadata GeoPackage for one collect's reorganized
     # images, via 02_extract_and_upload_metadata.py, and uploads it to S3.
