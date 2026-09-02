@@ -101,3 +101,26 @@ The workflow completes the following steps.
 For each line in the input, a separate training dataset is uploaded. In the following lines, the `pair_name` parameter represents the concatenation of the two columns in the input file. The `S3_TRAINING_OUTPUT_FOLDER` is a workflow-level parameter.
 - The geospatial crown delineations can be found at `s3:{S3_TRAINING_OUTPUT_FOLDER}/{pair_name}/{pair_name}_matched-trees.gpkg`. The `unique_ID` field matches to the rendered chips in the next bullet and the `live_dead` field represents whether it was predicted as live or dead based on the multiview crops and provided model. This file contains all the columns from the field reference trees that were matched to the crowns.
 - The chips can be found at `s3:{S3_TRAINING_OUTPUT_FOLDER}/{pair_name}/chips/` in a nested folder structure. The folders structure represents the structure of the input images, with the leaf folders corresponding to an individual image (minus the suffix). Within each folder, the individual images are named based on the `unique_ID` from the bullet above, padded to five digits. Using this linking, a model could be trained for any attribute provided in the initial field reference data.
+
+# Ingest under canopy data
+This workflow (`ingest-under-canopy-imagery-workflow.yaml`) is designed to standardize undercanopy GoPro imagery. A folder of all the imagery is provided and the first step is to subset the data into individual collects. This is done through a combination of filename prefix matching and date matching. Then, the imagery is reorganized into a standardized format. Per-image metadata is extracted and uploaded to S3. Then, the reorganized images are zipped and uploaded to S3 as well. After both complete, all temporary data is deleted from local storage. This process is repeated independently for each collect.
+
+The input arguments are described in comments in detail in the `arguments -> parameters` section of the workflow file. An important one is `COLLECTS_FILE`. This is a `.csv` that contains the per-collect information required to perform the standardization. As described in the workflow file, this input file should have at least the following four columns (others will be ignored):
+- `collect_id` is an integer representing the newly-assigned collect ID. All outputs contain this value.
+- `file_prefixes` is a string that contains one or more space-separated file prefix strings to include in this collect.
+- `collect_start_datetime` is a `YYYY-MM-DD HH:MM` string (e.g. `2026-08-15 09:30`) specifying the start of the inclusive datetime range of images to include for this collect.
+- `collect_end_datetime` is a `YYYY-MM-DD HH:MM` string (e.g. `2026-08-15 11:30`) specifying the end of the inclusive datetime range.
+In many cases for internal users, the collects file should be downloaded from Baserow (table `datasets-imagery-under-canopy`) and subset to the appropriate rows. To do this, go to `export view -> Export to CSV -> Download`.
+
+The other important parameter is `INPUT_DATA_FOLDER`. This is a path, relative to the mounted filesystem in `Argo`, where all the images are located. There are no requirements for how this data is organized.
+
+The current testing command is:
+```
+argo submit -n argo argo-workflows/ingest-under-canopy-workflow.yaml \
+  -p COLLECTS_FILE="/data/argo-input/under-canopy-imagery-organization/missions_file_subset.csv" \
+  -p S3_OUTPUT_FOLDER="ofo-public/under-canopy-imagery-test" \
+  -p INGEST_IMAGE_TAG="feature-DR-ingest-under-canopy" \
+  -p INPUT_DATA_FOLDER="/data/argo-input/under-canopy-imagery-organization/0_raw"
+```
+
+The processing will fail for a given collect if no images both match the specified file prefixes and the specified time bounds. If there is a gap in image timestamps, this will be logged as a warning, but will not cause the dataset to fail. These warnings can be viewed in the `report-warnings` step in the Argo UI. This step will only be run after all datasets finish.
