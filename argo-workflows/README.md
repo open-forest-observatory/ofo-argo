@@ -123,4 +123,4 @@ argo submit -n argo argo-workflows/ingest-under-canopy-workflow.yaml \
   -p INPUT_DATA_FOLDER="/data/argo-input/under-canopy-imagery-organization/0_raw"
 ```
 
-# TODO add a note about failure conditions and logging within the Argo UI
+The processing will fail for a given collect if no images both match the specified file prefixes and the specified time bounds. If there is a gap in image timestamps, this will be logged as a warning, but will not cause the dataset to fail. These warnings can be viewed in the `report-warnings` step in the Argo UI. This step will only be run after all datasets finish.
