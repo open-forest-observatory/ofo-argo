@@ -6,7 +6,7 @@ import json
 import shutil
 import subprocess
 import pandas as pd
-from datetime import datetime
+from datetime import datetime, timedelta
 
 
 def parse_args():
@@ -53,6 +53,12 @@ def parse_args():
         default=120.0,
         help="Fail if the max delta between image timestamps is greater than this number of seconds.",
     )
+    parser.add_argument(
+        "--time-bounds-tolerance",
+        type=float,
+        default=120.0,
+        help="Include images within this number of seconds of the provided time bounds to account for sychronization errors between devices",
+    )
 
     return parser.parse_args()
 
@@ -65,6 +71,7 @@ def main(
     collect_start_datetime: str,
     collect_end_datetime: str,
     max_allowable_delta: float = 120.0,
+    time_bounds_tolerance: float = 120.0,
 ):
     """Subset images based on file_prefixes and a datetime range and hardlink to an output folder named based on the collect_id
 
@@ -76,6 +83,7 @@ def main(
         collect_start_datetime (str): Start of the inclusive datetime range in 'YYYY-MM-DD HH:MM' format.
         collect_end_datetime (str): End of the inclusive datetime range in 'YYYY-MM-DD HH:MM' format.
         max_allowable_delta (float): Fail if the difference in timestamps between any pair of consecutive images is larger than this number of seconds.
+        time_bounds_tolerance (float): Include images within this number of seconds of the provided time bounds to account for sychronization errors between devices",
 
     Raises:
         ValueError: if the maximum delta between timestamps is larger than max_allowable_delta
@@ -111,20 +119,24 @@ def main(
     # Sort by time
     exif = exif.sort_values(by="DateTimeOriginal")
     # Extract only the rows within the requested datetime range (inclusive)
-    start_dt = datetime.strptime(collect_start_datetime, "%Y-%m-%d %H:%M")
-    end_dt = datetime.strptime(collect_end_datetime, "%Y-%m-%d %H:%M")
-    exif = exif[
-        (exif.DateTimeOriginal >= start_dt) & (exif.DateTimeOriginal <= end_dt)
-    ]
+    # This step adds the time_bound_tolerance to the window to make it more permissive
+    start_dt = datetime.strptime(
+        collect_start_datetime, "%Y-%m-%d %H:%M"
+    ) - timedelta(seconds=time_bounds_tolerance)
+    end_dt = (
+        datetime.strptime(collect_end_datetime, "%Y-%m-%d %H:%M")
+    ) + timedelta(seconds=time_bounds_tolerance)
+    exif = exif[(exif.DateTimeOriginal >= start_dt) & (exif.DateTimeOriginal <= end_dt)]
 
     # Check for large gaps in the timestamps
     max_delta_seconds = exif.DateTimeOriginal.diff().dt.total_seconds().max()
 
-    # Error if the gap is too large
+    # Write a warning file if the gap is too large so the workflow can aggregate it
     if max_delta_seconds > max_allowable_delta:
-        raise ValueError(
-            f"The maximum difference in consecutive timestamps was {max_delta_seconds} which is greater than the allowable {max_allowable_delta}"
-        )
+        warning_file = Path(output_data_folder, collect_id, "timestamp-gap-warning.json")
+        warning_file.parent.mkdir(parents=True, exist_ok=True)
+        with open(warning_file, "w") as outfile:
+            json.dump({"collect_id": collect_id, "max_delta_seconds": max_delta_seconds}, outfile)
     print(
         f"The maximum time difference between consecutive images was {max_delta_seconds} seconds"
     )

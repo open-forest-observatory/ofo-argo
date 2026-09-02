@@ -100,7 +100,6 @@ def stringify_nested_fields(df):
     """
     for col in df.columns:
         if df[col].apply(lambda v: isinstance(v, (list, dict))).any():
-            print(f"Applying stringify to nested field {col}")
             df[col] = df[col].apply(
                 lambda v: json.dumps(v) if isinstance(v, (list, dict)) else v
             )
@@ -129,7 +128,10 @@ def main():
     df = pd.DataFrame(records)
     df = df.sort_values("SourceFile").reset_index(drop=True)
     df = drop_binary_fields(df)
-    df = stringify_nested_fields(df)
+    # TODO if any data in the future fails to export because of fields which contain tuple or list
+    # values the below line should be re-added. Currently, nothing triggers it for the GoPro 360 MAX2
+    # data we have been using.
+    # df = stringify_nested_fields(df)
 
     geometry = build_geometry(df)
     gdf = gpd.GeoDataFrame(df, geometry=geometry, crs="EPSG:4326")

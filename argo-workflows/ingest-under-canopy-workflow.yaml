@@ -90,6 +90,10 @@ spec:
                 - name: file-prefixes
                   value: "{{item.file-prefixes}}"
             withParam: "{{tasks.determine-collects.outputs.result}}"
+          - name: report-warnings
+            template: report-warnings
+            # Run after all collects finish, as long as at least one succeeded
+            depends: "process-collects.AnySucceeded"
 
     # process-collects-workflow: DAG for a single collect. Reorganizes the raw images, extracts
     # metadata, zips and uploads the images, then cleans up the local working directory.
@@ -147,6 +151,8 @@ spec:
     # {collect-id-padded, file-prefixes, collect-start-datetime, collect-end-datetime} objects, one per CSV row.
     - name: determine-collects
       script:
+        # Only pandas is needed but we can use an image we'll otherwise use later to avoid pulling
+        # two distinct ones, since images are cached by the kubernetes runtime.
         image: ghcr.io/open-forest-observatory/ingest-data-under-canopy:{{workflow.parameters.INGEST_IMAGE_TAG}}
         volumeMounts:
           - name: data
@@ -331,3 +337,35 @@ spec:
           - |
             set -euo pipefail
             rm -rf "{{workflow.parameters.TEMP_FOLDER}}/{{workflow.name}}/{{inputs.parameters.collect-id-padded}}"
+
+    # report-warnings: scans all collect working directories for timestamp-gap warning files
+    # written by 01_reorganize.py and prints a summary. Runs after all collects finish.
+    - name: report-warnings
+      script:
+        # Use the same image as elsewhere to avoid another image pull, though only python is required
+        image: ghcr.io/open-forest-observatory/ingest-data-under-canopy:{{workflow.parameters.INGEST_IMAGE_TAG}}
+        volumeMounts:
+          - name: data
+            mountPath: /data
+        resources:
+          requests:
+            cpu: 250m
+            memory: "256Mi"
+          limits:
+            memory: "512Mi"
+        command: ["python"]
+        source: |
+          import json
+          from pathlib import Path
+
+          workflow_temp = Path("{{workflow.parameters.TEMP_FOLDER}}/{{workflow.name}}")
+          warning_files = sorted(workflow_temp.glob("*/timestamp-gap-warning.json"))
+
+          if not warning_files:
+              print("No timestamp gap warnings.")
+          else:
+              print(f"{len(warning_files)} collect(s) had timestamp gaps exceeding the threshold:")
+              for f in warning_files:
+                  with open(f) as fh:
+                      w = json.load(fh)
+                  print(f"  collect {w['collect_id']}: max gap = {w['max_delta_seconds']:.1f} s")
