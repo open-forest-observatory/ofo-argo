@@ -11,9 +11,9 @@ Dependencies: geopandas, pyyaml
 import argparse
 import copy
 from pathlib import Path
-import yaml
 
 import pandas as pd
+import yaml
 
 # =============================================================================
 # Configuration Defaults (used when no values are provided via command-line arguments)
