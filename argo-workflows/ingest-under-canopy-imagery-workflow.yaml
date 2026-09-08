@@ -1,0 +1,371 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Workflow
+metadata:
+  generateName: ingest-under-canopy-imagery-workflow-
+spec:
+  serviceAccountName: argo
+  entrypoint: main
+  # Max concurrent collects to process in parallel. Edit this value directly to change.
+  # (Argo doesn't support parameter substitution for integer fields like parallelism)
+  parallelism: 18
+
+  # Set imagePullPolicy for all containers in the workflow
+  podSpecPatch: |
+    containers:
+      - name: main
+        imagePullPolicy: Always
+
+  # Affinity rules for workflow pods:
+  # 1. nodeAffinity: Schedule on non-GPU nodes by default
+  # 2. podAffinity: Prefer nodes with other running workflow pods to minimize autoscaler evictions
+  affinity:
+    nodeAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        nodeSelectorTerms:
+          - matchExpressions:
+              - key: nvidia.com/gpu.present
+                operator: DoesNotExist
+    podAffinity:
+      preferredDuringSchedulingIgnoredDuringExecution:
+        - weight: 100
+          podAffinityTerm:
+            labelSelector:
+              matchExpressions:
+                - key: workflows.argoproj.io/completed
+                  operator: In
+                  values:
+                    - "false"
+            topologyKey: kubernetes.io/hostname
+
+  arguments:
+    parameters:
+      # Path on the shared volume to a CSV with at least the following columns: collect_id,
+      # file_prefixes, collect_start_datetime, and collect_end_datetime. All others are ignored.
+      # collect_id is an integer which is used to name the output data.
+      # file_prefixes are the start of the filenames to include (e.g. GSAO) and may contain multiple
+      # space-separated prefixes for a single collect.
+      # collect_start_datetime and collect_end_datetime are "YYYY-MM-DD HH:MM" strings (e.g. "2026-08-15 09:30")
+      # specifying the inclusive datetime range of images to include for that collect.
+      - name: COLLECTS_FILE
+      # Folder of raw GoPro files to search (recursively) for each collect's images, with respect
+      # to the mounted file system.
+      - name: INPUT_DATA_FOLDER
+      # Per-collect working directories (reorganized images + metadata, deleted after upload) are
+      # created under: TEMP_FOLDER/{{workflow.name}}/{collect_id}/
+      - name: TEMP_FOLDER
+        value: "/data/argo-output/temp-dir"
+      # S3 bucket and folder that outputs are uploaded to, via the 'js2s3' rclone remote.
+      # Full paths:
+      #   {S3_OUTPUT_FOLDER}/{collect_id}/{collect_id}_image-metadata.gpkg
+      #   {S3_OUTPUT_FOLDER}/{collect_id}/images/{collect_id}_images.zip
+      - name: S3_OUTPUT_FOLDER
+        value: "ofo-public/under-canopy-imagery"
+      # ingest-data-under-canopy-imagery Docker image tag (built from ingest-data/under-canopy-imagery/Dockerfile)
+      - name: INGEST_IMAGE_TAG
+        value: "main"
+
+  volumes:
+    - name: data
+      persistentVolumeClaim:
+        claimName: ceph-share-rw-pvc2
+
+  templates:
+    # main: reads COLLECTS_FILE and fans out to one process-collect DAG per collect.
+    - name: main
+      dag:
+        tasks:
+          - name: determine-collects
+            template: determine-collects
+          - name: process-collects
+            template: process-collects-workflow
+            depends: "determine-collects.Succeeded"
+            arguments:
+              parameters:
+                - name: collect-id-padded
+                  value: "{{item.collect-id-padded}}"
+                - name: collect-start-datetime
+                  value: "{{item.collect-start-datetime}}"
+                - name: collect-end-datetime
+                  value: "{{item.collect-end-datetime}}"
+                - name: file-prefixes
+                  value: "{{item.file-prefixes}}"
+            withParam: "{{tasks.determine-collects.outputs.result}}"
+          - name: report-warnings
+            template: report-warnings
+            # Run after all collects finish, as long as at least one succeeded
+            depends: "process-collects.AnySucceeded"
+
+    # process-collects-workflow: DAG for a single collect. Reorganizes the raw images, extracts
+    # metadata, zips and uploads the images, then cleans up the local working directory.
+    - name: process-collects-workflow
+      inputs:
+        parameters:
+          - name: collect-id-padded
+          - name: collect-start-datetime
+          - name: collect-end-datetime
+          - name: file-prefixes
+      dag:
+        # failFast=false ensures other collects continue processing if this one fails
+        failFast: false
+        tasks:
+          - name: reorganize
+            template: reorganize
+            arguments:
+              parameters:
+                - name: collect-id-padded
+                  value: "{{inputs.parameters.collect-id-padded}}"
+                - name: collect-start-datetime
+                  value: "{{inputs.parameters.collect-start-datetime}}"
+                - name: collect-end-datetime
+                  value: "{{inputs.parameters.collect-end-datetime}}"
+                - name: file-prefixes
+                  value: "{{inputs.parameters.file-prefixes}}"
+
+          - name: extract-metadata
+            template: extract-metadata
+            depends: "reorganize.Succeeded"
+            arguments:
+              parameters:
+                - name: collect-id-padded
+                  value: "{{inputs.parameters.collect-id-padded}}"
+
+          - name: zip-and-upload
+            template: zip-and-upload
+            depends: "extract-metadata.Succeeded"
+            arguments:
+              parameters:
+                - name: collect-id-padded
+                  value: "{{inputs.parameters.collect-id-padded}}"
+
+          - name: cleanup
+            template: cleanup
+            depends: "zip-and-upload.Succeeded"
+            arguments:
+              parameters:
+                - name: collect-id-padded
+                  value: "{{inputs.parameters.collect-id-padded}}"
+
+## Definitions of individual steps (templates)
+
+    # determine-collects: reads COLLECTS_FILE and emits a JSON array of
+    # {collect-id-padded, file-prefixes, collect-start-datetime, collect-end-datetime} objects, one per CSV row.
+    - name: determine-collects
+      script:
+        # Only pandas is needed but we can use an image we'll otherwise use later to avoid pulling
+        # two distinct ones, since images are cached by the kubernetes runtime.
+        image: ghcr.io/open-forest-observatory/ingest-data-under-canopy-imagery:{{workflow.parameters.INGEST_IMAGE_TAG}}
+        volumeMounts:
+          - name: data
+            mountPath: /data
+        resources:
+          requests:
+            cpu: 1
+            memory: "1Gi"
+          limits:
+            memory: "2Gi"
+        command: ["python"]
+        source: |
+          import json
+          import sys
+
+          import pandas as pd
+
+          collects_file = "{{workflow.parameters.COLLECTS_FILE}}"
+
+          # skipinitialspace handles ", "-separated headers/values
+          collects = pd.read_csv(collects_file, skipinitialspace=True)
+          collects.columns = collects.columns.str.strip()
+
+          result = [
+              {
+                  "collect-id-padded": f"{int(row['collect_id']):06d}",
+                  "file-prefixes": row["file_prefixes"],
+                  "collect-start-datetime": row["collect_start_datetime"],
+                  "collect-end-datetime": row["collect_end_datetime"],
+              }
+              for _, row in collects.iterrows()
+          ]
+
+          json.dump(result, sys.stdout)
+
+    # reorganize: hardlinks the raw images for one collect into
+    # TEMP_FOLDER/{{workflow.name}}/{collect-id-padded}/, via 01_reorganize.py.
+    - name: reorganize
+      inputs:
+        parameters:
+          - name: collect-id-padded
+          - name: file-prefixes
+          - name: collect-start-datetime
+          - name: collect-end-datetime
+      container:
+        image: ghcr.io/open-forest-observatory/ingest-data-under-canopy-imagery:{{workflow.parameters.INGEST_IMAGE_TAG}}
+        volumeMounts:
+          - name: data
+            mountPath: /data
+        resources:
+          requests:
+            cpu: 1
+            memory: "2Gi"
+          limits:
+            memory: "4Gi"
+        command: ["python", "01_reorganize.py"]
+        args:
+          - "{{workflow.parameters.INPUT_DATA_FOLDER}}"
+          - "{{workflow.parameters.TEMP_FOLDER}}/{{workflow.name}}"
+          - "--collect-id"
+          - "{{inputs.parameters.collect-id-padded}}"
+          - "--file-prefixes"
+          - "{{inputs.parameters.file-prefixes}}"
+          - "--collect-start-datetime"
+          - "{{inputs.parameters.collect-start-datetime}}"
+          - "--collect-end-datetime"
+          - "{{inputs.parameters.collect-end-datetime}}"
+
+    # extract-metadata: builds the per-image metadata GeoPackage for one collect's reorganized
+    # images, via 02_extract_and_upload_metadata.py, and uploads it to S3.
+    - name: extract-metadata
+      inputs:
+        parameters:
+          - name: collect-id-padded
+      container:
+        image: ghcr.io/open-forest-observatory/ingest-data-under-canopy-imagery:{{workflow.parameters.INGEST_IMAGE_TAG}}
+        volumeMounts:
+          - name: data
+            mountPath: /data
+        resources:
+          requests:
+            cpu: 2
+            memory: "4Gi"
+          limits:
+            memory: "8Gi"
+        command: ["python", "02_extract_and_upload_metadata.py"]
+        args:
+          - "{{workflow.parameters.TEMP_FOLDER}}/{{workflow.name}}/{{inputs.parameters.collect-id-padded}}/images"
+          - "{{workflow.parameters.TEMP_FOLDER}}/{{workflow.name}}/{{inputs.parameters.collect-id-padded}}/{{inputs.parameters.collect-id-padded}}_image-metadata.gpkg"
+          - "--s3-dest"
+          - "{{workflow.parameters.S3_OUTPUT_FOLDER}}/{{inputs.parameters.collect-id-padded}}/{{inputs.parameters.collect-id-padded}}_image-metadata.gpkg"
+        env:
+          - name: RCLONE_CONFIG_JS2S3_TYPE
+            value: "s3"
+          - name: RCLONE_CONFIG_JS2S3_PROVIDER
+            valueFrom:
+              secretKeyRef:
+                name: s3-credentials
+                key: provider
+          - name: RCLONE_CONFIG_JS2S3_ENDPOINT
+            valueFrom:
+              secretKeyRef:
+                name: s3-credentials
+                key: endpoint
+          - name: RCLONE_CONFIG_JS2S3_ACCESS_KEY_ID
+            valueFrom:
+              secretKeyRef:
+                name: s3-credentials
+                key: access_key
+          - name: RCLONE_CONFIG_JS2S3_SECRET_ACCESS_KEY
+            valueFrom:
+              secretKeyRef:
+                name: s3-credentials
+                key: secret_key
+
+    # zip-and-upload: zips one collect's reorganized images and uploads the archive to S3, via
+    # 03_zip_and_upload_images.py. The script deletes the local zip once the upload succeeds.
+    - name: zip-and-upload
+      inputs:
+        parameters:
+          - name: collect-id-padded
+      container:
+        image: ghcr.io/open-forest-observatory/ingest-data-under-canopy-imagery:{{workflow.parameters.INGEST_IMAGE_TAG}}
+        volumeMounts:
+          - name: data
+            mountPath: /data
+        resources:
+          requests:
+            cpu: 1
+            memory: "2Gi"
+          limits:
+            memory: "4Gi"
+        command: ["python", "03_zip_and_upload_images.py"]
+        args:
+          - "{{workflow.parameters.TEMP_FOLDER}}/{{workflow.name}}/{{inputs.parameters.collect-id-padded}}/images"
+          - "{{workflow.parameters.TEMP_FOLDER}}/{{workflow.name}}/{{inputs.parameters.collect-id-padded}}/images.zip"
+          - "--s3-dest"
+          - "{{workflow.parameters.S3_OUTPUT_FOLDER}}/{{inputs.parameters.collect-id-padded}}/images/{{inputs.parameters.collect-id-padded}}_images.zip"
+        env:
+          - name: RCLONE_CONFIG_JS2S3_TYPE
+            value: "s3"
+          - name: RCLONE_CONFIG_JS2S3_PROVIDER
+            valueFrom:
+              secretKeyRef:
+                name: s3-credentials
+                key: provider
+          - name: RCLONE_CONFIG_JS2S3_ENDPOINT
+            valueFrom:
+              secretKeyRef:
+                name: s3-credentials
+                key: endpoint
+          - name: RCLONE_CONFIG_JS2S3_ACCESS_KEY_ID
+            valueFrom:
+              secretKeyRef:
+                name: s3-credentials
+                key: access_key
+          - name: RCLONE_CONFIG_JS2S3_SECRET_ACCESS_KEY
+            valueFrom:
+              secretKeyRef:
+                name: s3-credentials
+                key: secret_key
+
+    # cleanup: removes the collect's local working directory (reorganized images, filename
+    # remapping, and metadata gpkg) now that both uploads have succeeded.
+    - name: cleanup
+      inputs:
+        parameters:
+          - name: collect-id-padded
+      container:
+        image: busybox
+        volumeMounts:
+          - name: data
+            mountPath: /data
+        resources:
+          requests:
+            cpu: 250m
+            memory: "256Mi"
+          limits:
+            memory: "512Mi"
+        command: ["/bin/sh", "-lc"]
+        args:
+          - |
+            set -euo pipefail
+            rm -rf "{{workflow.parameters.TEMP_FOLDER}}/{{workflow.name}}/{{inputs.parameters.collect-id-padded}}"
+
+    # report-warnings: scans all collect working directories for timestamp-gap warning files
+    # written by 01_reorganize.py and prints a summary. Runs after all collects finish.
+    - name: report-warnings
+      script:
+        # Use the same image as elsewhere to avoid another image pull, though only python is required
+        image: ghcr.io/open-forest-observatory/ingest-data-under-canopy-imagery:{{workflow.parameters.INGEST_IMAGE_TAG}}
+        volumeMounts:
+          - name: data
+            mountPath: /data
+        resources:
+          requests:
+            cpu: 250m
+            memory: "256Mi"
+          limits:
+            memory: "512Mi"
+        command: ["python"]
+        source: |
+          import json
+          from pathlib import Path
+
+          workflow_temp = Path("{{workflow.parameters.TEMP_FOLDER}}/{{workflow.name}}")
+          warning_files = sorted(workflow_temp.glob("timestamp-gap-warnings/*.json"))
+
+          if not warning_files:
+              print("No timestamp gap warnings.")
+          else:
+              print(f"{len(warning_files)} collect(s) had timestamp gaps exceeding the threshold:")
+              for f in warning_files:
+                  with open(f) as fh:
+                      w = json.load(fh)
+                  print(f"  collect {w['collect_id']}: max gap = {w['max_delta_seconds']:.1f} s")
