@@ -63,9 +63,10 @@ spec:
       # All  temp products are saved under: TEMP_FOLDER/{{workflow.name}}
       - name: TEMP_FOLDER
         value: "/data/argo-output/temp-dir"
-      # Where the data on S3 is stored. This path should include the bucket name.
+      # Where the data on S3 is stored. This path should include the bucket name and not have a
+      # trailing slash
       - name: TRAINING_DATA_PATH_S3
-        value: "ofo-public/drone/training-data_01/"
+        value: "ofo-public/drone/training-data_01"
       # The number of iterations to train for
       - name: TRAINING_ITERATIONS
         value: "10000"
@@ -95,16 +96,16 @@ spec:
                 - name: search-str
                   value: "{{item.search-str}}"
                 - name: download-dir
-                  value: "{{workflow.parameters.TEMP_FOLDER}}/{{item.dataset-id}}"
+                  value: "{{workflow.parameters.TEMP_FOLDER}}/{{workflow.name}}/{{item.dataset-id}}"
             withParam: "{{steps.determine-datasets.outputs.result}}"
-        - - name: reorganize-data
-            template: reorganize-data
-        - - name: train-model
-            template: train-model
-        - - name: upload-model
-            template: upload-model
-        - - name: cleanup
-            template: cleanup
+        #- - name: reorganize-data
+        #    template: reorganize-data
+        #- - name: train-model
+        #    template: train-model
+        #- - name: upload-model
+        #    template: upload-model
+        #- - name: cleanup
+        #    template: cleanup
 
 
 ## Definitions of individual step templates
@@ -136,11 +137,14 @@ spec:
               dataset = dataset.strip()
               split_dataset = dataset.split("_")
               if mission_type == "all" or len(split_dataset) == 2:
-                  search_str = dataset
+                  # Select all files
+                  search_str = "**/**"
               elif mission_type in ["nadir", "oblique"]:
                   # Assume that the dataset is in the format <drone_mission_id_nadir>_<drone_mission_id_oblique>_<plot_id>
                   nadir_str, oblique_str, _ = split_dataset
                   search_str = nadir_str if mission_type == "nadir" else oblique_str
+                  # Select all files under a matching folder name
+                  search_str = f"**/{search_str}_images/**"
               else:
                   raise ValueError(f"Invalid mission type: {mission_type}")
 
@@ -204,9 +208,9 @@ spec:
             S3_FOLDER="{{workflow.parameters.TRAINING_DATA_PATH_S3}}"
 
             # --- Photogrammetry products ---
-            echo "[rclone] Downloading photogrammetry products: $S3_FOLDER -> $DOWNLOAD_DIR"
+            echo "[rclone] Downloading chipped imagery : s3:${S3_FOLDER}/${DATASET_ID} -> $DOWNLOAD_DIR"
             rclone copy "s3:${S3_FOLDER}/${DATASET_ID}" "$DOWNLOAD_DIR" \
-              --include "*${SEARCH_STR}*" \
+              --include "${SEARCH_STR}" \
               --transfers 8 --checkers 8 --retries 5 --retries-sleep=15s \
               --stats 15s --stats-log-level NOTICE
             echo "[download] completed"
