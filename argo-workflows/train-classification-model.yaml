@@ -76,6 +76,9 @@ spec:
       # trailing slash
       - name: TRAINING_DATA_PATH_S3
         value: "ofo-public/drone/training-data_01"
+      # What fraction of the training data to use for validation.
+      - name: VAL_FRAC
+        value: "0.2"
         # Path to an MMPretrain config file on /ofo-share. All the fields should be finalized except
         # the data_root field
       - name: MODEL_CONFIG_PATH
@@ -124,6 +127,8 @@ spec:
                   value: "{{workflow.parameters.ATTRIBUTE_TO_TRAIN_ON}}"
                 - name: filter-dead-trees
                   value: "{{workflow.parameters.FILTER_DEAD_TREES}}"
+                - name: val-frac
+                  value: "{{workflow.parameters.VAL_FRAC}}"
         - - name: train-model
             template: train-model
             arguments:
@@ -269,6 +274,7 @@ spec:
           - name: filter-dead-trees
           - name: dead-trees-attribute
             value: "live_dead_prediction"
+          - name: val-frac
       nodeSelector:
         feature.node.kubernetes.io/workload-type: cpu
       script:
@@ -292,6 +298,7 @@ spec:
 
           import geopandas as gpd
           import pandas as pd
+          import numpy as np
 
           input_dir = Path("{{inputs.parameters.input-dir}}")
           output_dir = Path("{{inputs.parameters.output-dir}}")
@@ -299,7 +306,7 @@ spec:
           attribute = "{{inputs.parameters.attribute-to-train-on}}"
           filter_dead_trees = "{{inputs.parameters.filter-dead-trees}}" == "true"
           dead_trees_attribute = "{{inputs.parameters.dead-trees-attribute}}"
-
+          val_frac = float("{{inputs.parameters.val-frac}}")
           # Per-dataset folders each contain a "<dataset-id>_matched-trees.gpkg" and a "chips/" tree
           # of "<unique_ID>.png" chips (multiple views per tree, one per source image subfolder).
           GPKG_SUFFIX = "_matched-trees.gpkg"
@@ -332,10 +339,12 @@ spec:
               )
           print(f"Found {len(dataset_dirs)} dataset folder(s): {[d.name for d in dataset_dirs]}")
 
-          # --- Pre-create an output folder for each known output class ---
+          # --- Pre-create an output folder for each known output class in both train and val ---
           output_dir.mkdir(parents=True, exist_ok=True)
-          for output_class in sorted(set(class_remapping.values())):
-              (output_dir / output_class).mkdir(exist_ok=True)
+          for folder in ["train", "val"]:
+              (output_dir / folder).mkdir(exist_ok=True)
+              for output_class in sorted(set(class_remapping.values())):
+                  (output_dir / folder / output_class).mkdir(exist_ok=True)
 
           # --- Per-class counter: how many chips have been written for each class so far ---
           class_counters = defaultdict(int)
@@ -348,6 +357,9 @@ spec:
                   os.link(src, dst)
               except OSError:
                   shutil.copy2(src, dst)
+
+          # Control randomness in the train/val split
+          np.random.seed(0)
 
           for dataset_dir in dataset_dirs:
               gpkg_path = sorted(dataset_dir.glob(f"*{GPKG_SUFFIX}"))[0]
@@ -403,8 +415,9 @@ spec:
                       else:
                           chips_without_tree += 1
                       continue
-                  class_dir = output_dir / output_class
-                  class_dir.mkdir(exist_ok=True)
+                  # Select whether to put this chip in train or val
+                  train_or_val = "val" if np.random.rand() < val_frac else "train"
+                  class_dir = output_dir / train_or_val / output_class
                   dst = class_dir / f"{class_counters[output_class]:06d}{chip_path.suffix.lower()}"
                   link_or_copy(chip_path, dst)
                   class_counters[output_class] += 1
@@ -501,6 +514,9 @@ spec:
           # The config's train_cfg must already be iteration-based (no max_epochs key) or the
           # by_epoch/max_iters override below will conflict with it.
           set -x
+          # TODO Make sure that all expected classes are there or there will be indexing errors compared
+          # to the expected understanding of the class indices. Maybe this doesn't matter based on
+          # how the prediction results are interpreted.
           mim train mmpretrain "$MODIFIED_CONFIG" \
             --work-dir "$WORKDIR" \
             --gpus 1 \
