@@ -207,7 +207,14 @@ spec:
             DOWNLOAD_DIR="{{inputs.parameters.download-dir}}"
             S3_FOLDER="{{workflow.parameters.TRAINING_DATA_PATH_S3}}"
 
-            # --- Photogrammetry products ---
+            # Metadata
+            echo "[rclone] Downloading metadata file : s3:${S3_FOLDER}/${DATASET_ID}/${DATASET_ID}_matched-trees.gpkg -> $DOWNLOAD_DIR"
+            rclone copy "s3:${S3_FOLDER}/${DATASET_ID}/${DATASET_ID}_matched-trees.gpkg" "$DOWNLOAD_DIR" \
+              --transfers 1 --checkers 1 --retries 5 --retries-sleep=15s \
+              --stats 15s --stats-log-level NOTICE
+            echo "[download] metadata completed"
+
+            # Chipped imagery
             echo "[rclone] Downloading chipped imagery : s3:${S3_FOLDER}/${DATASET_ID} -> $DOWNLOAD_DIR"
             rclone copy "s3:${S3_FOLDER}/${DATASET_ID}" "$DOWNLOAD_DIR" \
               --include "${SEARCH_STR}" \
