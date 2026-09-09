@@ -489,9 +489,9 @@ spec:
           # Number of classes = number of class subfolders written by reorganize-data. MMPretrain's
           # CustomDataset infers the class names and their index order from the sorted subfolder
           # names, so only the count needs to be injected (into the classification head).
-          NUM_CLASSES=$(find "$INPUT_DIR" -mindepth 1 -maxdepth 1 -type d | wc -l)
+          NUM_CLASSES=$(find "${INPUT_DIR}/train" -mindepth 1 -maxdepth 1 -type d | wc -l)
           if [ "$NUM_CLASSES" -eq 0 ]; then
-            echo "ERROR: no class subfolders found in $INPUT_DIR" >&2
+            echo "ERROR: no class subfolders found in ${INPUT_DIR}/train" >&2
             exit 1
           fi
           echo "[train] training on $NUM_CLASSES classes:"
