@@ -512,13 +512,33 @@ spec:
           # num_classes and the iteration count are the only non-finalized fields in the config.
           # The config's train_cfg must already be iteration-based (no max_epochs key) or the
           # by_epoch/max_iters override below will conflict with it.
-          set -x
           # TODO Make sure that all expected classes are there or there will be indexing errors compared
           # to the expected understanding of the class indices. Maybe this doesn't matter based on
           # how the prediction results are interpreted.
-          mim train mmpretrain "$MODIFIED_CONFIG" \
+
+          # Locate MMPretrain's bundled train.py. `mim train` is not usable in this image: its
+          # is_installed() check reloads pkg_resources, which crashes on the image's setuptools
+          # version (pkg_resources.extern.six was removed). The tools/ dir is packaged under
+          # <mmpretrain>/.mim/ by pip; fall back to a cloned repo location if that is missing.
+          TRAIN_PY=$(python -c "import mmpretrain, pathlib; p = pathlib.Path(mmpretrain.__file__).parent / '.mim' / 'tools' / 'train.py'; print(p if p.exists() else '')")
+          if [ -z "$TRAIN_PY" ]; then
+            for c in /mmpretrain/tools/train.py /root/mmpretrain/tools/train.py; do
+              if [ -f "$c" ]; then TRAIN_PY="$c"; break; fi
+            done
+          fi
+          if [ -z "$TRAIN_PY" ]; then
+            echo "ERROR: could not locate the MMPretrain train.py script" >&2
+            exit 1
+          fi
+
+          # Run standard MMPretrain training, writing logs and checkpoints under the workdir.
+          # num_classes and the iteration count are the only non-finalized fields in the config.
+          # The config's train_cfg must already be iteration-based (no max_epochs key) or the
+          # by_epoch/max_iters override below will conflict with it. train.py runs single-GPU
+          # (non-distributed) by default.
+          set -x
+          python "$TRAIN_PY" "$MODIFIED_CONFIG" \
             --work-dir "$WORKDIR" \
-            --gpus 1 \
             --cfg-options \
               "model.head.num_classes=${NUM_CLASSES}" \
               "train_cfg.max_iters=${MAX_ITERS}" \
