@@ -56,10 +56,15 @@ spec:
       # string), an identity mapping is used and every observed class is kept.
       - name: CLASS_REMAPPING_FILE
         value: ""
-      # What column of the downloaded geopackages to use as the class
-      - name: ATTRIBUTE_TO_TRAIN_ON
       # Where on S3 should the model be uploaded. This path should include the bucket name.
       - name: MODEL_UPLOAD_PATH
+      # What column of the downloaded geopackages to use as the class
+      - name: ATTRIBUTE_TO_TRAIN_ON
+        value: "species_code"
+      # Whether to exclude trees that are predicted as dead from the training data. "true" or "false"
+      # Any strings other than "true" case-sensitive will be treated as false.
+      - name: FILTER_DEAD_TREES
+        value: "true"
       # What data to use for training. Options are "all" (use all data), "nadir" (use only nadir images), or "oblique" (use only oblique images).
       # Note that this is only applicable for paired datasets and all data will be used in single-mission datasets.
       - name: MISSION_TYPE
@@ -100,20 +105,22 @@ spec:
                 - name: search-str
                   value: "{{item.search-str}}"
                 - name: download-dir
-                  value: "{{workflow.parameters.TEMP_FOLDER}}/{{workflow.name}}/{{item.dataset-id}}"
+                  value: "{{workflow.parameters.TEMP_FOLDER}}/{{workflow.name}}/downloads/{{item.dataset-id}}"
             withParam: "{{steps.determine-datasets.outputs.result}}"
         - - name: reorganize-data
             template: reorganize-data
             arguments:
               parameters:
                 - name: input-dir
-                  value: "{{workflow.parameters.TEMP_FOLDER}}/{{workflow.name}}"
+                  value: "{{workflow.parameters.TEMP_FOLDER}}/{{workflow.name}}/downloads"
                 - name: output-dir
                   value: "{{workflow.parameters.TEMP_FOLDER}}/{{workflow.name}}/training-chips"
                 - name: remap-file
                   value: "{{workflow.parameters.CLASS_REMAPPING_FILE}}"
                 - name: attribute-to-train-on
                   value: "{{workflow.parameters.ATTRIBUTE_TO_TRAIN_ON}}"
+                - name: filter-dead-trees
+                  value: "{{workflow.parameters.FILTER_DEAD_TREES}}"
         #- - name: train-model
         #    template: train-model
         #- - name: upload-model
@@ -243,6 +250,9 @@ spec:
           - name: output-dir
           - name: remap-file
           - name: attribute-to-train-on
+          - name: filter-dead-trees
+          - name: dead-trees-attribute
+            value: "live_dead_prediction"
       nodeSelector:
         feature.node.kubernetes.io/workload-type: cpu
       script:
@@ -271,6 +281,8 @@ spec:
           output_dir = Path("{{inputs.parameters.output-dir}}")
           remap_file = "{{inputs.parameters.remap-file}}".strip()
           attribute = "{{inputs.parameters.attribute-to-train-on}}"
+          filter_dead_trees = "{{inputs.parameters.filter-dead-trees}}" == "true"
+          dead_trees_attribute = "{{inputs.parameters.dead-trees-attribute}}"
 
           # Per-dataset folders each contain a "<dataset-id>_matched-trees.gpkg" and a "chips/" tree
           # of "<unique_ID>.png" chips (multiple views per tree, one per source image subfolder).
@@ -330,6 +342,18 @@ spec:
 
               # 1. Load the geopackage and remap the class attribute for each tree
               trees = gpd.read_file(gpkg_path)
+              # Drop rows which are not predicted as live if requested
+              if filter_dead_trees:
+                  n_total = len(trees)
+                  if dead_trees_attribute not in trees.columns:
+                      raise ValueError(
+                          f"[{dataset_dir.name}] column '{dead_trees_attribute}' not found in {gpkg_path.name}; "
+                          f"available columns: {list(trees.columns)}"
+                      )
+                  trees = trees[trees[dead_trees_attribute] == "Live"]
+
+                  print(f"Dropped {len(trees) - n_total} trees predicted as dead from {dataset_dir.name}")
+
               for required in (ID_COLUMN, attribute):
                   if required not in trees.columns:
                       raise ValueError(
