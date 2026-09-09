@@ -76,9 +76,12 @@ spec:
       # trailing slash
       - name: TRAINING_DATA_PATH_S3
         value: "ofo-public/drone/training-data_01"
+        # Path to an MMPretrain config file on /ofo-share. All the fields should be finalized except
+        # the data_root field
+      - name: MODEL_CONFIG_PATH
       # The number of iterations to train for
       - name: TRAINING_ITERATIONS
-        value: "10000"
+        value: "500"
       # TODO consider learning rate or other parameters the user might want to specify
       # The class names (and therefore number of classes) can be extracted from the input data.
 
@@ -121,8 +124,18 @@ spec:
                   value: "{{workflow.parameters.ATTRIBUTE_TO_TRAIN_ON}}"
                 - name: filter-dead-trees
                   value: "{{workflow.parameters.FILTER_DEAD_TREES}}"
-        #- - name: train-model
-        #    template: train-model
+        - - name: train-model
+            template: train-model
+            arguments:
+              parameters:
+                - name: input-imagery-dir
+                  value: "{{workflow.parameters.TEMP_FOLDER}}/{{workflow.name}}/training-chips"
+                - name: config-path
+                  value: "{{workflow.parameters.MODEL_CONFIG_PATH}}"
+                - name: workdir
+                  value: "{{workflow.parameters.TEMP_FOLDER}}/{{workflow.name}}/train-workdir"
+                - name: training-iterations
+                  value: "{{workflow.parameters.TRAINING_ITERATIONS}}"
         #- - name: upload-model
         #    template: upload-model
         #- - name: cleanup
@@ -156,6 +169,9 @@ spec:
           output_dicts = []
           for dataset in datasets:
               dataset = dataset.strip()
+              if not dataset:
+                  # Skip blank lines (e.g. a trailing newline in the datasets file)
+                  continue
               split_dataset = dataset.split("_")
               if mission_type == "all" or len(split_dataset) == 2:
                   # Select all files
@@ -352,7 +368,7 @@ spec:
                       )
                   trees = trees[trees[dead_trees_attribute] == "Live"]
 
-                  print(f"Dropped {len(trees) - n_total} trees predicted as dead from {dataset_dir.name}")
+                  print(f"Dropped {n_total - len(trees)} of {n_total} trees predicted as dead from {dataset_dir.name}")
 
               for required in (ID_COLUMN, attribute):
                   if required not in trees.columns:
@@ -416,3 +432,79 @@ spec:
               raise ValueError(
                   "No chips were written; check ATTRIBUTE_TO_TRAIN_ON and the remapping file"
               )
+
+    - name: train-model
+      inputs:
+        parameters:
+          # Directory of class subfolders produced by reorganize-data (one subfolder per class,
+          # each holding the training chips for that class).
+          - name: input-imagery-dir
+          # MMPretrain config file. Every field should be finalized except `data_root` (rewritten
+          # here) and the class-dependent fields (num_classes / class list, injected here). For the
+          # iteration override below to be consistent, the config's schedulers, val_interval and
+          # checkpoint hook should also be iteration-based (by_epoch=False).
+          - name: config-path
+          # Directory where the modified config, logs and checkpoints are written.
+          - name: workdir
+          # Number of training iterations (overrides train_cfg.max_iters in the config).
+          - name: training-iterations
+      # Disable workflow-level non-GPU affinity; let GPU resource request handle node selection
+      affinity: {}
+      script:
+        image: waikatodatamining/mmpretrain:1.2.0_cuda11.1
+        volumeMounts:
+          - name: data
+            mountPath: /data
+        # TODO consider replacing this with a request for a single full GPU (nvidia.com/gpu: 1) instead of 7 MIG slices.
+        resources:
+          requests:
+            nvidia.com/mig-1g.5gb: 7
+          limits:
+            nvidia.com/mig-1g.5gb: 7
+        command: ["sh"]
+        source: |
+          set -eu
+
+          INPUT_DIR="{{inputs.parameters.input-imagery-dir}}"
+          SRC_CONFIG="{{inputs.parameters.config-path}}"
+          WORKDIR="{{inputs.parameters.workdir}}"
+          MAX_ITERS="{{inputs.parameters.training-iterations}}"
+          # Sentinel path that the config file uses wherever the dataset directory should go
+          PLACEHOLDER="/path/to/intermediate/mmpretrain_dataset"
+
+          mkdir -p "$WORKDIR"
+
+          # Number of classes = number of class subfolders written by reorganize-data. MMPretrain's
+          # CustomDataset infers the class names and their index order from the sorted subfolder
+          # names, so only the count needs to be injected (into the classification head).
+          NUM_CLASSES=$(find "$INPUT_DIR" -mindepth 1 -maxdepth 1 -type d | wc -l)
+          if [ "$NUM_CLASSES" -eq 0 ]; then
+            echo "ERROR: no class subfolders found in $INPUT_DIR" >&2
+            exit 1
+          fi
+          echo "[train] training on $NUM_CLASSES classes:"
+          find "$INPUT_DIR" -mindepth 1 -maxdepth 1 -type d -exec basename {} \; | sort | sed 's/^/  /'
+
+          # Copy the config into the workdir and point every dataset reference at the real directory
+          MODIFIED_CONFIG="${WORKDIR}/$(basename "$SRC_CONFIG")"
+          cp "$SRC_CONFIG" "$MODIFIED_CONFIG"
+          if ! grep -qF "$PLACEHOLDER" "$MODIFIED_CONFIG"; then
+            echo "ERROR: placeholder '$PLACEHOLDER' not found in $SRC_CONFIG" >&2
+            exit 1
+          fi
+          # '|' delimiter since the replacement path contains slashes
+          sed -i "s|${PLACEHOLDER}|${INPUT_DIR}|g" "$MODIFIED_CONFIG"
+          echo "[train] wrote modified config to $MODIFIED_CONFIG"
+
+          # Run standard MMPretrain training, writing logs and checkpoints under the workdir.
+          # num_classes and the iteration count are the only non-finalized fields in the config.
+          # The config's train_cfg must already be iteration-based (no max_epochs key) or the
+          # by_epoch/max_iters override below will conflict with it.
+          set -x
+          mim train mmpretrain "$MODIFIED_CONFIG" \
+            --work-dir "$WORKDIR" \
+            --gpus 1 \
+            --cfg-options \
+              "model.head.num_classes=${NUM_CLASSES}" \
+              "train_cfg.max_iters=${MAX_ITERS}" \
+              "train_cfg.by_epoch=False"
