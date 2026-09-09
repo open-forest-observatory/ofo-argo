@@ -1,7 +1,7 @@
 apiVersion: argoproj.io/v1alpha1
 kind: Workflow
 metadata:
-  generateName: species-prediction-training-data-prep-
+  generateName: train-classification-model-
 spec:
   serviceAccountName: argo
   entrypoint: main
@@ -43,9 +43,11 @@ spec:
     parameters:
       # Path to a file on the mounted volume which specifies what data to train on.
       # This should specify each dataset in the format it appears on S3, e.g. either
-      # <drone_mission_id>_<plot_id> or <drone_mission_id_oblique>_<drone_mission_id_nadir>_<plot_id>
-      # based on whether it's the paired or single mission case.
-      # TODO check the order of th determine whether any addition information should be included
+      # <drone_mission_id>_<plot_id> or <drone_mission_id_nadir>_<drone_mission_id_oblique>_<plot_id>
+      # based on whether it's the paired or single mission case. Each dataset should be provided on
+      # a separate line.
+      # TODO check the order of the datasets to determine whether any additional information should be included
+      # such as per-dataset oblique vs. nadir
       - name: DATASETS_FILE
       # A .json file specifying how to remap from the included attributes to final classes. If not
       # provided, all classes will be kept.
@@ -54,12 +56,19 @@ spec:
       - name: ATTRIBUTE_TO_TRAIN_ON
       # Where on S3 should the model be uploaded. This path should include the bucket name.
       - name: MODEL_UPLOAD_PATH
+      # What data to use for training. Options are "all" (use all data), "nadir" (use only nadir images), or "oblique" (use only oblique images).
+      # Note that this is only applicable for paired datasets and all data will be used in single-mission datasets.
+      - name: MISSION_TYPE
+        value: "all"
+      # All  temp products are saved under: TEMP_FOLDER/{{workflow.name}}
+      - name: TEMP_FOLDER
+        value: "/data/argo-output/temp-dir"
       # Where the data on S3 is stored. This path should include the bucket name.
       - name: TRAINING_DATA_PATH_S3
         value: "ofo-public/drone/training-data_01/"
       # The number of iterations to train for
       - name: TRAINING_ITERATIONS
-        value: 10000
+        value: "10000"
       # TODO consider learning rate or other parameters the user might want to specify
       # The class names (and therefore number of classes) can be extracted from the input data.
 
@@ -77,11 +86,31 @@ spec:
       steps:
         - - name: determine-datasets
             template: determine-datasets
+        - - name: download-data
+            template: download-data
+            arguments:
+              parameters:
+                - name: dataset-id
+                  value: "{{item.dataset-id}}"
+                - name: search-str
+                  value: "{{item.search-str}}"
+                - name: download-dir
+                  value: "{{workflow.parameters.TEMP_FOLDER}}/{{item.dataset-id}}"
+            withParam: "{{steps.determine-datasets.outputs.result}}"
+        - - name: reorganize-data
+            template: reorganize-data
+        - - name: train-model
+            template: train-model
+        - - name: upload-model
+            template: upload-model
+        - - name: cleanup
+            template: cleanup
+
 
 ## Definitions of individual step templates
 
-    # Parse the newline-separated datasets file (comma-separated "{processed-drone-dataset-id}, {ground-plot-id}"
-    # per line) into a JSON array of {processed-drone-dataset-id, ground-plot-id, drone-ground-pair-name} objects.
+    # Parse the newline-separated list of datasets and return a list of dicts with the dataset-id and
+    # search-str for each dataset. The search-str is used to filter the files to download from S3.
     - name: determine-datasets
       nodeSelector:
         feature.node.kubernetes.io/workload-type: cpu
@@ -94,8 +123,90 @@ spec:
         source: |
           import json, sys
 
-          datasets = []
-          with open("{{workflow.parameters.DATASETS_FILE}}", "r") as f:
-              # TODO fix this
-              datasets.append(None)
-          json.dump(datasets, sys.stdout)
+          datasets_file = "{{workflow.parameters.DATASETS_FILE}}"
+          mission_type = "{{workflow.parameters.MISSION_TYPE}}"
+
+          with open(datasets_file, "r") as f:
+              datasets = f.readlines()
+
+          # Convert to a list of dicts in case we want to add more information per dataset in the future
+
+          output_dicts = []
+          for dataset in datasets:
+              dataset = dataset.strip()
+              split_dataset = dataset.split("_")
+              if mission_type == "all" or len(split_dataset) == 2:
+                  search_str = dataset
+              elif mission_type in ["nadir", "oblique"]:
+                  # Assume that the dataset is in the format <drone_mission_id_nadir>_<drone_mission_id_oblique>_<plot_id>
+                  nadir_str, oblique_str, _ = split_dataset
+                  search_str = nadir_str if mission_type == "nadir" else oblique_str
+              else:
+                  raise ValueError(f"Invalid mission type: {mission_type}")
+
+              output_dicts.append({
+                  "dataset-id": dataset,
+                  "search-str": search_str
+              })
+
+
+          json.dump(output_dicts, sys.stdout)
+
+    - name: download-data
+      inputs:
+        parameters:
+          - name: dataset-id
+          - name: search-str
+          - name: download-dir
+      nodeSelector:
+        feature.node.kubernetes.io/workload-type: cpu
+      container:
+        image: rclone/rclone:sha-7a53f24
+        volumeMounts:
+          - name: data
+            mountPath: /data
+        resources:
+          requests:
+            cpu: 1
+            memory: "2Gi"
+          limits:
+            memory: "4Gi"
+        env:
+          - name: RCLONE_CONFIG_S3_TYPE
+            value: "s3"
+          - name: RCLONE_CONFIG_S3_PROVIDER
+            valueFrom:
+              secretKeyRef:
+                name: s3-credentials
+                key: provider
+          - name: RCLONE_CONFIG_S3_ENDPOINT
+            valueFrom:
+              secretKeyRef:
+                name: s3-credentials
+                key: endpoint
+          - name: RCLONE_CONFIG_S3_ACCESS_KEY_ID
+            valueFrom:
+              secretKeyRef:
+                name: s3-credentials
+                key: access_key
+          - name: RCLONE_CONFIG_S3_SECRET_ACCESS_KEY
+            valueFrom:
+              secretKeyRef:
+                name: s3-credentials
+                key: secret_key
+        command: ["/bin/sh", "-lc"]
+        args:
+          - |
+            set -euo pipefail
+            DATASET_ID="{{inputs.parameters.dataset-id}}"
+            SEARCH_STR="{{inputs.parameters.search-str}}"
+            DOWNLOAD_DIR="{{inputs.parameters.download-dir}}"
+            S3_FOLDER="{{workflow.parameters.TRAINING_DATA_PATH_S3}}"
+
+            # --- Photogrammetry products ---
+            echo "[rclone] Downloading photogrammetry products: $S3_FOLDER -> $DOWNLOAD_DIR"
+            rclone copy "s3:${S3_FOLDER}/${DATASET_ID}" "$DOWNLOAD_DIR" \
+              --include "*${SEARCH_STR}*" \
+              --transfers 8 --checkers 8 --retries 5 --retries-sleep=15s \
+              --stats 15s --stats-log-level NOTICE
+            echo "[download] completed"
