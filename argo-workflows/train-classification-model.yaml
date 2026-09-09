@@ -339,13 +339,6 @@ spec:
               )
           print(f"Found {len(dataset_dirs)} dataset folder(s): {[d.name for d in dataset_dirs]}")
 
-          # --- Pre-create an output folder for each known output class in both train and val ---
-          output_dir.mkdir(parents=True, exist_ok=True)
-          for folder in ["train", "val"]:
-              (output_dir / folder).mkdir(exist_ok=True)
-              for output_class in sorted(set(class_remapping.values())):
-                  (output_dir / folder / output_class).mkdir(exist_ok=True)
-
           # --- Per-class counter: how many chips have been written for each class so far ---
           class_counters = defaultdict(int)
           skipped_unmapped = defaultdict(int)  # raw attribute value -> chips skipped
@@ -353,6 +346,7 @@ spec:
 
           def link_or_copy(src, dst):
               """Hardlink src -> dst, falling back to a copy if they are on different filesystems."""
+              dst.parent.mkdir(exist_ok=True, parents=True)
               try:
                   os.link(src, dst)
               except OSError:
@@ -392,6 +386,9 @@ spec:
 
               raw_by_id = dict(zip(trees[ID_COLUMN], trees[attribute]))
               class_by_id = {}
+              # Train/val assignment is made once per tree (unique_ID) so that every view of a
+              # given tree lands in the same split, avoiding train/val leakage between views.
+              split_by_id = {}
               for unique_id, raw_class in raw_by_id.items():
                   if pd.isna(raw_class):
                       continue
@@ -415,8 +412,10 @@ spec:
                       else:
                           chips_without_tree += 1
                       continue
-                  # Select whether to put this chip in train or val
-                  train_or_val = "val" if np.random.rand() < val_frac else "train"
+                  # Assign this tree to train or val (once per unique_ID, shared across its views)
+                  if unique_id not in split_by_id:
+                      split_by_id[unique_id] = "val" if np.random.rand() < val_frac else "train"
+                  train_or_val = split_by_id[unique_id]
                   class_dir = output_dir / train_or_val / output_class
                   dst = class_dir / f"{class_counters[output_class]:06d}{chip_path.suffix.lower()}"
                   link_or_copy(chip_path, dst)
