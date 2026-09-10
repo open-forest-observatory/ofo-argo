@@ -97,7 +97,7 @@ spec:
         value: 50
       # The distances from the labels that the cameras are cropped to
       - name: RENDER_CAMERAS_ROI_BUFFER_RADIUS_METERS
-        value: 100
+        value: 80
       # Maximum number of image chips to save per tree (passed as --n-chips-per-tree to chip_images.py)
       # Note this should be set very high for most training workflows, to include as wide a diversity
       # of views as possible. Unless you want to balance the number of training images across trees.
@@ -154,7 +154,7 @@ spec:
           - name: imagery-zip-urls
       dag:
         # failFast=false ensures other pairs continue if this one fails
-        failFast: false
+        failFast: true
         tasks:
           - name: download-raw-imagery
             template: download-raw-imagery
