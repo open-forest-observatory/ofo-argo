@@ -124,3 +124,10 @@ argo submit -n argo argo-workflows/ingest-under-canopy-workflow.yaml \
 ```
 
 The processing will fail for a given collect if no images both match the specified file prefixes and the specified time bounds. If there is a gap in image timestamps, this will be logged as a warning, but will not cause the dataset to fail. These warnings can be viewed in the `report-warnings` step in the Argo UI. This step will only be run after all datasets finish.
+
+# Train classification model on pre-chipped imagery
+The `Create chips for model training` workflow creates training data consisting of masked views of individual trees. This workflow downloads this data from S3 and uses it to train a classificaiton model that can be used to perform species prediction on unseen data.
+
+This workflow runs by first downloading all the required chipped data and the tree-level metadata saved as a `.gpkg` data format. At this stage, there is the option to filter based on whether the data comes from oblique or nadir views, but only in the cases where the data is generated from paired missions. These datasets are organized into train and test folders based on the user specification, but all files retain their original naming. Then, using the tree-level metadata, these files are reorganzed to be sequentially numbered in class-level folders. The user can optionally specify a class-level remapping to update and optionally merge classes contained in the metadata.
+
+From there, a model is trained using the `MMPretrain` framework. Once trained, this model is uploaded to S3 along with the associated config file and training logs. Finally, the downloaded data is all removed from local storage.
