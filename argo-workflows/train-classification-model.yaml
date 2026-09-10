@@ -449,6 +449,25 @@ spec:
                       "No chips were written; check ATTRIBUTE_TO_TRAIN_ON and the remapping file"
                   )
 
+          # Ensure matching train and val folders
+          train_class_names = {p.name for p in (output_dir / "train").glob("*")}
+          val_class_names = {p.name for p in (output_dir / "val").glob("*")}
+
+          val_not_in_train = val_class_names - train_class_names
+          train_not_in_val = train_class_names - val_class_names
+
+          # This is an error because there are classes we clearly want to evaluate but we'll never
+          # generate predictions for them.
+          if len(val_not_in_train) != 0:
+              raise ValueError(f"The following classes were in val but not train: {sorted(val_not_in_train)}")
+
+          # This case is slightly less severe because despite being unable to assess the quality of
+          # these classes, they will still be present in the trained model's predictions.
+          if len(train_not_in_val) != 0:
+              print(f"Creating empty val folders for classes in train but not val: {sorted(train_not_in_val)}")
+              for name in train_not_in_val:
+                  (output_dir / "val" / name).mkdir()
+
     - name: train-model
       inputs:
         parameters:
