@@ -153,8 +153,7 @@ spec:
           - name: drone-ground-pair-name
           - name: imagery-zip-urls
       dag:
-        # failFast=false ensures other pairs continue if this one fails
-        failFast: false
+        failFast: true
         tasks:
           - name: download-raw-imagery
             template: download-raw-imagery
