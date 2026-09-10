@@ -59,7 +59,7 @@ spec:
       - name: CLASS_REMAPPING_FILE
         value: ""
       # Where on S3 should the model be uploaded. This path should include the bucket name.
-      - name: MODEL_UPLOAD_PATH
+      - name: MODEL_UPLOAD_DIR_S3
       # What column of the downloaded geopackages to use as the class
       - name: ATTRIBUTE_TO_TRAIN_ON
         value: "species_code"
@@ -84,12 +84,11 @@ spec:
         # Path to an MMPretrain config file on /ofo-share. All the fields should be finalized except
         # the data_root field
       - name: MODEL_CONFIG_PATH
-      # The number of iterations to train for
-      - name: TRAINING_ITERATIONS
-        value: "500"
+      # The number of epochs to train for
+      - name: TRAINING_EPOCHS
+        value: "10"
       # TODO consider learning rate or other parameters the user might want to specify
       # The class names (and therefore number of classes) can be extracted from the input data.
-
 
 
 
@@ -141,10 +140,18 @@ spec:
                   value: "{{workflow.parameters.MODEL_CONFIG_PATH}}"
                 - name: workdir
                   value: "{{workflow.parameters.TEMP_FOLDER}}/{{workflow.name}}/train-workdir"
-                - name: training-iterations
-                  value: "{{workflow.parameters.TRAINING_ITERATIONS}}"
-        #- - name: upload-model
-        #    template: upload-model
+                - name: training-epochs
+                  value: "{{workflow.parameters.TRAINING_EPOCHS}}"
+        - - name: upload-model-and-cleanup
+            template: upload-model-and-cleanup
+            arguments:
+              parameters:
+                - name: data-dir
+                  value: "{{workflow.parameters.TEMP_FOLDER}}/{{workflow.name}}"
+                - name: model-upload-dir-s3
+                  value: "{{workflow.parameters.MODEL_UPLOAD_DIR_S3}}"
+                - name: workdir-subdir
+                  value: "train-workdir"
         #- - name: cleanup
         #    template: cleanup
 
@@ -462,8 +469,8 @@ spec:
           - name: config-path
           # Directory where the modified config, logs and checkpoints are written.
           - name: workdir
-          # Number of training iterations (overrides train_cfg.max_iters in the config).
-          - name: training-iterations
+          # Number of epochs to train for (overrides train_cfg.max_epochs in the config).
+          - name: training-epochs
       # Disable workflow-level non-GPU affinity; let GPU resource request handle node selection
       affinity: {}
       script:
@@ -484,7 +491,7 @@ spec:
           INPUT_DIR="{{inputs.parameters.input-imagery-dir}}"
           SRC_CONFIG="{{inputs.parameters.config-path}}"
           WORKDIR="{{inputs.parameters.workdir}}"
-          MAX_ITERS="{{inputs.parameters.training-iterations}}"
+          MAX_EPOCHS="{{inputs.parameters.training-epochs}}"
           # Sentinel path that the config file uses wherever the dataset directory should go
           PLACEHOLDER="/path/to/intermediate/mmpretrain_dataset"
 
@@ -499,7 +506,7 @@ spec:
             exit 1
           fi
           echo "[train] training on $NUM_CLASSES classes:"
-          find "$INPUT_DIR" -mindepth 1 -maxdepth 1 -type d -exec basename {} \; | sort | sed 's/^/  /'
+          find "$INPUT_DIR/train" -mindepth 1 -maxdepth 1 -type d -exec basename {} \; | sort | sed 's/^/  /'
 
           # Copy the config into the workdir and point every dataset reference at the real directory
           MODIFIED_CONFIG="${WORKDIR}/$(basename "$SRC_CONFIG")"
@@ -537,11 +544,80 @@ spec:
 
           # Run standard MMPretrain training, writing logs and checkpoints under the workdir.
           # num_classes and the iteration count are the only non-finalized fields in the config.
-          # The config's train_cfg must already be iteration-based (no max_epochs key) or the
-          # by_epoch/max_iters override below will conflict with it. train.py runs single-GPU
-          # (non-distributed) by default.
+          # train.py runs single-GPU (non-distributed) by default.
           set -x
           python "$TRAIN_PY" "$MODIFIED_CONFIG" \
             --work-dir "$WORKDIR" \
             --cfg-options \
-              "model.head.num_classes=${NUM_CLASSES}"
+              "model.head.num_classes=${NUM_CLASSES}" \
+              "data_preprocessor.num_classes=${NUM_CLASSES}"
+#              TODO figure out the issue with these parameters and fix it
+#              "train_cfg.by_epoch=True" \
+#              "train_cfg.max_epochs=${MAX_EPOCHS}" \
+
+    # Upload the trained model, along with the config file and logs to S3. Then remove all the local
+    # data.
+    - name: upload-model-and-cleanup
+      inputs:
+        parameters:
+          - name: data-dir
+          - name: model-upload-dir-s3
+          - name: workdir-subdir
+      nodeSelector:
+        feature.node.kubernetes.io/workload-type: cpu
+      container:
+        image: rclone/rclone:sha-7a53f24
+        volumeMounts:
+          - name: data
+            mountPath: /data
+        resources:
+          requests:
+            cpu: 500m
+            memory: "256Mi"
+          limits:
+            memory: "1Gi"
+        env:
+          - name: RCLONE_CONFIG_S3_TYPE
+            value: "s3"
+          - name: RCLONE_CONFIG_S3_PROVIDER
+            valueFrom:
+              secretKeyRef:
+                name: s3-credentials
+                key: provider
+          - name: RCLONE_CONFIG_S3_ENDPOINT
+            valueFrom:
+              secretKeyRef:
+                name: s3-credentials
+                key: endpoint
+          - name: RCLONE_CONFIG_S3_ACCESS_KEY_ID
+            valueFrom:
+              secretKeyRef:
+                name: s3-credentials
+                key: access_key
+          - name: RCLONE_CONFIG_S3_SECRET_ACCESS_KEY
+            valueFrom:
+              secretKeyRef:
+                name: s3-credentials
+                key: secret_key
+        command: ["/bin/sh", "-lc"]
+        args:
+          - |
+            set -euo pipefail
+            # Parse inputs
+            DATA_DIR="{{inputs.parameters.data-dir}}"
+            WORKDIR="${DATA_DIR}/{{inputs.parameters.workdir-subdir}}"
+            MODEL_UPLOAD_DIR_S3="s3:{{inputs.parameters.model-upload-dir-s3}}"
+
+            # Upload to S3
+            echo "[rclone] Uploading model training folder: $WORKDIR -> $MODEL_UPLOAD_DIR_S3"
+            rclone sync "$WORKDIR" "$MODEL_UPLOAD_DIR_S3" \
+              --transfers 8 --checkers 8 --retries 5 --retries-sleep=15s \
+              --s3-upload-cutoff 200Mi --s3-chunk-size 100Mi --s3-upload-concurrency 4 \
+              --stats 15s --stats-log-level NOTICE
+
+            echo "[rclone] Upload successful for ${WORKDIR}"
+
+            # Delete all data
+            echo "[cleanup] Removing local dataset directory: $DATA_DIR"
+            rm -rf "$DATA_DIR"
+            echo "[cleanup] Done"
