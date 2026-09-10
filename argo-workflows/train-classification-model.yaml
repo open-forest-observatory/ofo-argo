@@ -42,12 +42,14 @@ spec:
   arguments:
     parameters:
       # Path to a file on the mounted volume which specifies what data to train on.
-      # This should specify each dataset in the format it appears on S3, e.g. either
+      # There should be two columns separated by a comma, representing what dataset to include and
+      # whether it is train or val.
+      # The first column should specify each dataset in the format it appears on S3, e.g. either
       # <drone_mission_id>_<plot_id> or <drone_mission_id_nadir>_<drone_mission_id_oblique>_<plot_id>
       # based on whether it's the paired or single mission case. Each dataset should be provided on
       # a separate line.
-      # TODO check the order of the datasets to determine whether any additional information should be included
-      # such as per-dataset oblique vs. nadir
+      # The second column should be either the string "train" or "val" identifying that the dataset
+      # should be assigned to that split.
       - name: DATASETS_FILE
       # A .json file specifying how to remap from the included attributes to final classes, as a flat
       # object mapping each original attribute value to its final class name, e.g.
@@ -111,7 +113,7 @@ spec:
                 - name: search-str
                   value: "{{item.search-str}}"
                 - name: download-dir
-                  value: "{{workflow.parameters.TEMP_FOLDER}}/{{workflow.name}}/downloads/{{item.dataset-id}}"
+                  value: "{{workflow.parameters.TEMP_FOLDER}}/{{workflow.name}}/downloads/{{item.train-val}}/{{item.dataset-id}}"
             withParam: "{{steps.determine-datasets.outputs.result}}"
         - - name: reorganize-data
             template: reorganize-data
@@ -161,19 +163,23 @@ spec:
             mountPath: /data
         command: ["python3"]
         source: |
-          import json, sys
+          import json
+          import sys
+          import csv
 
           datasets_file = "{{workflow.parameters.DATASETS_FILE}}"
           mission_type = "{{workflow.parameters.MISSION_TYPE}}"
 
           with open(datasets_file, "r") as f:
-              datasets = f.readlines()
+              split_lines = csv.reader(f.readlines())
 
           # Convert to a list of dicts in case we want to add more information per dataset in the future
 
           output_dicts = []
-          for dataset in datasets:
+          for split_line in split_lines:
+              dataset, train_val = split_line
               dataset = dataset.strip()
+              train_val = train_val.strip()
               if not dataset:
                   # Skip blank lines (e.g. a trailing newline in the datasets file)
                   continue
@@ -192,7 +198,8 @@ spec:
 
               output_dicts.append({
                   "dataset-id": dataset,
-                  "search-str": search_str
+                  "search-str": search_str,
+                  "train-val": train_val,
               })
 
 
@@ -313,6 +320,14 @@ spec:
           IMAGE_EXTS = {".png", ".jpg", ".jpeg"}
           ID_COLUMN = "unique_ID"
 
+          def link_or_copy(src, dst):
+              """Hardlink src -> dst, falling back to a copy if they are on different filesystems."""
+              dst.parent.mkdir(exist_ok=True, parents=True)
+              try:
+                  os.link(src, dst)
+              except OSError:
+                  shutil.copy2(src, dst)
+
           # --- Load the class remapping (original attribute value -> final class name) ---
           # With no file provided, fall back to an identity mapping that keeps every observed class.
           if remap_file:
@@ -328,122 +343,111 @@ spec:
               identity_mapping = True
               print("No class remapping file provided; keeping every class unchanged")
 
-          # --- List the per-dataset folders (those holding a *_matched-trees.gpkg) ---
-          dataset_dirs = sorted(
-              d for d in input_dir.iterdir()
-              if d.is_dir() and any(d.glob(f"*{GPKG_SUFFIX}"))
-          )
-          if not dataset_dirs:
-              raise ValueError(
-                  f"No dataset folders containing a *{GPKG_SUFFIX} file were found under {input_dir}"
+          if not (input_dir / "train").is_dir() or not (input_dir / "val").is_dir():
+              raise ValueError(f"Both train and val subfolders of {input_dir} must be present")
+
+          for train_val in ("train", "val"):
+              # Create the subfolder path that holds all datasets for either train or val
+              input_dir_train_val = (input_dir / train_val)
+              # --- List the per-dataset folders (those holding a *_matched-trees.gpkg) ---
+              dataset_dirs = sorted(
+                  d for d in input_dir_train_val.iterdir()
+                  if d.is_dir() and any(d.glob(f"*{GPKG_SUFFIX}"))
               )
-          print(f"Found {len(dataset_dirs)} dataset folder(s): {[d.name for d in dataset_dirs]}")
+              if not dataset_dirs:
+                  raise ValueError(
+                      f"No dataset folders containing a *{GPKG_SUFFIX} file were found under {input_dir_train_val}"
+                  )
+              print(f"Found {len(dataset_dirs)} dataset folder(s): {[d.name for d in dataset_dirs]}")
 
-          # --- Per-class counter: how many chips have been written for each class so far ---
-          class_counters = defaultdict(int)
-          skipped_unmapped = defaultdict(int)  # raw attribute value -> chips skipped
-          chips_without_tree = 0  # chip whose unique_ID is absent from the geopackage
+              # --- Per-class counter: how many chips have been written for each class so far ---
+              class_counters = defaultdict(int)
+              skipped_unmapped = defaultdict(int)  # raw attribute value -> chips skipped
+              chips_without_tree = 0  # chip whose unique_ID is absent from the geopackage
 
-          def link_or_copy(src, dst):
-              """Hardlink src -> dst, falling back to a copy if they are on different filesystems."""
-              dst.parent.mkdir(exist_ok=True, parents=True)
-              try:
-                  os.link(src, dst)
-              except OSError:
-                  shutil.copy2(src, dst)
-
-          # Control randomness in the train/val split
-          np.random.seed(0)
-
-          for dataset_dir in dataset_dirs:
-              gpkg_path = sorted(dataset_dir.glob(f"*{GPKG_SUFFIX}"))[0]
-              chips_dir = dataset_dir / "chips"
-              if not chips_dir.is_dir():
-                  print(f"[{dataset_dir.name}] no chips/ directory; skipping")
-                  continue
-
-              # 1. Load the geopackage and remap the class attribute for each tree
-              trees = gpd.read_file(gpkg_path)
-              # Drop rows which are not predicted as live if requested
-              if filter_dead_trees:
-                  n_total = len(trees)
-                  if dead_trees_attribute not in trees.columns:
-                      raise ValueError(
-                          f"[{dataset_dir.name}] column '{dead_trees_attribute}' not found in {gpkg_path.name}; "
-                          f"available columns: {list(trees.columns)}"
-                      )
-                  trees = trees[trees[dead_trees_attribute] == "Live"]
-
-                  print(f"Dropped {n_total - len(trees)} of {n_total} trees predicted as dead from {dataset_dir.name}")
-
-              for required in (ID_COLUMN, attribute):
-                  if required not in trees.columns:
-                      raise ValueError(
-                          f"[{dataset_dir.name}] column '{required}' not found in {gpkg_path.name}; "
-                          f"available columns: {list(trees.columns)}"
-                      )
-              trees[ID_COLUMN] = trees[ID_COLUMN].astype(str)
-
-              raw_by_id = dict(zip(trees[ID_COLUMN], trees[attribute]))
-              class_by_id = {}
-              # Train/val assignment is made once per tree (unique_ID) so that every view of a
-              # given tree lands in the same split, avoiding train/val leakage between views.
-              split_by_id = {}
-              for unique_id, raw_class in raw_by_id.items():
-                  if pd.isna(raw_class):
+              for dataset_dir in dataset_dirs:
+                  gpkg_path = sorted(dataset_dir.glob(f"*{GPKG_SUFFIX}"))[0]
+                  chips_dir = dataset_dir / "chips"
+                  if not chips_dir.is_dir():
+                      print(f"[{dataset_dir.name}] no chips/ directory; skipping")
                       continue
-                  raw_class = str(raw_class)
-                  if identity_mapping:
-                      class_by_id[unique_id] = raw_class
-                  elif raw_class in class_remapping:
-                      class_by_id[unique_id] = class_remapping[raw_class]
-                  # else: attribute value absent from the remapping file -> drop this tree
 
-              # 2. Hardlink every chip to the output folder for its remapped class
-              n_linked = 0
-              for chip_path in sorted(chips_dir.rglob("*")):
-                  if not chip_path.is_file() or chip_path.suffix.lower() not in IMAGE_EXTS:
-                      continue
-                  unique_id = chip_path.stem
-                  output_class = class_by_id.get(unique_id)
-                  if output_class is None:
-                      if unique_id in raw_by_id:
-                          skipped_unmapped[str(raw_by_id[unique_id])] += 1
-                      else:
-                          chips_without_tree += 1
-                      continue
-                  # Assign this tree to train or val (once per unique_ID, shared across its views)
-                  if unique_id not in split_by_id:
-                      split_by_id[unique_id] = "val" if np.random.rand() < val_frac else "train"
-                  train_or_val = split_by_id[unique_id]
-                  class_dir = output_dir / train_or_val / output_class
-                  dst = class_dir / f"{class_counters[output_class]:06d}{chip_path.suffix.lower()}"
-                  link_or_copy(chip_path, dst)
-                  class_counters[output_class] += 1
-                  n_linked += 1
+                  # 1. Load the geopackage and remap the class attribute for each tree
+                  trees = gpd.read_file(gpkg_path)
+                  # Drop rows which are not predicted as live if requested
+                  if filter_dead_trees:
+                      n_total = len(trees)
+                      if dead_trees_attribute not in trees.columns:
+                          raise ValueError(
+                              f"[{dataset_dir.name}] column '{dead_trees_attribute}' not found in {gpkg_path.name}; "
+                              f"available columns: {list(trees.columns)}"
+                          )
+                      trees = trees[trees[dead_trees_attribute] == "Live"]
 
-              print(
-                  f"[{dataset_dir.name}] linked {n_linked} chips "
-                  f"from {len(class_by_id)} matched trees"
-              )
+                      print(f"Dropped {n_total - len(trees)} of {n_total} trees predicted as dead from {dataset_dir.name}")
 
-          # --- Summary ---
-          total = sum(class_counters.values())
-          print("\n=== Reorganization summary ===")
-          for output_class in sorted(class_counters):
-              print(f"  {output_class}: {class_counters[output_class]} chips")
-          print(f"  TOTAL: {total} chips across {len(class_counters)} class(es)")
-          if skipped_unmapped:
-              print("Chips skipped (attribute value null or absent from the remapping file):")
-              for raw, count in sorted(skipped_unmapped.items(), key=lambda kv: -kv[1]):
-                  print(f"  {raw!r}: {count}")
-          if chips_without_tree:
-              print(f"Chips skipped (unique_ID not present in the geopackage): {chips_without_tree}")
+                  for required in (ID_COLUMN, attribute):
+                      if required not in trees.columns:
+                          raise ValueError(
+                              f"[{dataset_dir.name}] column '{required}' not found in {gpkg_path.name}; "
+                              f"available columns: {list(trees.columns)}"
+                          )
+                  trees[ID_COLUMN] = trees[ID_COLUMN].astype(str)
 
-          if total == 0:
-              raise ValueError(
-                  "No chips were written; check ATTRIBUTE_TO_TRAIN_ON and the remapping file"
-              )
+                  raw_by_id = dict(zip(trees[ID_COLUMN], trees[attribute]))
+                  class_by_id = {}
+                  for unique_id, raw_class in raw_by_id.items():
+                      if pd.isna(raw_class):
+                          continue
+                      raw_class = str(raw_class)
+                      if identity_mapping:
+                          class_by_id[unique_id] = raw_class
+                      elif raw_class in class_remapping:
+                          class_by_id[unique_id] = class_remapping[raw_class]
+                      # else: attribute value absent from the remapping file -> drop this tree
+
+                  # 2. Hardlink every chip to the output folder for its remapped class
+                  n_linked = 0
+                  for chip_path in sorted(chips_dir.rglob("*")):
+                      if not chip_path.is_file() or chip_path.suffix.lower() not in IMAGE_EXTS:
+                          continue
+                      unique_id = chip_path.stem
+                      output_class = class_by_id.get(unique_id)
+                      if output_class is None:
+                          if unique_id in raw_by_id:
+                              skipped_unmapped[str(raw_by_id[unique_id])] += 1
+                          else:
+                              chips_without_tree += 1
+                          continue
+                      # Assign this tree to train or val (once per unique_ID, shared across its views)
+                      class_dir = output_dir / train_val / output_class
+                      dst = class_dir / f"{class_counters[output_class]:06d}{chip_path.suffix.lower()}"
+                      link_or_copy(chip_path, dst)
+                      class_counters[output_class] += 1
+                      n_linked += 1
+
+                  print(
+                      f"[{dataset_dir.name}] linked {n_linked} chips "
+                      f"from {len(class_by_id)} matched trees"
+                  )
+
+              # --- Summary ---
+              total = sum(class_counters.values())
+              print(f"\n=== Reorganization summary ({train_val})===")
+              for output_class in sorted(class_counters):
+                  print(f"  {output_class}: {class_counters[output_class]} chips")
+              print(f"  TOTAL: {total} chips across {len(class_counters)} class(es)")
+              if skipped_unmapped:
+                  print("Chips skipped (attribute value null or absent from the remapping file):")
+                  for raw, count in sorted(skipped_unmapped.items(), key=lambda kv: -kv[1]):
+                      print(f"  {raw!r}: {count}")
+              if chips_without_tree:
+                  print(f"Chips skipped (unique_ID not present in the geopackage): {chips_without_tree}")
+
+              if total == 0:
+                  raise ValueError(
+                      "No chips were written; check ATTRIBUTE_TO_TRAIN_ON and the remapping file"
+                  )
 
     - name: train-model
       inputs:
