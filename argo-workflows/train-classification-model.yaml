@@ -474,9 +474,9 @@ spec:
         # TODO consider replacing this with a request for a single full GPU (nvidia.com/gpu: 1) instead of 7 MIG slices.
         resources:
           requests:
-            nvidia.com/mig-1g.5gb: 7
+            nvidia.com/gpu: 1
           limits:
-            nvidia.com/mig-1g.5gb: 7
+            nvidia.com/gpu: 1
         command: ["sh"]
         source: |
           set -eu
@@ -544,6 +544,4 @@ spec:
           python "$TRAIN_PY" "$MODIFIED_CONFIG" \
             --work-dir "$WORKDIR" \
             --cfg-options \
-              "model.head.num_classes=${NUM_CLASSES}" \
-              "train_cfg.max_iters=${MAX_ITERS}" \
-              "train_cfg.by_epoch=False"
+              "model.head.num_classes=${NUM_CLASSES}"
