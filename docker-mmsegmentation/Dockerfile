@@ -1,2 +1,24 @@
-FROM waikatodatamining/mmpretrain:1.2.0_cuda11.1
+FROM nvidia/cuda:11.3.1-cudnn8-devel-ubuntu20.04
 
+ENV DEBIAN_FRONTEND=noninteractive
+RUN apt-get update && apt-get install -y git wget && rm -rf /var/lib/apt/lists/*
+
+# Install miniconda
+RUN wget -q https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh -O /tmp/miniconda.sh \
+    && bash /tmp/miniconda.sh -b -p /opt/conda \
+    && rm /tmp/miniconda.sh
+ENV PATH="/opt/conda/bin:$PATH"
+
+# Create conda environment with Python, PyTorch, and CUDA toolkit
+RUN conda create -n open-mmlab python=3.8 pytorch==1.10.1 torchvision==0.11.2 cudatoolkit=11.3 -c pytorch -y
+
+# Install openmim and mmpretrain dependencies into the conda environment
+RUN conda run -n open-mmlab pip install openmim tensorboard
+
+# Clone the OFO mmpretrain fork and install it in editable mode
+RUN git clone https://github.com/open-forest-observatory/mmpretrain.git /mmpretrain
+WORKDIR /mmpretrain
+RUN conda run -n open-mmlab mim install -e .
+
+# Activate the conda environment by default for all subsequent commands
+ENV PATH="/opt/conda/envs/open-mmlab/bin:$PATH"
