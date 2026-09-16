@@ -361,6 +361,9 @@ spec:
               raise ValueError(f"Both train and val subfolders of {input_dir} must be present")
 
           for train_val in ("train", "val"):
+              # This saves information about the restructuring
+              reorganization_summary = []
+
               # Create the subfolder path that holds all datasets for either train or val
               input_dir_train_val = (input_dir / train_val)
               # --- List the per-dataset folders (those holding a *_matched-trees.gpkg) ---
@@ -433,12 +436,15 @@ spec:
                           else:
                               chips_without_tree += 1
                           continue
-                      # Assign this tree to train or val (once per unique_ID, shared across its views)
+
                       class_dir = output_dir / train_val / output_class
                       dst = class_dir / f"{class_counters[output_class]:06d}{chip_path.suffix.lower()}"
                       link_or_copy(chip_path, dst)
                       class_counters[output_class] += 1
                       n_linked += 1
+
+                      # Add an entry to the list which tracks the reorganization
+                      reorganization_summary.append({"image_path": str(dst), "class": output_class, "tree_id": unique_id})
 
                   print(
                       f"[{dataset_dir.name}] linked {n_linked} chips "
@@ -462,6 +468,11 @@ spec:
                   raise ValueError(
                       "No chips were written; check ATTRIBUTE_TO_TRAIN_ON and the remapping file"
                   )
+
+              # Save out the summary file
+              reorganization_summary = pd.DataFrame(reorganization_summary)
+              reorganization_summary_path = Path(output_dir, f"{train_val}_reorganization_summary.csv")
+              reorganization_summary.to_csv(reorganization_summary_path)
 
           # Ensure matching train and val folders
           train_class_names = {p.name for p in (output_dir / "train").glob("*")}
@@ -565,6 +576,11 @@ spec:
           - "train_cfg.max_epochs={{inputs.parameters.training-epochs}}"
           - "data_preprocessor.mean={{inputs.parameters.training-mean}}"
           - "data_preprocessor.std={{inputs.parameters.training-std}}"
+          # TODO uncomment these config overrides once the TreeLevelAccuracy metric is revised to
+          # accept a more general style of input, rather than the L1-L4 formatting from the initial
+          # project
+          # - "train_evaluator.TreeLevelAccuracy.metadata_csv={{inputs.parameters.input-imagery-dir}}/train_reorganization_summary.csv"
+          # - "val_evaluator.TreeLevelAccuracy.metadata_csv={{inputs.parameters.input-imagery-dir}}/val_reorganization_summary.csv"
 
     # Upload the trained model, along with the config file and logs to S3. Then remove all the local
     # data.
