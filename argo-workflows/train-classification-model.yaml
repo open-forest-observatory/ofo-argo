@@ -149,6 +149,10 @@ spec:
                   value: "{{workflow.parameters.TRAINING_EPOCHS}}"
                 - name: num-classes
                   value: "{{=jsonpath(steps['image-statistics'].outputs.result, '$.n_classes')}}"
+                - name: training-mean
+                  value: "{{=jsonpath(steps['image-statistics'].outputs.result, '$.means')}}"
+                - name: training-std
+                  value: "{{=jsonpath(steps['image-statistics'].outputs.result, '$.stds')}}"
         - - name: upload-model-and-cleanup
             template: upload-model-and-cleanup
             arguments:
@@ -493,14 +497,18 @@ spec:
         source: |
           import json
           import sys
+          import os
           from pathlib import Path
+          from contextlib import redirect_stdout
 
           from segmentation_utils.dataset_creation.summary_statistics import compute_summary_statistics
 
           train_folder = Path("{{inputs.parameters.dataset-folder}}", "train")
           n_classes = len(list(train_folder.glob("*")))
 
-          means, stds = compute_summary_statistics(train_folder)
+          # Suppress printing so the final output is json-parseable
+          with redirect_stdout(open(os.devnull, "w")):
+              means, stds = compute_summary_statistics(train_folder)
 
           output_dict = {"n_classes": n_classes, "means": means, "stds": stds}
 
@@ -524,6 +532,10 @@ spec:
           # The number of prediction logits. Note, it is not strictly required that all classes
           # have training data
           - name: num-classes
+          # The channel-wise mean of the training images
+          - name: training-mean
+          # The channel-wise std of the training images
+          - name: training-std
       # Disable workflow-level non-GPU affinity; let GPU resource request handle node selection
       affinity: {}
       container:
@@ -551,6 +563,8 @@ spec:
           - "test_dataloader.dataset.data_root={{inputs.parameters.input-imagery-dir}}"
           - "train_cfg.by_epoch=True"
           - "train_cfg.max_epochs={{inputs.parameters.training-epochs}}"
+          - "data_preprocessor.mean={{inputs.parameters.training-mean}}"
+          - "data_preprocessor.std={{inputs.parameters.training-std}}"
 
     # Upload the trained model, along with the config file and logs to S3. Then remove all the local
     # data.
