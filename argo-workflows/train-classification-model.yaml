@@ -487,10 +487,14 @@ spec:
           - name: workdir
           # Number of epochs to train for (overrides train_cfg.max_epochs in the config).
           - name: training-epochs
+          # The number of prediction logits. Note, it is not strictly required that all classes
+          # have training data
+          - name: num-classes
+            value: 8 # TODO compute this on the fly or enforce that it's provided at the workflow level
       # Disable workflow-level non-GPU affinity; let GPU resource request handle node selection
       affinity: {}
-      script:
-        image: waikatodatamining/mmpretrain:1.2.0_cuda11.1
+      container:
+        image: ghcr.io/open-forest-observatory/mmsegmentation:main
         volumeMounts:
           - name: data
             mountPath: /data
@@ -499,76 +503,21 @@ spec:
             nvidia.com/gpu: 1
           limits:
             nvidia.com/gpu: 1
-        command: ["sh"]
-        source: |
-          set -eu
-
-          INPUT_DIR="{{inputs.parameters.input-imagery-dir}}"
-          SRC_CONFIG="{{inputs.parameters.config-path}}"
-          WORKDIR="{{inputs.parameters.workdir}}"
-          MAX_EPOCHS="{{inputs.parameters.training-epochs}}"
-          # Sentinel path that the config file uses wherever the dataset directory should go
-          PLACEHOLDER="/path/to/intermediate/mmpretrain_dataset"
-
-          mkdir -p "$WORKDIR"
-
-          # Number of classes = number of class subfolders written by reorganize-data. MMPretrain's
-          # CustomDataset infers the class names and their index order from the sorted subfolder
-          # names, so only the count needs to be injected (into the classification head).
-          NUM_CLASSES=$(find "${INPUT_DIR}/train" -mindepth 1 -maxdepth 1 -type d | wc -l)
-          if [ "$NUM_CLASSES" -eq 0 ]; then
-            echo "ERROR: no class subfolders found in ${INPUT_DIR}/train" >&2
-            exit 1
-          fi
-          echo "[train] training on $NUM_CLASSES classes:"
-          find "$INPUT_DIR/train" -mindepth 1 -maxdepth 1 -type d -exec basename {} \; | sort | sed 's/^/  /'
-
-          # Copy the config into the workdir and point every dataset reference at the real directory
-          MODIFIED_CONFIG="${WORKDIR}/$(basename "$SRC_CONFIG")"
-          cp "$SRC_CONFIG" "$MODIFIED_CONFIG"
-          if ! grep -qF "$PLACEHOLDER" "$MODIFIED_CONFIG"; then
-            echo "ERROR: placeholder '$PLACEHOLDER' not found in $SRC_CONFIG" >&2
-            exit 1
-          fi
-          # '|' delimiter since the replacement path contains slashes
-          sed -i "s|${PLACEHOLDER}|${INPUT_DIR}|g" "$MODIFIED_CONFIG"
-          echo "[train] wrote modified config to $MODIFIED_CONFIG"
-
-          # Run standard MMPretrain training, writing logs and checkpoints under the workdir.
-          # num_classes and the iteration count are the only non-finalized fields in the config.
-          # The config's train_cfg must already be iteration-based (no max_epochs key) or the
-          # by_epoch/max_iters override below will conflict with it.
-          # TODO Make sure that all expected classes are there or there will be indexing errors compared
-          # to the expected understanding of the class indices. Maybe this doesn't matter based on
-          # how the prediction results are interpreted.
-
-          # Locate MMPretrain's bundled train.py. `mim train` is not usable in this image: its
-          # is_installed() check reloads pkg_resources, which crashes on the image's setuptools
-          # version (pkg_resources.extern.six was removed). The tools/ dir is packaged under
-          # <mmpretrain>/.mim/ by pip; fall back to a cloned repo location if that is missing.
-          TRAIN_PY=$(python -c "import mmpretrain, pathlib; p = pathlib.Path(mmpretrain.__file__).parent / '.mim' / 'tools' / 'train.py'; print(p if p.exists() else '')")
-          if [ -z "$TRAIN_PY" ]; then
-            for c in /mmpretrain/tools/train.py /root/mmpretrain/tools/train.py; do
-              if [ -f "$c" ]; then TRAIN_PY="$c"; break; fi
-            done
-          fi
-          if [ -z "$TRAIN_PY" ]; then
-            echo "ERROR: could not locate the MMPretrain train.py script" >&2
-            exit 1
-          fi
-
-          # Run standard MMPretrain training, writing logs and checkpoints under the workdir.
-          # num_classes and the iteration count are the only non-finalized fields in the config.
-          # train.py runs single-GPU (non-distributed) by default.
-          set -x
-          python "$TRAIN_PY" "$MODIFIED_CONFIG" \
-            --work-dir "$WORKDIR" \
-            --cfg-options \
-              "model.head.num_classes=${NUM_CLASSES}" \
-              "data_preprocessor.num_classes=${NUM_CLASSES}"
-#              TODO figure out the issue with these parameters and fix it
-#              "train_cfg.by_epoch=True" \
-#              "train_cfg.max_epochs=${MAX_EPOCHS}" \
+        command: ["python"]
+        args:
+          - "/mmpretrain/mmpretrain/tools/train.py"
+          - "{{inputs.parameters.config-path}}"
+          - "--work-dir"
+          - "{{inputs.parameters.workdir}}"
+          - "--cfg-options"
+          - "model.head.num_classes={{inputs.parameters.num-classes}}"
+          - "data_preprocessor.num_classes={{inputs.parameters.num-classes}}"
+          - "data_root={{inputs.parameters.input-imagery-dir}}"
+          - "train_dataloader.dataset.data_root={{inputs.parameters.input-imagery-dir}}"
+          - "val_dataloader.dataset.data_root={{inputs.parameters.input-imagery-dir}}"
+          - "test_dataloader.dataset.data_root={{inputs.parameters.input-imagery-dir}}"
+          - "train_cfg.by_epoch=True"
+          - "train_cfg.max_epochs={{inputs.parameters.training-epochs}}"
 
     # Upload the trained model, along with the config file and logs to S3. Then remove all the local
     # data.
