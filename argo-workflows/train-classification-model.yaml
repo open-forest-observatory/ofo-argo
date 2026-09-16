@@ -129,6 +129,12 @@ spec:
                   value: "{{workflow.parameters.ATTRIBUTE_TO_TRAIN_ON}}"
                 - name: filter-dead-trees
                   value: "{{workflow.parameters.FILTER_DEAD_TREES}}"
+        - - name: image-statistics
+            template: image-statistics
+            arguments:
+              parameters:
+                - name: dataset-folder
+                  value: "{{workflow.parameters.TEMP_FOLDER}}/{{workflow.name}}/training-chips"
         - - name: train-model
             template: train-model
             arguments:
@@ -141,6 +147,8 @@ spec:
                   value: "{{workflow.parameters.TEMP_FOLDER}}/{{workflow.name}}/train-workdir"
                 - name: training-epochs
                   value: "{{workflow.parameters.TRAINING_EPOCHS}}"
+                - name: num-classes
+                  value: "{{=jsonpath(steps['image-statistics'].outputs.result, '$.n_classes')}}"
         - - name: upload-model-and-cleanup
             template: upload-model-and-cleanup
             arguments:
@@ -151,8 +159,6 @@ spec:
                   value: "{{workflow.parameters.MODEL_UPLOAD_DIR_S3}}"
                 - name: workdir-subdir
                   value: "train-workdir"
-        #- - name: cleanup
-        #    template: cleanup
 
 
 ## Definitions of individual step templates
@@ -472,6 +478,34 @@ spec:
               for name in train_not_in_val:
                   (output_dir / "val" / name).mkdir()
 
+    - name: image-statistics
+      inputs:
+        parameters:
+          - name: dataset-folder
+      nodeSelector:
+        feature.node.kubernetes.io/workload-type: cpu
+      script:
+        image: ghcr.io/open-forest-observatory/segmentation_utils:main
+        volumeMounts:
+          - name: data
+            mountPath: /data
+        command: ["python3"]
+        source: |
+          import json
+          import sys
+          from pathlib import Path
+
+          from segmentation_utils.dataset_creation.summary_statistics import compute_summary_statistics
+
+          train_folder = Path("{{inputs.parameters.dataset-folder}}", "train")
+          n_classes = len(list(train_folder.glob("*")))
+
+          means, stds = compute_summary_statistics(train_folder)
+
+          output_dict = {"n_classes": n_classes, "means": means, "stds": stds}
+
+          json.dump(output_dict, sys.stdout)
+
     - name: train-model
       inputs:
         parameters:
@@ -490,11 +524,10 @@ spec:
           # The number of prediction logits. Note, it is not strictly required that all classes
           # have training data
           - name: num-classes
-            value: 8 # TODO compute this on the fly or enforce that it's provided at the workflow level
       # Disable workflow-level non-GPU affinity; let GPU resource request handle node selection
       affinity: {}
       container:
-        image: ghcr.io/open-forest-observatory/mmsegmentation:main
+        image: ghcr.io/open-forest-observatory/mmsegmentation:feature-dr-train-classifier-from-uploaded-data
         volumeMounts:
           - name: data
             mountPath: /data
@@ -505,7 +538,7 @@ spec:
             nvidia.com/gpu: 1
         command: ["python"]
         args:
-          - "/mmpretrain/mmpretrain/tools/train.py"
+          - "/mmpretrain/tools/train.py"
           - "{{inputs.parameters.config-path}}"
           - "--work-dir"
           - "{{inputs.parameters.workdir}}"
