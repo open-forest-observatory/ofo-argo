@@ -43,7 +43,7 @@ spec:
     parameters:
       # Path to a newline-separated file with comma-separated "{processed-drone-dataset-id}, {ground-plot-id}"
       # pairs to process, e.g. "000004_000005, 0010". processed-drone-dataset-id is itself the
-      # composite "{mission_lo}_{mission_hn}" ID for a paired photogrammetry run or the mission_id of a single drone dataset.
+      # composite "{mission_hn}_{mission_lo}" ID for a paired photogrammetry run or the mission_id of a single drone dataset.
       # The mesh CRS is parsed automatically from the photogrammetry log file and does not need to be provided.
       - name: DATASETS_FILE
       # Path to the file of field trees for all plots, with a `plot_id` column
