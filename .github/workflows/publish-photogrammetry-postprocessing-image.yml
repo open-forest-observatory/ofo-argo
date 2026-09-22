@@ -2,10 +2,6 @@ name: Publish photogrammetry-postprocessing image to Github Packages
 
 on:
   push:
-    branches-ignore:
-      # Do not run on pushes to main, because this is separately triggred on pushes to main by the
-      # isort workflow, and we want to make sure it runs after isort, and not twice
-      - main
     # Only build if this folder changes
     paths:
       - 'docker-photogrammetry-postprocessing/**'
