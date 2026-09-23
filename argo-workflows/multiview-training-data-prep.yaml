@@ -621,6 +621,7 @@ spec:
           import geopandas as gpd
           import pandas as pd
           from tree_registration_and_matching.add_attributes import match_field_and_drone_trees
+          from tree_registration_and_matching.utils import ensure_height_is_present, is_overstory
 
           # Input variables
           pair_name = "{{inputs.parameters.drone-ground-pair-name}}"
@@ -666,6 +667,22 @@ spec:
           field_trees.geometry = field_trees.geometry.translate(xoff=x_shift, yoff=y_shift)
           field_bounds.geometry = field_bounds.geometry.translate(xoff=x_shift, yoff=y_shift)
 
+          print(f"A total of {len(field_trees)} were present")
+          # The decay class specifies how severely a dead trees is decaying. At values above decay class 2,
+          # it is expected that the stem may be broken. This would cause issues estimating the height from
+          # DBH, and likely suggests a tree that will overall not be reconstructed well. Therefore, these
+          # trees are dropped prior to matching.
+          decay_mask = (field_trees.decay_class > 2)
+          print(f"Removing {decay_mask.sum()} trees due to decay")
+          field_trees = field_trees[~decay_mask]
+          # Impute height for as many trees as possible, using other attributes
+          field_trees = ensure_height_is_present(field_trees)
+          # Remove understory trees
+          overstory_mask = is_overstory(field_trees)
+          print(f"Removing {(~overstory_mask).sum()} trees due to being understory")
+          field_trees = field_trees[overstory_mask]
+
+          print(f"Matching {len(field_trees)} field trees to {len(drone_trees)} drone trees")
           # Perform matching
           drone_crowns_with_additional_attributes = match_field_and_drone_trees(
               field_trees=field_trees,
@@ -677,6 +694,7 @@ spec:
 
           # Convert back to the original drone CRS
           drone_crowns_with_additional_attributes.to_crs(drone_crown_crs, inplace=True)
+          print(f"Matched {len(drone_crowns_with_additional_attributes)} trees")
 
           # Save the drone crowns with additional field attributes to the file
           output_file.parent.mkdir(exist_ok=True, parents=True)
@@ -768,9 +786,9 @@ spec:
             mountPath: /data
         resources:
           requests:
-            nvidia.com/mig-1g.5gb: 7
+            nvidia.com/gpu: 1
           limits:
-            nvidia.com/mig-1g.5gb: 7
+            nvidia.com/gpu: 1
         command: ["python"]
         source: |
           import json
