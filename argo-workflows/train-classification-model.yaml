@@ -150,6 +150,8 @@ spec:
                   value: "{{workflow.parameters.TEMP_FOLDER}}/{{workflow.name}}/train-workdir"
                 - name: training-epochs
                   value: "{{workflow.parameters.TRAINING_EPOCHS}}"
+                - name: classes
+                  value: "{{=jsonpath(steps['image-statistics'].outputs.result, '$.classes')}}"
                 - name: num-classes
                   value: "{{=jsonpath(steps['image-statistics'].outputs.result, '$.n_classes')}}"
                 - name: training-mean
@@ -447,7 +449,14 @@ spec:
                       n_linked += 1
 
                       # Add an entry to the list which tracks the reorganization
-                      reorganization_summary.append({"image_path": str(dst), "class": output_class, "tree_id": unique_id})
+                      reorganization_summary.append(
+                        {
+                          "image_path": str(dst),
+                          "class": output_class,
+                          "tree_id": unique_id,
+                          "dataset_id": dataset_dir.name
+                        }
+                      )
 
                   print(
                       f"[{dataset_dir.name}] linked {n_linked} chips "
@@ -518,13 +527,14 @@ spec:
           from segmentation_utils.dataset_creation.summary_statistics import compute_summary_statistics
 
           train_folder = Path("{{inputs.parameters.dataset-folder}}", "train")
-          n_classes = len(list(train_folder.glob("*")))
+          classes = [p.name for p in list(train_folder.glob("*"))]
+          n_classes = len(classes)
 
           # Suppress printing so the final output is json-parseable
           with redirect_stdout(open(os.devnull, "w")):
               means, stds = compute_summary_statistics(train_folder)
 
-          output_dict = {"n_classes": n_classes, "means": means, "stds": stds}
+          output_dict = {"classes": classes, "n_classes": n_classes, "means": means, "stds": stds}
 
           json.dump(output_dict, sys.stdout)
 
@@ -543,8 +553,10 @@ spec:
           - name: workdir
           # Number of epochs to train for (overrides train_cfg.max_epochs in the config).
           - name: training-epochs
+          # A list of the names of classes, in alphabetical order
+          - name: classes
           # The number of prediction logits. Note, it is not strictly required that all classes
-          # have training data
+          # have training data. This should match the length of the `classes` list above.
           - name: num-classes
           # The channel-wise mean of the training images
           - name: training-mean
@@ -579,11 +591,9 @@ spec:
           - "train_cfg.max_epochs={{inputs.parameters.training-epochs}}"
           - "data_preprocessor.mean={{inputs.parameters.training-mean}}"
           - "data_preprocessor.std={{inputs.parameters.training-std}}"
-          # TODO uncomment these config overrides once the TreeLevelAccuracy metric is revised to
-          # accept a more general style of input, rather than the L1-L4 formatting from the initial
-          # project
-          # - "train_evaluator.TreeLevelAccuracy.metadata_csv={{inputs.parameters.input-imagery-dir}}/train_reorganization_summary.csv"
-          # - "val_evaluator.TreeLevelAccuracy.metadata_csv={{inputs.parameters.input-imagery-dir}}/val_reorganization_summary.csv"
+          # val_evaluators is a list, so index by integer
+          - "val_evaluator.1.metadata_csv={{inputs.parameters.input-imagery-dir}}/val_reorganization_summary.csv"
+          - "val_evaluator.1.classes={{inputs.parameters.classes}}"
 
     # Upload the trained model, along with the config file and logs to S3. Then remove all the local
     # data.
