@@ -932,16 +932,28 @@ spec:
             DATASET_DIR="{{workflow.parameters.TEMP_FOLDER}}/{{workflow.name}}/${PAIR_NAME}"
             S3_UPLOAD_FOLDER="s3:{{workflow.parameters.S3_TRAINING_OUTPUT_FOLDER}}/${PAIR_NAME}"
 
-            # Sync all chips (all trees retained; downstream handles dead-tree filtering)
-            # Note, sync enforces that all data in the destination is identical, so outdated files
-            # would be deleted if they exist.
+            # Zip each subdirectory of chips independently and upload to S3
             CHIPS_SRC="${DATASET_DIR}/chips/"
             CHIPS_DST="${S3_UPLOAD_FOLDER}/chips"
-            echo "[rclone] Uploading chips: $CHIPS_SRC -> $CHIPS_DST"
-            rclone sync "$CHIPS_SRC" "$CHIPS_DST" \
-              --transfers 8 --checkers 8 --retries 5 --retries-sleep=15s \
-              --s3-upload-cutoff 200Mi --s3-chunk-size 100Mi --s3-upload-concurrency 4 \
+            echo "[rclone] Clearing existing chips destination: $CHIPS_DST"
+            rclone delete "$CHIPS_DST" \
+              --retries 5 --retries-sleep=15s \
               --stats 15s --stats-log-level NOTICE
+            # Install the zip package since it is not present
+            apk add --no-cache zip >/dev/null
+            for dir in "$CHIPS_SRC"/*/; do
+              [ -d "$dir" ] || continue
+              folder_name=$(basename "$dir")
+              zip_file="${DATASET_DIR}/${folder_name}.zip"
+              echo "[zip] Creating ${folder_name}.zip"
+              (cd "$CHIPS_SRC" && zip -r "$zip_file" "$folder_name")
+              echo "[rclone] Uploading ${folder_name}.zip -> ${CHIPS_DST}/${folder_name}.zip"
+              rclone copyto "$zip_file" "${CHIPS_DST}/${folder_name}.zip" \
+                --retries 5 --retries-sleep=15s \
+                --s3-upload-cutoff 200Mi --s3-chunk-size 100Mi --s3-upload-concurrency 4 \
+                --stats 15s --stats-log-level NOTICE
+              rm "$zip_file"
+            done
 
             # Upload matched crowns with species labels and live/dead predictions
             CROWNS_SRC="${DATASET_DIR}/${PAIR_NAME}_matched-tree-crowns_w-live-dead.gpkg"
