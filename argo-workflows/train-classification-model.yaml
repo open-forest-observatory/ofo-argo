@@ -88,6 +88,9 @@ spec:
       # The number of epochs to train for
       - name: TRAINING_EPOCHS
         value: "10"
+      # The version tag for the mmpretrain docker image
+      - name: MMPRETRAIN_IMAGE_TAG
+        value: "main"
       # TODO consider learning rate or other parameters the user might want to specify
       # The class names (and therefore number of classes) can be extracted from the input data.
 
@@ -550,7 +553,7 @@ spec:
       # Disable workflow-level non-GPU affinity; let GPU resource request handle node selection
       affinity: {}
       container:
-        image: ghcr.io/open-forest-observatory/mmsegmentation:feature-dr-train-classifier-from-uploaded-data
+        image: ghcr.io/open-forest-observatory/mmpretrain:{{workflow.parameters.MMPRETRAIN_IMAGE_TAG}}
         volumeMounts:
           - name: data
             mountPath: /data
@@ -561,7 +564,7 @@ spec:
             nvidia.com/gpu: 1
         command: ["python"]
         args:
-          - "/mmpretrain/tools/train.py"
+          - "/app/tools/train.py"
           - "{{inputs.parameters.config-path}}"
           - "--work-dir"
           - "{{inputs.parameters.workdir}}"
