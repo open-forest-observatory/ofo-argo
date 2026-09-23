@@ -37,62 +37,28 @@ spec:
                     - "false"
             topologyKey: kubernetes.io/hostname
 
-  # A list of input parameters available to the workflow at runtime.
-  # These parameters can be referenced throughout the workflow templates using {{workflow.parameters.<name>}}
   arguments:
+    # For documentation, see the sibling README.md file
     parameters:
-      # Path to a file on the mounted volume which specifies what data to train on.
-      # This should be a text file with two columns (comma-separated; no column headers),
-      # representing what dataset to include and whether that dataset should be included in the
-      # training or validation set.
-      # The first column should specify each dataset in the format it appears on S3, e.g. either
-      # <drone_mission_id>_<plot_id> or <drone_mission_id_nadir>_<drone_mission_id_oblique>_<plot_id>
-      # based on whether it's the paired or single mission case. Each dataset should be provided on
-      # a separate line.
-      # The second column should be either the string "train" or "val" identifying that the dataset
-      # should be assigned to that split.
       - name: DATASETS_FILE
-      # A .json file specifying how to remap from the included attributes to final classes, as a flat
-      # object mapping each original attribute value to its final class name, e.g.
-      # {"CADE27": "incense_cedar", "PIPO": "pine", "PILA": "pine"}. The set of output classes is the
-      # set of values. Trees whose attribute value is not a key are dropped. If not provided (empty
-      # string), an identity mapping is used and every observed class is kept.
       - name: CLASS_REMAPPING_FILE
         value: ""
-      # Where on S3 should the model be uploaded. This path should include the bucket name.
       - name: MODEL_UPLOAD_DIR_S3
-      # What column of the downloaded geopackages to use as the class
       - name: ATTRIBUTE_TO_TRAIN_ON
         value: "species_code"
-      # Whether to exclude trees that are predicted as dead from the training data. "true" or "false"
-      # Any strings other than "true" (case-sensitive) will be treated as false. The live/dead status
-      # is predicted during the chipping workflow and included in the per-tree metadata file which
-      # is downloaded from S3 in this workflow.
       - name: FILTER_DEAD_TREES
         value: "true"
-      # What data to use for training. Options are "all" (use all data), "nadir" (use only nadir images), or "oblique" (use only oblique images).
-      # Note that this is only applicable for paired datasets and all data will be used in single-mission datasets.
       - name: MISSION_TYPE
         value: "all"
-      # All  temp products are saved under: TEMP_FOLDER/{{workflow.name}}
       - name: TEMP_FOLDER
         value: "/data/argo-output/temp-dir"
-      # Where the data on S3 is stored. This path should include the bucket name and not have a
-      # trailing slash
       - name: TRAINING_DATA_PATH_S3
         value: "ofo-public/drone/training-data_01"
-        # Path to an MMPretrain config file on /ofo-share. All the fields should be finalized except
-        # the "data_root" field, which will be overriden automatically to reflect the location of
-        # data during training.
       - name: MODEL_CONFIG_PATH
-      # The number of epochs to train for
       - name: TRAINING_EPOCHS
         value: "10"
-      # The version tag for the mmpretrain docker image
       - name: MMPRETRAIN_IMAGE_TAG
         value: "main"
-      # TODO consider learning rate or other parameters the user might want to specify
-      # The class names (and therefore number of classes) can be extracted from the input data.
 
 
 
