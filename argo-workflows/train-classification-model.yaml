@@ -66,6 +66,11 @@ spec:
     - name: data
       persistentVolumeClaim:
         claimName: ceph-share-rw-pvc2
+    # This is required for the pytorch dataloader shared memory
+    - name: dshm
+      emptyDir:
+        medium: Memory
+        sizeLimit: "16Gi"
 
   templates:
     # The 'main' template reads the datasets file and fans out to process each pair in parallel.
@@ -535,6 +540,8 @@ spec:
         volumeMounts:
           - name: data
             mountPath: /data
+          - name: dshm
+            mountPath: /dev/shm
         resources:
           requests:
             nvidia.com/gpu: 1
