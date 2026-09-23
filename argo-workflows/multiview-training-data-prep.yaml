@@ -696,9 +696,27 @@ spec:
           drone_crowns_with_additional_attributes.to_crs(drone_crown_crs, inplace=True)
           print(f"Matched {len(drone_crowns_with_additional_attributes)} trees")
 
-          # Save the drone crowns with additional field attributes to the file
-          output_file.parent.mkdir(exist_ok=True, parents=True)
-          drone_crowns_with_additional_attributes.to_file(output_file)
+          # Drop crowns matched to field trees with no species code
+          drone_crowns_with_additional_attributes = drone_crowns_with_additional_attributes.dropna(subset=["species_code"])
+          # Drop any dead trees. Note that there may be classes other than "L" (live) in the output
+          # but these are assumed to be live as well.
+          drone_crowns_with_additional_attributes = drone_crowns_with_additional_attributes[
+              drone_crowns_with_additional_attributes.live_dead != "D"
+          ]
+          # Drop any crowns that were less than 10m tall
+          drone_crowns_with_additional_attributes = drone_crowns_with_additional_attributes[
+              drone_crowns_with_additional_attributes.height_field > 10
+          ]
+          final_n_matched = len(drone_crowns_with_additional_attributes)
+          print(f"After filtering all matched trees, {final_n_matched} trees remain")
+
+          print(f"Matched {final_n_matched} trees")
+          if final_n_matched >= 10:
+              # Save the drone crowns with additional field attributes to the file
+              output_file.parent.mkdir(exist_ok=True, parents=True)
+              drone_crowns_with_additional_attributes.to_file(output_file)
+          else:
+              raise ValueError(f"Not enough matched trees (only {final_n_matched})")
 
 
     - name: render-instance-labels
