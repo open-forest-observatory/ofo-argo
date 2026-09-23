@@ -498,7 +498,8 @@ spec:
           from segmentation_utils.dataset_creation.summary_statistics import compute_summary_statistics
 
           train_folder = Path("{{inputs.parameters.dataset-folder}}", "train")
-          classes = [p.name for p in list(train_folder.glob("*"))]
+          # It's critical that the classes are sorted
+          classes = sorted([p.name for p in list(train_folder.glob("*"))])
           n_classes = len(classes)
 
           # Suppress printing so the final output is json-parseable
