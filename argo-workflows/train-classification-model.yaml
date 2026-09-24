@@ -1,0 +1,654 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Workflow
+metadata:
+  generateName: train-classification-model-
+spec:
+  serviceAccountName: argo
+  entrypoint: main
+  # Max concurrent pairs to process in parallel. Edit this value directly to change.
+  # (Argo doesn't support parameter substitution for integer fields like parallelism)
+  parallelism: 18
+
+  # Set imagePullPolicy for all containers in the workflow
+  podSpecPatch: |
+    containers:
+      - name: main
+        imagePullPolicy: Always
+
+  # Affinity rules for workflow pods:
+  # 1. nodeAffinity: Schedule on non-GPU nodes by default (GPU tasks override with affinity: {})
+  # 2. podAffinity: Prefer nodes with other running workflow pods to minimize autoscaler evictions
+  affinity:
+    nodeAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        nodeSelectorTerms:
+          - matchExpressions:
+              - key: nvidia.com/gpu.present
+                operator: DoesNotExist
+    podAffinity:
+      preferredDuringSchedulingIgnoredDuringExecution:
+        - weight: 100
+          podAffinityTerm:
+            labelSelector:
+              matchExpressions:
+                - key: workflows.argoproj.io/completed
+                  operator: In
+                  values:
+                    - "false"
+            topologyKey: kubernetes.io/hostname
+
+  arguments:
+    # For documentation, see the sibling README.md file
+    parameters:
+      - name: DATASETS_FILE
+      - name: CLASS_REMAPPING_FILE
+        value: ""
+      - name: MODEL_UPLOAD_DIR_S3
+      - name: ATTRIBUTE_TO_TRAIN_ON
+        value: "species_code"
+      - name: FILTER_DEAD_TREES
+        value: "true"
+      - name: MISSION_TYPE
+        value: "all"
+      - name: TEMP_FOLDER
+        value: "/data/argo-output/temp-dir"
+      - name: TRAINING_DATA_PATH_S3
+        value: "ofo-public/drone/training-data_01"
+      - name: MODEL_CONFIG_PATH
+      - name: TRAINING_EPOCHS
+        value: "10"
+      - name: MMPRETRAIN_IMAGE_TAG
+        value: "main"
+
+
+
+  volumes:
+    - name: data
+      persistentVolumeClaim:
+        claimName: ceph-share-rw-pvc2
+    # This is required for the pytorch dataloader shared memory
+    - name: dshm
+      emptyDir:
+        medium: Memory
+        sizeLimit: "16Gi"
+
+  templates:
+    # The 'main' template reads the datasets file and fans out to process each pair in parallel.
+    - name: main
+      steps:
+        - - name: determine-datasets
+            template: determine-datasets
+        - - name: download-data
+            template: download-data
+            arguments:
+              parameters:
+                - name: dataset-id
+                  value: "{{item.dataset-id}}"
+                - name: search-str
+                  value: "{{item.search-str}}"
+                - name: download-dir
+                  value: "{{workflow.parameters.TEMP_FOLDER}}/{{workflow.name}}/downloads/{{item.train-val}}/{{item.dataset-id}}"
+            withParam: "{{steps.determine-datasets.outputs.result}}"
+        - - name: reorganize-data
+            template: reorganize-data
+            arguments:
+              parameters:
+                - name: input-dir
+                  value: "{{workflow.parameters.TEMP_FOLDER}}/{{workflow.name}}/downloads"
+                - name: output-dir
+                  value: "{{workflow.parameters.TEMP_FOLDER}}/{{workflow.name}}/training-chips"
+                - name: remap-file
+                  value: "{{workflow.parameters.CLASS_REMAPPING_FILE}}"
+                - name: attribute-to-train-on
+                  value: "{{workflow.parameters.ATTRIBUTE_TO_TRAIN_ON}}"
+                - name: filter-dead-trees
+                  value: "{{workflow.parameters.FILTER_DEAD_TREES}}"
+        - - name: image-statistics
+            template: image-statistics
+            arguments:
+              parameters:
+                - name: dataset-folder
+                  value: "{{workflow.parameters.TEMP_FOLDER}}/{{workflow.name}}/training-chips"
+        - - name: train-model
+            template: train-model
+            arguments:
+              parameters:
+                - name: input-imagery-dir
+                  value: "{{workflow.parameters.TEMP_FOLDER}}/{{workflow.name}}/training-chips"
+                - name: config-path
+                  value: "{{workflow.parameters.MODEL_CONFIG_PATH}}"
+                - name: workdir
+                  value: "{{workflow.parameters.TEMP_FOLDER}}/{{workflow.name}}/train-workdir"
+                - name: training-epochs
+                  value: "{{workflow.parameters.TRAINING_EPOCHS}}"
+                - name: classes
+                  value: "{{=jsonpath(steps['image-statistics'].outputs.result, '$.classes')}}"
+                - name: num-classes
+                  value: "{{=jsonpath(steps['image-statistics'].outputs.result, '$.n_classes')}}"
+                - name: training-mean
+                  value: "{{=jsonpath(steps['image-statistics'].outputs.result, '$.means')}}"
+                - name: training-std
+                  value: "{{=jsonpath(steps['image-statistics'].outputs.result, '$.stds')}}"
+        - - name: upload-model-and-cleanup
+            template: upload-model-and-cleanup
+            arguments:
+              parameters:
+                - name: data-dir
+                  value: "{{workflow.parameters.TEMP_FOLDER}}/{{workflow.name}}"
+                - name: model-upload-dir-s3
+                  value: "{{workflow.parameters.MODEL_UPLOAD_DIR_S3}}"
+                - name: workdir-subdir
+                  value: "train-workdir"
+
+
+## Definitions of individual step templates
+
+    # Parse the newline-separated list of datasets and return a list of dicts with the dataset-id and
+    # search-str for each dataset. The search-str is used to filter the files to download from S3.
+    - name: determine-datasets
+      nodeSelector:
+        feature.node.kubernetes.io/workload-type: cpu
+      script:
+        image: python:3.9
+        volumeMounts:
+          - name: data
+            mountPath: /data
+        command: ["python3"]
+        source: |
+          import json
+          import sys
+          import csv
+
+          datasets_file = "{{workflow.parameters.DATASETS_FILE}}"
+          mission_type = "{{workflow.parameters.MISSION_TYPE}}"
+
+          with open(datasets_file, "r") as f:
+              split_lines = csv.reader(f.readlines())
+
+          # Convert to a list of dicts in case we want to add more information per dataset in the future
+
+          output_dicts = []
+          for split_line in split_lines:
+              dataset, train_val = split_line
+              dataset = dataset.strip()
+              train_val = train_val.strip()
+              if not dataset:
+                  # Skip blank lines (e.g. a trailing newline in the datasets file)
+                  continue
+              split_dataset = dataset.split("_")
+              if mission_type == "all" or len(split_dataset) == 2:
+                  # Select all files
+                  search_str = "*.zip"
+              elif mission_type in ["nadir", "oblique"]:
+                  # Assume that the dataset is in the format <drone_mission_id_nadir>_<drone_mission_id_oblique>_<plot_id>
+                  nadir_str, oblique_str, _ = split_dataset
+                  search_str = nadir_str if mission_type == "nadir" else oblique_str
+                  # Select all files under a matching folder name
+                  search_str = f"{search_str}_images.zip"
+              else:
+                  raise ValueError(f"Invalid mission type: {mission_type}")
+
+              output_dicts.append({
+                  "dataset-id": dataset,
+                  "search-str": search_str,
+                  "train-val": train_val,
+              })
+
+
+          json.dump(output_dicts, sys.stdout)
+
+    - name: download-data
+      inputs:
+        parameters:
+          - name: dataset-id
+          - name: search-str
+          - name: download-dir
+      nodeSelector:
+        feature.node.kubernetes.io/workload-type: cpu
+      container:
+        image: rclone/rclone:sha-7a53f24
+        volumeMounts:
+          - name: data
+            mountPath: /data
+        resources:
+          requests:
+            cpu: 1
+            memory: "2Gi"
+          limits:
+            memory: "4Gi"
+        env:
+          - name: RCLONE_CONFIG_S3_TYPE
+            value: "s3"
+          - name: RCLONE_CONFIG_S3_PROVIDER
+            valueFrom:
+              secretKeyRef:
+                name: s3-credentials
+                key: provider
+          - name: RCLONE_CONFIG_S3_ENDPOINT
+            valueFrom:
+              secretKeyRef:
+                name: s3-credentials
+                key: endpoint
+          - name: RCLONE_CONFIG_S3_ACCESS_KEY_ID
+            valueFrom:
+              secretKeyRef:
+                name: s3-credentials
+                key: access_key
+          - name: RCLONE_CONFIG_S3_SECRET_ACCESS_KEY
+            valueFrom:
+              secretKeyRef:
+                name: s3-credentials
+                key: secret_key
+        command: ["/bin/sh", "-lc"]
+        args:
+          - |
+            set -euo pipefail
+            DATASET_ID="{{inputs.parameters.dataset-id}}"
+            SEARCH_STR="{{inputs.parameters.search-str}}"
+            DOWNLOAD_DIR="{{inputs.parameters.download-dir}}"
+            S3_FOLDER="{{workflow.parameters.TRAINING_DATA_PATH_S3}}"
+
+            # Metadata
+            echo "[rclone] Downloading metadata file : s3:${S3_FOLDER}/${DATASET_ID}/${DATASET_ID}_matched-trees.gpkg -> $DOWNLOAD_DIR"
+            rclone copy "s3:${S3_FOLDER}/${DATASET_ID}/${DATASET_ID}_matched-trees.gpkg" "$DOWNLOAD_DIR" \
+              --transfers 1 --checkers 1 --retries 5 --retries-sleep=15s \
+              --stats 15s --stats-log-level NOTICE
+            echo "[download] metadata completed"
+
+            # Chipped imagery
+            echo "[rclone] Downloading chipped imagery zip files : s3:${S3_FOLDER}/${DATASET_ID} -> $DOWNLOAD_DIR"
+            rclone copy "s3:${S3_FOLDER}/${DATASET_ID}" "$DOWNLOAD_DIR" \
+              --include "${SEARCH_STR}" \
+              --transfers 2 --checkers 2 --retries 5 --retries-sleep=15s \
+              --stats 15s --stats-log-level NOTICE
+            echo "[download] chips completed"
+
+            # Extract each downloaded zip into DOWNLOAD_DIR, then delete it
+            # Install unzip because it is not present
+            # TODO consider an image that has both rclone and unzip in the future
+            apk add --no-cache unzip >/dev/null
+            find "$DOWNLOAD_DIR/chips" -maxdepth 1 -name "*.zip" | while read -r zip_file; do
+              echo "[unzip] Extracting $(basename "$zip_file")"
+              unzip -q "$zip_file" -d "$DOWNLOAD_DIR/chips"
+              rm "$zip_file"
+            done
+            echo "[unzip] all chip zips extracted"
+
+    - name: reorganize-data
+      inputs:
+        parameters:
+          - name: input-dir
+          - name: output-dir
+          - name: remap-file
+          - name: attribute-to-train-on
+          - name: filter-dead-trees
+          - name: dead-trees-attribute
+            value: "live_dead_prediction"
+      nodeSelector:
+        feature.node.kubernetes.io/workload-type: cpu
+      script:
+        image: uhoosborne/geopandas@sha256:42bdd13882321a2647668446dae9ee1a8d76f2ac95aa8c3cb4e8eacadd5070d9
+        volumeMounts:
+          - name: data
+            mountPath: /data
+        resources:
+          requests:
+            cpu: 1
+            memory: "2Gi"
+          limits:
+            memory: "4Gi"
+        command: ["python"]
+        source: |
+          import json
+          import os
+          import shutil
+          from collections import defaultdict
+          from pathlib import Path
+
+          import geopandas as gpd
+          import pandas as pd
+          import numpy as np
+
+          input_dir = Path("{{inputs.parameters.input-dir}}")
+          output_dir = Path("{{inputs.parameters.output-dir}}")
+          remap_file = "{{inputs.parameters.remap-file}}".strip()
+          attribute = "{{inputs.parameters.attribute-to-train-on}}"
+          filter_dead_trees = "{{inputs.parameters.filter-dead-trees}}" == "true"
+          dead_trees_attribute = "{{inputs.parameters.dead-trees-attribute}}"
+          # Per-dataset folders each contain a "<dataset-id>_matched-trees.gpkg" and a "chips/" tree
+          # of "<unique_ID>.png" chips (multiple views per tree, one per source image subfolder).
+          GPKG_SUFFIX = "_matched-trees.gpkg"
+          IMAGE_EXTS = {".png", ".jpg", ".jpeg"}
+          ID_COLUMN = "unique_ID"
+
+          def link_or_copy(src, dst):
+              """Hardlink src -> dst, falling back to a copy if they are on different filesystems."""
+              dst.parent.mkdir(exist_ok=True, parents=True)
+              try:
+                  os.link(src, dst)
+              except OSError:
+                  shutil.copy2(src, dst)
+
+          # --- Load the class remapping (original attribute value -> final class name) ---
+          # With no file provided, fall back to an identity mapping that keeps every observed class.
+          if remap_file:
+              with open(remap_file, "r") as f:
+                  class_remapping = {str(k): str(v) for k, v in json.load(f).items()}
+              identity_mapping = False
+              print(
+                  f"Loaded class remapping: {len(class_remapping)} attribute values -> "
+                  f"{len(set(class_remapping.values()))} output classes"
+              )
+          else:
+              class_remapping = {}
+              identity_mapping = True
+              print("No class remapping file provided; keeping every class unchanged")
+
+          if not (input_dir / "train").is_dir() or not (input_dir / "val").is_dir():
+              raise ValueError(f"Both train and val subfolders of {input_dir} must be present")
+
+          for train_val in ("train", "val"):
+              # This saves information about the restructuring
+              reorganization_summary = []
+
+              # Create the subfolder path that holds all datasets for either train or val
+              input_dir_train_val = (input_dir / train_val)
+              # --- List the per-dataset folders (those holding a *_matched-trees.gpkg) ---
+              dataset_dirs = sorted(
+                  d for d in input_dir_train_val.iterdir()
+                  if d.is_dir() and any(d.glob(f"*{GPKG_SUFFIX}"))
+              )
+              if not dataset_dirs:
+                  raise ValueError(
+                      f"No dataset folders containing a *{GPKG_SUFFIX} file were found under {input_dir_train_val}"
+                  )
+              print(f"Found {len(dataset_dirs)} dataset folder(s): {[d.name for d in dataset_dirs]}")
+
+              # --- Per-class counter: how many chips have been written for each class so far ---
+              class_counters = defaultdict(int)
+              skipped_unmapped = defaultdict(int)  # raw attribute value -> chips skipped
+
+              for dataset_dir in dataset_dirs:
+                  gpkg_path = sorted(dataset_dir.glob(f"*{GPKG_SUFFIX}"))[0]
+                  chips_dir = dataset_dir / "chips"
+                  if not chips_dir.is_dir():
+                      print(f"[{dataset_dir.name}] no chips/ directory; skipping")
+                      continue
+
+                  # 1. Load the geopackage and remap the class attribute for each tree
+                  trees = gpd.read_file(gpkg_path)
+                  for required in (ID_COLUMN, attribute):
+                      if required not in trees.columns:
+                          raise ValueError(
+                              f"[{dataset_dir.name}] column '{required}' not found in {gpkg_path.name}; "
+                              f"available columns: {list(trees.columns)}"
+                          )
+                  # Normalize IDs to strings up front so they compare correctly against chip filename
+                  # stems everywhere below, including dead_tree_IDs (computed before any filtering).
+                  trees[ID_COLUMN] = trees[ID_COLUMN].astype(str)
+
+                  # Drop rows which are not predicted as live if requested
+                  if filter_dead_trees:
+                      n_total = len(trees)
+                      if dead_trees_attribute not in trees.columns:
+                          raise ValueError(
+                              f"[{dataset_dir.name}] column '{dead_trees_attribute}' not found in {gpkg_path.name}; "
+                              f"available columns: {list(trees.columns)}"
+                          )
+
+                      live_trees = trees[dead_trees_attribute] == "Live"
+                      dead_tree_IDs = set(trees.loc[~live_trees, ID_COLUMN])
+                      trees = trees[live_trees]
+
+                      print(f"Dropped {n_total - len(trees)} of {n_total} trees predicted as dead from {dataset_dir.name}")
+                  else:
+                      dead_tree_IDs = set()
+
+                  raw_by_id = dict(zip(trees[ID_COLUMN], trees[attribute]))
+                  class_by_id = {}
+                  for unique_id, raw_class in raw_by_id.items():
+                      if pd.isna(raw_class):
+                          continue
+                      raw_class = str(raw_class)
+                      if identity_mapping:
+                          class_by_id[unique_id] = raw_class
+                      elif raw_class in class_remapping:
+                          class_by_id[unique_id] = class_remapping[raw_class]
+                      # else: attribute value absent from the remapping file -> drop this tree
+
+                  # 2. Hardlink every chip to the output folder for its remapped class
+                  n_linked = 0
+                  for chip_path in sorted(chips_dir.rglob("*")):
+                      if not chip_path.is_file() or chip_path.suffix.lower() not in IMAGE_EXTS:
+                          continue
+                      unique_id = chip_path.stem
+                      output_class = class_by_id.get(unique_id)
+                      if output_class is None:
+                          if unique_id in raw_by_id:
+                              skipped_unmapped[str(raw_by_id[unique_id])] += 1
+                          elif unique_id not in dead_tree_IDs:
+                              raise ValueError(
+                                  f"Unique ID {unique_id} not found in {gpkg_path.name}"
+                              )
+                          continue
+
+                      class_dir = output_dir / train_val / output_class
+                      dst = class_dir / f"{class_counters[output_class]:06d}{chip_path.suffix.lower()}"
+                      link_or_copy(chip_path, dst)
+                      class_counters[output_class] += 1
+                      n_linked += 1
+
+                      # Add an entry to the list which tracks the reorganization
+                      reorganization_summary.append(
+                        {
+                          "image_path": str(dst),
+                          "class": output_class,
+                          "tree_id": unique_id,
+                          "dataset_id": dataset_dir.name
+                        }
+                      )
+
+                  print(
+                      f"[{dataset_dir.name}] linked {n_linked} chips "
+                      f"from {len(class_by_id)} matched trees"
+                  )
+
+              # --- Summary ---
+              total = sum(class_counters.values())
+              print(f"\n=== Reorganization summary ({train_val})===")
+              for output_class in sorted(class_counters):
+                  print(f"  {output_class}: {class_counters[output_class]} chips")
+              print(f"  TOTAL: {total} chips across {len(class_counters)} class(es)")
+              if skipped_unmapped:
+                  print("Chips skipped (attribute value null or absent from the remapping file):")
+                  for raw, count in sorted(skipped_unmapped.items(), key=lambda kv: -kv[1]):
+                      print(f"  {raw!r}: {count}")
+
+              if total == 0:
+                  raise ValueError(
+                      "No chips were written; check ATTRIBUTE_TO_TRAIN_ON and the remapping file"
+                  )
+
+              # Save out the summary file
+              reorganization_summary = pd.DataFrame(reorganization_summary)
+              reorganization_summary_path = Path(output_dir, f"{train_val}_reorganization_summary.csv")
+              reorganization_summary.to_csv(reorganization_summary_path)
+
+          # Ensure matching train and val folders
+          train_class_names = {p.name for p in (output_dir / "train").glob("*")}
+          val_class_names = {p.name for p in (output_dir / "val").glob("*")}
+
+          val_not_in_train = val_class_names - train_class_names
+          train_not_in_val = train_class_names - val_class_names
+
+          # This is an error because there are classes we clearly want to evaluate but we'll never
+          # generate predictions for them.
+          if len(val_not_in_train) != 0:
+              raise ValueError(f"The following classes were in val but not train: {sorted(val_not_in_train)}")
+
+          # This case is slightly less severe because despite being unable to assess the quality of
+          # these classes, they will still be present in the trained model's predictions.
+          if len(train_not_in_val) != 0:
+              print(f"Creating empty val folders for classes in train but not val: {sorted(train_not_in_val)}")
+              for name in train_not_in_val:
+                  (output_dir / "val" / name).mkdir()
+
+    - name: image-statistics
+      inputs:
+        parameters:
+          - name: dataset-folder
+      nodeSelector:
+        feature.node.kubernetes.io/workload-type: cpu
+      script:
+        image: ghcr.io/open-forest-observatory/segmentation_utils:main
+        volumeMounts:
+          - name: data
+            mountPath: /data
+        command: ["python3"]
+        source: |
+          import json
+          import sys
+          import os
+          from pathlib import Path
+          from contextlib import redirect_stdout
+
+          from segmentation_utils.dataset_creation.summary_statistics import compute_summary_statistics
+
+          train_folder = Path("{{inputs.parameters.dataset-folder}}", "train")
+          # It's critical that the classes are sorted
+          classes = sorted([p.name for p in list(train_folder.glob("*"))])
+          n_classes = len(classes)
+
+          # Suppress printing so the final output is json-parseable
+          with redirect_stdout(open(os.devnull, "w")):
+              means, stds = compute_summary_statistics(train_folder)
+
+          output_dict = {"classes": classes, "n_classes": n_classes, "means": means, "stds": stds}
+
+          json.dump(output_dict, sys.stdout)
+
+    - name: train-model
+      inputs:
+        parameters:
+          # Directory of class subfolders produced by reorganize-data (one subfolder per class,
+          # each holding the training chips for that class).
+          - name: input-imagery-dir
+          # MMPretrain config file. Every field should be finalized except `data_root` (rewritten
+          # here) and the class-dependent fields (num_classes / class list, injected here). For the
+          # iteration override below to be consistent, the config's schedulers, val_interval and
+          # checkpoint hook should also be iteration-based (by_epoch=False).
+          - name: config-path
+          # Directory where the modified config, logs and checkpoints are written.
+          - name: workdir
+          # Number of epochs to train for (overrides train_cfg.max_epochs in the config).
+          - name: training-epochs
+          # A list of the names of classes, in alphabetical order
+          - name: classes
+          # The number of prediction logits. Note, it is not strictly required that all classes
+          # have training data. This should match the length of the `classes` list above.
+          - name: num-classes
+          # The channel-wise mean of the training images
+          - name: training-mean
+          # The channel-wise std of the training images
+          - name: training-std
+      # Disable workflow-level non-GPU affinity; let GPU resource request handle node selection
+      affinity: {}
+      container:
+        image: ghcr.io/open-forest-observatory/mmpretrain:{{workflow.parameters.MMPRETRAIN_IMAGE_TAG}}
+        volumeMounts:
+          - name: data
+            mountPath: /data
+          - name: dshm
+            mountPath: /dev/shm
+        resources:
+          requests:
+            nvidia.com/gpu: 1
+          limits:
+            nvidia.com/gpu: 1
+        command: ["python"]
+        args:
+          - "/app/tools/train.py"
+          - "{{inputs.parameters.config-path}}"
+          - "--work-dir"
+          - "{{inputs.parameters.workdir}}"
+          - "--cfg-options"
+          - "model.head.num_classes={{inputs.parameters.num-classes}}"
+          - "data_preprocessor.num_classes={{inputs.parameters.num-classes}}"
+          - "data_root={{inputs.parameters.input-imagery-dir}}"
+          - "train_dataloader.dataset.data_root={{inputs.parameters.input-imagery-dir}}"
+          - "val_dataloader.dataset.data_root={{inputs.parameters.input-imagery-dir}}"
+          - "test_dataloader.dataset.data_root={{inputs.parameters.input-imagery-dir}}"
+          - "train_cfg.by_epoch=True"
+          - "train_cfg.max_epochs={{inputs.parameters.training-epochs}}"
+          - "data_preprocessor.mean={{inputs.parameters.training-mean}}"
+          - "data_preprocessor.std={{inputs.parameters.training-std}}"
+          # val_evaluators is a list, so index by integer
+          - "val_evaluator.1.metadata_csv={{inputs.parameters.input-imagery-dir}}/val_reorganization_summary.csv"
+          - "val_evaluator.1.classes={{inputs.parameters.classes}}"
+
+    # Upload the trained model, along with the config file and logs to S3. Then remove all the local
+    # data.
+    - name: upload-model-and-cleanup
+      inputs:
+        parameters:
+          - name: data-dir
+          - name: model-upload-dir-s3
+          - name: workdir-subdir
+      nodeSelector:
+        feature.node.kubernetes.io/workload-type: cpu
+      container:
+        image: rclone/rclone:sha-7a53f24
+        volumeMounts:
+          - name: data
+            mountPath: /data
+        resources:
+          requests:
+            cpu: 500m
+            memory: "256Mi"
+          limits:
+            memory: "1Gi"
+        env:
+          - name: RCLONE_CONFIG_S3_TYPE
+            value: "s3"
+          - name: RCLONE_CONFIG_S3_PROVIDER
+            valueFrom:
+              secretKeyRef:
+                name: s3-credentials
+                key: provider
+          - name: RCLONE_CONFIG_S3_ENDPOINT
+            valueFrom:
+              secretKeyRef:
+                name: s3-credentials
+                key: endpoint
+          - name: RCLONE_CONFIG_S3_ACCESS_KEY_ID
+            valueFrom:
+              secretKeyRef:
+                name: s3-credentials
+                key: access_key
+          - name: RCLONE_CONFIG_S3_SECRET_ACCESS_KEY
+            valueFrom:
+              secretKeyRef:
+                name: s3-credentials
+                key: secret_key
+        command: ["/bin/sh", "-lc"]
+        args:
+          - |
+            set -euo pipefail
+            # Parse inputs
+            DATA_DIR="{{inputs.parameters.data-dir}}"
+            WORKDIR="${DATA_DIR}/{{inputs.parameters.workdir-subdir}}"
+            MODEL_UPLOAD_DIR_S3="s3:{{inputs.parameters.model-upload-dir-s3}}"
+
+            # Upload to S3
+            echo "[rclone] Uploading model training folder: $WORKDIR -> $MODEL_UPLOAD_DIR_S3"
+            rclone sync "$WORKDIR" "$MODEL_UPLOAD_DIR_S3" \
+              --transfers 8 --checkers 8 --retries 5 --retries-sleep=15s \
+              --s3-upload-cutoff 200Mi --s3-chunk-size 100Mi --s3-upload-concurrency 4 \
+              --stats 15s --stats-log-level NOTICE
+
+            echo "[rclone] Upload successful for ${WORKDIR}"
+
+            # Delete all data
+            echo "[cleanup] Removing local dataset directory: $DATA_DIR"
+            rm -rf "$DATA_DIR"
+            echo "[cleanup] Done"

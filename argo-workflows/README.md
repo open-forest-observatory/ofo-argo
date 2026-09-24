@@ -124,3 +124,34 @@ argo submit -n argo argo-workflows/ingest-under-canopy-workflow.yaml \
 ```
 
 The processing will fail for a given collect if no images both match the specified file prefixes and the specified time bounds. If there is a gap in image timestamps, this will be logged as a warning, but will not cause the dataset to fail. These warnings can be viewed in the `report-warnings` step in the Argo UI. This step will only be run after all datasets finish.
+
+# Train classification model on pre-chipped imagery
+The `Create chips for model training` workflow creates training data consisting of masked views of individual trees. This workflow (`train-classification-model.yaml`) downloads this data from S3 and uses it to train a classificaiton model that can be used to perform species prediction on unseen data. This model is then uploaded to S3 and all intermediate local data is deleted.
+
+This workflow runs by first downloading all the required chipped data and the tree-level metadata saved as a `.gpkg` data format. At this stage, there is the option to filter based on whether the data comes from oblique or nadir views, but only in the cases where the data is generated from paired missions. These datasets are organized into train and test folders based on the user specification, but all files retain their original naming. Then, using the tree-level metadata, these files are reorganzed to be sequentially numbered in class-level folders. The user can optionally specify a class-level remapping to update and optionally merge classes contained in the metadata.
+
+From there, a model is trained using the `MMPretrain` framework. Once trained, this model is uploaded to S3 along with the associated config file and training logs. Finally, the downloaded data is all removed from local storage.
+
+## Parameters
+
+- **`DATASETS_FILE`** (required): Path to a file on the mounted volume specifying what data to train on. This should be a text file with two columns (comma-separated; no column headers). The first column specifies each dataset in the format it appears on S3 — either `<drone_mission_id>_<plot_id>` or `<drone_mission_id_nadir>_<drone_mission_id_oblique>_<plot_id>` for the single or paired mission case. The second column should be either `"train"` or `"val"`.
+
+- **`CLASS_REMAPPING_FILE`** (default: `""`): A `.json` file specifying how to remap input attribute values to final class names, as a flat object, e.g. `{"CADE27": "incense_cedar", "PIPO": "pine", "PILA": "pine"}`. The set of output classes is the set of values. Trees whose attribute value is not a key are dropped. If not provided (empty string), an identity mapping is used and every observed class is kept.
+
+- **`MODEL_UPLOAD_DIR_S3`** (required): Where on S3 the trained model should be uploaded. Should include the bucket name.
+
+- **`ATTRIBUTE_TO_TRAIN_ON`** (default: `"species_code"`): The column of the downloaded geopackages to use as the training class label.
+
+- **`FILTER_DEAD_TREES`** (default: `"true"`): Whether to exclude trees predicted as dead from the training data. Any value other than `"true"` (case-sensitive) is treated as false. Live/dead status is predicted during the chipping workflow and included in the per-tree metadata file downloaded from S3.
+
+- **`MISSION_TYPE`** (default: `"all"`): Which imagery to use for training. Options are `"all"`, `"nadir"`, or `"oblique"`. Only applies to paired datasets; all data is used for single-mission datasets.
+
+- **`TEMP_FOLDER`** (default: `"/data/argo-output/temp-dir"`): Base directory for temporary products. All temp outputs for a run are saved under `TEMP_FOLDER/<workflow-name>`.
+
+- **`TRAINING_DATA_PATH_S3`** (default: `"ofo-public/drone/training-data_01"`): S3 path where the chipped training data is stored. Should include the bucket name and no trailing slash.
+
+- **`MODEL_CONFIG_PATH`** (required): Path to an MMPretrain config file on `/ofo-share`. All fields should be finalized except `data_root`, which is overridden automatically to point to the downloaded training data.
+
+- **`TRAINING_EPOCHS`** (default: `"10"`): Number of epochs to train for.
+
+- **`MMPRETRAIN_IMAGE_TAG`** (default: `"main"`): Version tag for the mmpretrain Docker image.
