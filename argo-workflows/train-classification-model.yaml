@@ -178,13 +178,13 @@ spec:
               split_dataset = dataset.split("_")
               if mission_type == "all" or len(split_dataset) == 2:
                   # Select all files
-                  search_str = "**/**"
+                  search_str = "*.zip"
               elif mission_type in ["nadir", "oblique"]:
                   # Assume that the dataset is in the format <drone_mission_id_nadir>_<drone_mission_id_oblique>_<plot_id>
                   nadir_str, oblique_str, _ = split_dataset
                   search_str = nadir_str if mission_type == "nadir" else oblique_str
                   # Select all files under a matching folder name
-                  search_str = f"**/{search_str}_images/**"
+                  search_str = f"{search_str}_images.zip"
               else:
                   raise ValueError(f"Invalid mission type: {mission_type}")
 
@@ -256,12 +256,23 @@ spec:
             echo "[download] metadata completed"
 
             # Chipped imagery
-            echo "[rclone] Downloading chipped imagery : s3:${S3_FOLDER}/${DATASET_ID} -> $DOWNLOAD_DIR"
+            echo "[rclone] Downloading chipped imagery zip files : s3:${S3_FOLDER}/${DATASET_ID} -> $DOWNLOAD_DIR"
             rclone copy "s3:${S3_FOLDER}/${DATASET_ID}" "$DOWNLOAD_DIR" \
               --include "${SEARCH_STR}" \
-              --transfers 8 --checkers 8 --retries 5 --retries-sleep=15s \
+              --transfers 2 --checkers 2 --retries 5 --retries-sleep=15s \
               --stats 15s --stats-log-level NOTICE
             echo "[download] chips completed"
+
+            # Extract each downloaded zip into DOWNLOAD_DIR, then delete it
+            # Install unzip because it is not present
+            # TODO consider an image that has both rclone and unzip in the future
+            apk add --no-cache unzip >/dev/null
+            find "$DOWNLOAD_DIR/chips" -maxdepth 1 -name "*.zip" | while read -r zip_file; do
+              echo "[unzip] Extracting $(basename "$zip_file")"
+              unzip -q "$zip_file" -d "$DOWNLOAD_DIR/chips"
+              rm "$zip_file"
+            done
+            echo "[unzip] all chip zips extracted"
 
     - name: reorganize-data
       inputs:
