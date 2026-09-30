@@ -117,6 +117,8 @@ spec:
         value: "main"
       - name: CV_UTILS_IMAGE_TAG
         value: "main"
+      - name: MMPRETRAIN_IMAGE_TAG
+        value: "main"
 
   volumes:
     - name: data
@@ -797,8 +799,8 @@ spec:
           - name: output-path
       # Disable workflow-level non-GPU affinity; let GPU resource request handle node selection
       affinity: {}
-      script:
-        image: waikatodatamining/mmpretrain:1.2.0_cuda11.1
+      container:
+        image: ghcr.io/open-forest-observatory/mmpretrain:{{workflow.parameters.MMPRETRAIN_IMAGE_TAG}}
         volumeMounts:
           - name: data
             mountPath: /data
@@ -807,33 +809,14 @@ spec:
             nvidia.com/gpu: 1
           limits:
             nvidia.com/gpu: 1
-        command: ["python"]
-        source: |
-          import json
-          from pathlib import Path
-
-          from mmpretrain.apis import ImageClassificationInferencer
-
-          input_folder = Path("{{inputs.parameters.chips-folder}}")
-          config_path = "{{inputs.parameters.config-path}}"
-          model_path = "{{inputs.parameters.model-path}}"
-          output_path = Path("{{inputs.parameters.output-path}}")
-
-          input_files = [
-              str(f)
-              for f in Path(input_folder).rglob("*")
-              if f.suffix.lower() in [".jpg", ".jpeg", ".png"]
-          ]
-          print(f"Running on {len(input_files)} files")
-
-          inferencer = ImageClassificationInferencer(model=config_path, pretrained=model_path, device="cuda")
-          results = inferencer(input_files, batch_size=128)
-          pred_labels = [r["pred_class"] for r in results]
-          results_per_file = {str(k): v for k, v in zip(input_files, pred_labels)}
-
-          output_path.parent.mkdir(exist_ok=True, parents=True)
-          with open(output_path, "w") as file_h:
-              json.dump(results_per_file, file_h)
+        command: [
+          "python",
+          "/app/tools/predict.py",
+          "{{inputs.parameters.chips-folder}}",
+          "{{inputs.parameters.config-path}}",
+          "{{inputs.parameters.model-path}}",
+          "{{inputs.parameters.output-path}}",
+        ]
 
     # Assign per-chip live/dead predictions to tree crowns via majority vote, producing
     # a matched crowns file with a live_dead_prediction column. All trees are retained
