@@ -119,6 +119,8 @@ spec:
         value: "main"
       - name: MMPRETRAIN_IMAGE_TAG
         value: "main"
+      - name: TREE_CLASSIFICATION_FRAMEWORK_IMAGE_TAG
+        value: "main"
 
   volumes:
     - name: data
@@ -831,8 +833,8 @@ spec:
           - name: output-crowns-file
       nodeSelector:
         feature.node.kubernetes.io/workload-type: cpu
-      script:
-        image: uhoosborne/geopandas@sha256:42bdd13882321a2647668446dae9ee1a8d76f2ac95aa8c3cb4e8eacadd5070d9
+      container:
+        image: ghcr.io/open-forest-observatory/tree-classification-framework:{{workflow.parameters.TREE_CLASSIFICATION_FRAMEWORK_IMAGE_TAG}}
         volumeMounts:
           - name: data
             mountPath: /data
@@ -842,54 +844,15 @@ spec:
             memory: "2Gi"
           limits:
             memory: "4Gi"
-        command: ["python"]
-        source: |
-          import json
-          import geopandas as gpd
-          import pandas as pd
-          import numpy as np
-          from pathlib import Path
-
-          column_name = "live_dead_prediction"
-          image_level_predictions_file = "{{inputs.parameters.image-level-predictions-file}}"
-          input_crowns_path = Path("{{inputs.parameters.input-crowns-file}}")
-          output_crowns_path = Path("{{inputs.parameters.output-crowns-file}}")
-
-          with open(image_level_predictions_file, "r") as f:
-              preds = json.load(f)
-
-          input_files = list(preds.keys())
-          labels = list(preds.values())
-          tree_IDs = [Path(f).stem for f in input_files]
-
-          preds_df = pd.DataFrame({"tree_ID": tree_IDs, column_name: labels})
-
-          def fair_mode(series):
-              """Tie break randomly if there are two or more options with equal counts."""
-              modes = series.mode()
-              mode = np.random.choice(modes)
-              n_preds = len(series)
-              frac_matching = (series == mode).sum() / n_preds
-              return pd.Series({
-                  column_name: mode,
-                  f"{column_name}_frac_matching_mode": frac_matching,
-                  f"{column_name}_n_preds": n_preds,
-              })
-
-          predictions = preds_df.groupby(["tree_ID"]).apply(
-              lambda x: fair_mode(x[column_name]), include_groups=False
-          ).reset_index().rename(columns={"tree_ID": "unique_ID"})
-
-          crowns = gpd.read_file(input_crowns_path)
-          crowns["unique_ID"] = crowns["unique_ID"].astype(str)
-
-          # Avoid collision with existing column by removing it if present
-          crowns.drop(columns=column_name, inplace=True, errors="ignore")
-          # Merge in the predictions
-          crowns = crowns.merge(predictions, on="unique_ID", how="left")
-
-          output_crowns_path.parent.mkdir(parents=True, exist_ok=True)
-          crowns.to_file(output_crowns_path)
+        command: [
+          "python",
+          "/app/tree_classification_framework/assign_predictions_to_trees.py",
+          "{{inputs.parameters.image-level-predictions-file}}",
+          "output-column-name-TODO",
+          "{{inputs.parameters.input-crowns-file}}",
+          "input-tree-tops-file-TODO",
+          "{{inputs.parameters.output-crowns-file}}"
+        ]
 
     # Upload chips directory and matched crowns (with live/dead predictions) to S3, then
     # clean up the local temp directory.
