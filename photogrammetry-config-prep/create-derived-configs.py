@@ -26,7 +26,7 @@ MISSIONS_GPKG_PATH = "/ofo-share/project-data/catalog-data-prep/05_drone-imagery
 
 # Path to the KML file defining the priority area (missions near this area are processed first)
 # Set to None to disable priority sorting
-PRIORITY_AREA_KML_PATH = None # "/home/derek/repos/ofo-argo/photogrammetry-config-prep/config-prep-runs/run-03/input/priority-area.kml"
+PRIORITY_AREA_KML_PATH = None  # "/home/derek/repos/ofo-argo/photogrammetry-config-prep/config-prep-runs/run-03/input/priority-area.kml"
 
 # Buffer distance in degrees for priority area proximity check (~0.1 degrees ≈ 10km at mid-latitudes)
 PRIORITY_BUFFER_DEGREES = 0.1
