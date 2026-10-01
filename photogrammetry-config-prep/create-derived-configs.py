@@ -22,20 +22,20 @@ from shapely.ops import unary_union
 # =============================================================================
 
 # Path to the GeoPackage containing drone mission polygons and metadata
-MISSIONS_GPKG_PATH = "/home/derek/repos/ofo-argo/photogrammetry-config-prep/config-prep-runs/run-03/input/ofo-all-missions-metadata-curated.gpkg"
+MISSIONS_GPKG_PATH = "/ofo-share/project-data/catalog-data-prep/05_drone-imagery-web-catalog/01_metadata/post-curation/mission-metadata.gpkg"
 
 # Path to the KML file defining the priority area (missions near this area are processed first)
 # Set to None to disable priority sorting
-PRIORITY_AREA_KML_PATH = "/home/derek/repos/ofo-argo/photogrammetry-config-prep/config-prep-runs/run-03/input/priority-area.kml"
+PRIORITY_AREA_KML_PATH = None # "/home/derek/repos/ofo-argo/photogrammetry-config-prep/config-prep-runs/run-03/input/priority-area.kml"
 
 # Buffer distance in degrees for priority area proximity check (~0.1 degrees ≈ 10km at mid-latitudes)
 PRIORITY_BUFFER_DEGREES = 0.1
 
 # Path to the base automate-metashape configuration YAML
-BASE_CONFIG_PATH = "/home/derek/repos/ofo-argo/photogrammetry-config-prep/config-prep-runs/run-03/input/config-base.yml"
+BASE_CONFIG_PATH = "/ofo-share/repos/derek/ofo-argo/photogrammetry-config-prep/config-prep-runs/run-03/input/config-base.yml"
 
 # Output directory for derived config files
-OUTPUT_DIR = "/home/derek/repos/ofo-argo/photogrammetry-config-prep/config-prep-runs/run-03/derived-configs"
+OUTPUT_DIR = "/ofo-share/repos/derek/ofo-argo/photogrammetry-config-prep/config-prep-runs/run-03/derived-configs"
 
 # S3 path prefix for drone mission imagery downloads.
 # The full path will be: {S3_DRONE_MISSIONS_PATH}/{mission_id}/images/{mission_id}_images.zip

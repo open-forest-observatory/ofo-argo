@@ -9,7 +9,7 @@ project:
 
   # The path to the directory of flight photos
   # If there are multiple photo folders, set path to the folder that contains all the photo folders,
-  # or provide a list of paths via the YAML list syntax (e.g., ["/path/to/photo/folder1", "/path/to/photo/folder2"]). Each separately-provided path will optiongally be given its own camera calibration (see add_photos below).
+  # or provide a list of paths via the YAML list syntax (e.g., ["/path/to/photo/folder1", "/path/to/photo/folder2"]). Each separately-provided path will be given its own camera calibration.
   # If there are no photos to add (e.g., this is an existing project that already has photos in it, set to an empty string ("")
   # If you are running this workflow via the OFO Argo platform and have specified (in the 'argo' section below) to download input imagery from S3, reference the location of those downloaded images with '__DOWNLOADED__'. For example, set photo_path to ["__DOWNLOADED__/000558_images/000558-01", "__DOWNLOADED__/000558_images/000558-02", "__DOWNLOADED__/000559_images/000559-01"]. The first folder beaneath __DOWNLOADED__ is the name of the downloaded zip file (sans extension) and the remainder (optional) is any subfolders that should receive separate camera calibration.
   photo_path: ""
@@ -34,7 +34,7 @@ project:
   project_name: ""
 
   # CRS EPSG code that project outputs should be in (projection should be in meter units and intended for the project area)
-  project_crs: "EPSG::26910" # 26910 is UTM 10N
+  project_crs: "EPSG::32610" # 26910 is UTM 10N
 
   # Enable metashape "fine-level task subdivision" which reduces memory use by breaking processing into independent chunks that are run in series.
   # Assuming there's enough memory, it seems to run 10-20% faster by disabling subdividing. But large projects can run out memory and fail if subdivide is not enabled.
@@ -50,7 +50,7 @@ project:
 # example, you only want to add GCPs (or do additional processing) to an existing project.
 add_photos: # (Metashape: addPhotos)
   enabled: True # This applies to the main photos specified in project:photo_path above. Secondary photos are always added and aligned if a path (or paths) is provided.
-  separate_calibration_per_path: False # If True, each photo path (i.e. each element in the list supplied to 'project:photo_path' above) will be calibrated independently. Regardless whether True or False, separate camera *models* are calibrated separately; if True, identical camera *models* are calibrated separately if they are provided as separate paths. This addresses the case where two different instances of the same camera model are used in the same project. Note that when True, the logic for assigning separate calibration to each path assumes that the same camera is used for all photos in the path.
+  separate_calibration_per_path: True # If True, each photo path (i.e. each element in the list supplied to 'project:photo_path' above) will be calibrated independently. Regardless whether True or False, separate camera *models* are calibrated separately; if True, identical camera *models* are calibrated separately if they are provided as separate paths. This addresses the case where two different instances of the same camera model are used in the same project. Note that when True, the logic for assigning separate calibration to each path assumes that the same camera is used for all photos in the path.
   multispectral: False # Is this a multispectral photo set? If RGB, set to False.
   use_rtk: False # Whether to use image EXIF RTK flags to make image geospatial accuracy more precise. If enabled but photos don't have RTK data, will treat them as regular photos and use the nofix accuracy.
   fix_accuracy: 3 # Accuracy to set for photos that have a RTK fix, in units of the CRS
@@ -170,7 +170,7 @@ build_dem: # (Metashape: buildDem, (optionally) classifyGroundPoints, exportRast
 
 build_orthomosaic: # (Metashape: buildOrthomosaic, exportRaster)
     enabled: True
-    surface: ["DTM-ptcloud", "DSM-ptcloud", "DSM-mesh", "Mesh"] # Options: "DTM-ptcloud", "DSM-ptcloud", "DSM-mesh", and/or "Mesh". The surface to build the orthomosaic onto. DTM and DSM refer to elevation models built by Metashape and must be configured to be computed via build_dem, above. Mesh refers to using the mesh model directly rather than first computing a DEM.
+    surface: ["DSM-ptcloud"] # Options: "DTM-ptcloud", "DSM-ptcloud", "DSM-mesh", and/or "Mesh". The surface to build the orthomosaic onto. DTM and DSM refer to elevation models built by Metashape and must be configured to be computed via build_dem, above. Mesh refers to using the mesh model directly rather than first computing a DEM.
     blending: Metashape.MosaicBlending # Photo blending mode. Options include AverageBlending, MosaicBlending, MinBlending, MaxBlending, DisabledBlending
     fill_holes: True # Fill holes in orthomosaic where no photo data exist by interpolating?
     refine_seamlines: True # Use smart algorithm to identify photo seamlines where they will least distort.
@@ -186,7 +186,7 @@ build_orthomosaic: # (Metashape: buildOrthomosaic, exportRaster)
 # (https://github.com/open-forest-observatory/ofo-argo) and has no effect otherwise
 argo:
     # Raw (input) imagery download instructions
-    s3_imagery_zip_download:  # List of zip files to download, in the format bucket/path/to/file.zip within the Jetstream2 object store. Leave blank (or empty string) to skip imagery download and use files already on the PVC. Multiple zip files can be provided in the format ["ofo-public/drone/missions_01/000558/images/000558_images.zip", "ofo-public/drone/missions_01/000559/images/000559_images.zip"]
+    s3_imagery_zip_download:  # List of S3 paths to zip files to download. Format: bucket/path/file.zip (no remote prefix). S3 credentials come from the cluster's s3-credentials Kubernetes secret. Leave blank to skip imagery download and use files already on the PVC. Multiple zip files can be provided as a list: ["ofo-public/drone/missions_01/000558/images/000558_images.zip", "ofo-public/drone/missions_01/000559/images/000559_images.zip"]
     cleanup_downloaded_imagery: true  # Whether to delete downloaded imagery after workflow completes (default: true)
     
     # Resource requests per step
