@@ -831,6 +831,8 @@ spec:
           - name: input-crowns-file
           - name: image-level-predictions-file
           - name: output-crowns-file
+          - name: output-column-name
+            value: "live_dead_prediction"
       nodeSelector:
         feature.node.kubernetes.io/workload-type: cpu
       container:
@@ -848,10 +850,9 @@ spec:
           "python",
           "/app/tree_classification_framework/assign_predictions_to_trees.py",
           "{{inputs.parameters.image-level-predictions-file}}",
-          "output-column-name-TODO",
+          "{{inputs.parameters.output-column-name}}",
           "{{inputs.parameters.input-crowns-file}}",
-          "input-tree-tops-file-TODO",
-          "{{inputs.parameters.output-crowns-file}}"
+          "{{inputs.parameters.output-crowns-file}}",
         ]
 
     # Upload chips directory and matched crowns (with live/dead predictions) to S3, then
