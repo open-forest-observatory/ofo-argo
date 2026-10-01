@@ -117,6 +117,10 @@ spec:
         value: "main"
       - name: CV_UTILS_IMAGE_TAG
         value: "main"
+      - name: MMPRETRAIN_IMAGE_TAG
+        value: "main"
+      - name: TREE_CLASSIFICATION_FRAMEWORK_IMAGE_TAG
+        value: "main"
 
   volumes:
     - name: data
@@ -621,6 +625,7 @@ spec:
           import geopandas as gpd
           import pandas as pd
           from tree_registration_and_matching.add_attributes import match_field_and_drone_trees
+          from tree_registration_and_matching.utils import ensure_height_is_present, is_overstory
 
           # Input variables
           pair_name = "{{inputs.parameters.drone-ground-pair-name}}"
@@ -666,6 +671,22 @@ spec:
           field_trees.geometry = field_trees.geometry.translate(xoff=x_shift, yoff=y_shift)
           field_bounds.geometry = field_bounds.geometry.translate(xoff=x_shift, yoff=y_shift)
 
+          print(f"A total of {len(field_trees)} were present")
+          # The decay class specifies how severely a dead trees is decaying. At values above decay class 2,
+          # it is expected that the stem may be broken. This would cause issues estimating the height from
+          # DBH, and likely suggests a tree that will overall not be reconstructed well. Therefore, these
+          # trees are dropped prior to matching.
+          decay_mask = (field_trees.decay_class > 2)
+          print(f"Removing {decay_mask.sum()} trees due to decay")
+          field_trees = field_trees[~decay_mask]
+          # Impute height for as many trees as possible, using other attributes
+          field_trees = ensure_height_is_present(field_trees)
+          # Remove understory trees
+          overstory_mask = is_overstory(field_trees)
+          print(f"Removing {(~overstory_mask).sum()} trees due to being understory")
+          field_trees = field_trees[overstory_mask]
+
+          print(f"Matching {len(field_trees)} field trees to {len(drone_trees)} drone trees")
           # Perform matching
           drone_crowns_with_additional_attributes = match_field_and_drone_trees(
               field_trees=field_trees,
@@ -677,10 +698,29 @@ spec:
 
           # Convert back to the original drone CRS
           drone_crowns_with_additional_attributes.to_crs(drone_crown_crs, inplace=True)
+          print(f"Matched {len(drone_crowns_with_additional_attributes)} trees")
 
-          # Save the drone crowns with additional field attributes to the file
-          output_file.parent.mkdir(exist_ok=True, parents=True)
-          drone_crowns_with_additional_attributes.to_file(output_file)
+          # Drop crowns matched to field trees with no species code
+          drone_crowns_with_additional_attributes = drone_crowns_with_additional_attributes.dropna(subset=["species_code"])
+          # Drop any dead trees. Note that there may be classes other than "L" (live) in the output
+          # but these are assumed to be live as well.
+          drone_crowns_with_additional_attributes = drone_crowns_with_additional_attributes[
+              drone_crowns_with_additional_attributes.live_dead != "D"
+          ]
+          # Drop any crowns that were less than 10m tall
+          drone_crowns_with_additional_attributes = drone_crowns_with_additional_attributes[
+              drone_crowns_with_additional_attributes.height_field > 10
+          ]
+          final_n_matched = len(drone_crowns_with_additional_attributes)
+          print(f"After filtering all matched trees, {final_n_matched} trees remain")
+
+          print(f"Matched {final_n_matched} trees")
+          if final_n_matched >= 10:
+              # Save the drone crowns with additional field attributes to the file
+              output_file.parent.mkdir(exist_ok=True, parents=True)
+              drone_crowns_with_additional_attributes.to_file(output_file)
+          else:
+              raise ValueError(f"Not enough matched trees (only {final_n_matched})")
 
 
     - name: render-instance-labels
@@ -761,43 +801,24 @@ spec:
           - name: output-path
       # Disable workflow-level non-GPU affinity; let GPU resource request handle node selection
       affinity: {}
-      script:
-        image: waikatodatamining/mmpretrain:1.2.0_cuda11.1
+      container:
+        image: ghcr.io/open-forest-observatory/mmpretrain:{{workflow.parameters.MMPRETRAIN_IMAGE_TAG}}
         volumeMounts:
           - name: data
             mountPath: /data
         resources:
           requests:
-            nvidia.com/mig-1g.5gb: 7
+            nvidia.com/gpu: 1
           limits:
-            nvidia.com/mig-1g.5gb: 7
-        command: ["python"]
-        source: |
-          import json
-          from pathlib import Path
-
-          from mmpretrain.apis import ImageClassificationInferencer
-
-          input_folder = Path("{{inputs.parameters.chips-folder}}")
-          config_path = "{{inputs.parameters.config-path}}"
-          model_path = "{{inputs.parameters.model-path}}"
-          output_path = Path("{{inputs.parameters.output-path}}")
-
-          input_files = [
-              str(f)
-              for f in Path(input_folder).rglob("*")
-              if f.suffix.lower() in [".jpg", ".jpeg", ".png"]
-          ]
-          print(f"Running on {len(input_files)} files")
-
-          inferencer = ImageClassificationInferencer(model=config_path, pretrained=model_path, device="cuda")
-          results = inferencer(input_files, batch_size=128)
-          pred_labels = [r["pred_class"] for r in results]
-          results_per_file = {str(k): v for k, v in zip(input_files, pred_labels)}
-
-          output_path.parent.mkdir(exist_ok=True, parents=True)
-          with open(output_path, "w") as file_h:
-              json.dump(results_per_file, file_h)
+            nvidia.com/gpu: 1
+        command: [
+          "python",
+          "/app/tools/predict.py",
+          "{{inputs.parameters.chips-folder}}",
+          "{{inputs.parameters.config-path}}",
+          "{{inputs.parameters.model-path}}",
+          "{{inputs.parameters.output-path}}",
+        ]
 
     # Assign per-chip live/dead predictions to tree crowns via majority vote, producing
     # a matched crowns file with a live_dead_prediction column. All trees are retained
@@ -810,10 +831,12 @@ spec:
           - name: input-crowns-file
           - name: image-level-predictions-file
           - name: output-crowns-file
+          - name: output-column-name
+            value: "live_dead_prediction"
       nodeSelector:
         feature.node.kubernetes.io/workload-type: cpu
-      script:
-        image: uhoosborne/geopandas@sha256:42bdd13882321a2647668446dae9ee1a8d76f2ac95aa8c3cb4e8eacadd5070d9
+      container:
+        image: ghcr.io/open-forest-observatory/tree-classification-framework:{{workflow.parameters.TREE_CLASSIFICATION_FRAMEWORK_IMAGE_TAG}}
         volumeMounts:
           - name: data
             mountPath: /data
@@ -823,54 +846,14 @@ spec:
             memory: "2Gi"
           limits:
             memory: "4Gi"
-        command: ["python"]
-        source: |
-          import json
-          import geopandas as gpd
-          import pandas as pd
-          import numpy as np
-          from pathlib import Path
-
-          column_name = "live_dead_prediction"
-          image_level_predictions_file = "{{inputs.parameters.image-level-predictions-file}}"
-          input_crowns_path = Path("{{inputs.parameters.input-crowns-file}}")
-          output_crowns_path = Path("{{inputs.parameters.output-crowns-file}}")
-
-          with open(image_level_predictions_file, "r") as f:
-              preds = json.load(f)
-
-          input_files = list(preds.keys())
-          labels = list(preds.values())
-          tree_IDs = [Path(f).stem for f in input_files]
-
-          preds_df = pd.DataFrame({"tree_ID": tree_IDs, column_name: labels})
-
-          def fair_mode(series):
-              """Tie break randomly if there are two or more options with equal counts."""
-              modes = series.mode()
-              mode = np.random.choice(modes)
-              n_preds = len(series)
-              frac_matching = (series == mode).sum() / n_preds
-              return pd.Series({
-                  column_name: mode,
-                  f"{column_name}_frac_matching_mode": frac_matching,
-                  f"{column_name}_n_preds": n_preds,
-              })
-
-          predictions = preds_df.groupby(["tree_ID"]).apply(
-              lambda x: fair_mode(x[column_name]), include_groups=False
-          ).reset_index().rename(columns={"tree_ID": "unique_ID"})
-
-          crowns = gpd.read_file(input_crowns_path)
-          crowns["unique_ID"] = crowns["unique_ID"].astype(str)
-
-          # Avoid collision with existing column by removing it if present
-          crowns.drop(columns=column_name, inplace=True, errors="ignore")
-          # Merge in the predictions
-          crowns = crowns.merge(predictions, on="unique_ID", how="left")
-
-          output_crowns_path.parent.mkdir(parents=True, exist_ok=True)
-          crowns.to_file(output_crowns_path)
+        command: [
+          "python",
+          "/app/tree_classification_framework/assign_predictions_to_trees.py",
+          "{{inputs.parameters.image-level-predictions-file}}",
+          "{{inputs.parameters.output-column-name}}",
+          "{{inputs.parameters.input-crowns-file}}",
+          "{{inputs.parameters.output-crowns-file}}",
+        ]
 
     # Upload chips directory and matched crowns (with live/dead predictions) to S3, then
     # clean up the local temp directory.
@@ -896,16 +879,28 @@ spec:
             DATASET_DIR="{{workflow.parameters.TEMP_FOLDER}}/{{workflow.name}}/${PAIR_NAME}"
             S3_UPLOAD_FOLDER="s3:{{workflow.parameters.S3_TRAINING_OUTPUT_FOLDER}}/${PAIR_NAME}"
 
-            # Sync all chips (all trees retained; downstream handles dead-tree filtering)
-            # Note, sync enforces that all data in the destination is identical, so outdated files
-            # would be deleted if they exist.
+            # Zip each subdirectory of chips independently and upload to S3
             CHIPS_SRC="${DATASET_DIR}/chips/"
             CHIPS_DST="${S3_UPLOAD_FOLDER}/chips"
-            echo "[rclone] Uploading chips: $CHIPS_SRC -> $CHIPS_DST"
-            rclone sync "$CHIPS_SRC" "$CHIPS_DST" \
-              --transfers 8 --checkers 8 --retries 5 --retries-sleep=15s \
-              --s3-upload-cutoff 200Mi --s3-chunk-size 100Mi --s3-upload-concurrency 4 \
+            echo "[rclone] Clearing existing chips destination: $CHIPS_DST"
+            rclone delete "$CHIPS_DST" \
+              --retries 5 --retries-sleep=15s \
               --stats 15s --stats-log-level NOTICE
+            # Install the zip package since it is not present
+            apk add --no-cache zip >/dev/null
+            for dir in "$CHIPS_SRC"/*/; do
+              [ -d "$dir" ] || continue
+              folder_name=$(basename "$dir")
+              zip_file="${DATASET_DIR}/${folder_name}.zip"
+              echo "[zip] Creating ${folder_name}.zip"
+              (cd "$CHIPS_SRC" && zip -r "$zip_file" "$folder_name")
+              echo "[rclone] Uploading ${folder_name}.zip -> ${CHIPS_DST}/${folder_name}.zip"
+              rclone copyto "$zip_file" "${CHIPS_DST}/${folder_name}.zip" \
+                --retries 5 --retries-sleep=15s \
+                --s3-upload-cutoff 200Mi --s3-chunk-size 100Mi --s3-upload-concurrency 4 \
+                --stats 15s --stats-log-level NOTICE
+              rm "$zip_file"
+            done
 
             # Upload matched crowns with species labels and live/dead predictions
             CROWNS_SRC="${DATASET_DIR}/${PAIR_NAME}_matched-tree-crowns_w-live-dead.gpkg"
