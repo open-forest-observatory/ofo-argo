@@ -114,7 +114,7 @@ spec:
             arguments:
               parameters:
                 - name: dataset-folder
-                  value: "{{workflow.parameters.TEMP_FOLDER}}/{{workflow.name}}/training-chips"
+                  value: "{{workflow.parameters.TEMP_FOLDER}}/{{workflow.name}}/training-chips/train"
         - - name: train-model
             template: train-model
             arguments:
@@ -175,9 +175,8 @@ spec:
 
           output_dicts = []
           for split_line in split_lines:
-              dataset, train_val = split_line
+              dataset, _ = split_line
               dataset = dataset.strip()
-              train_val = train_val.strip()
               if not dataset:
                   # Skip blank lines (e.g. a trailing newline in the datasets file)
                   continue
@@ -309,7 +308,6 @@ spec:
           limits:
             memory: "4Gi"
         command: ["python"]
-        # This additional complexity is to handle the optional flag arguments
         source: |
           import runpy, sys
 
@@ -335,35 +333,32 @@ spec:
       inputs:
         parameters:
           - name: dataset-folder
+          - name: num-files
+            value: "400"
       nodeSelector:
         feature.node.kubernetes.io/workload-type: cpu
       script:
-        image: ghcr.io/open-forest-observatory/segmentation_utils:main
+        image: ghcr.io/open-forest-observatory/tree-classification-framework:{{workflow.parameters.TCF_IMAGE_TAG}}
+        resources:
+          requests:
+            cpu: 1
+            memory: "4Gi"
+          limits:
+            memory: "4Gi"
         volumeMounts:
           - name: data
             mountPath: /data
-        command: ["python3"]
+        command: ["python"]
+        # Using a "script" is required because otherwise standard out cannot be captured.
         source: |
-          import json
-          import sys
-          import os
-          from pathlib import Path
-          from contextlib import redirect_stdout
+          import runpy, sys
 
-          from segmentation_utils.dataset_creation.summary_statistics import compute_summary_statistics
-
-          train_folder = Path("{{inputs.parameters.dataset-folder}}", "train")
-          # It's critical that the classes are sorted
-          classes = sorted([p.name for p in list(train_folder.glob("*"))])
-          n_classes = len(classes)
-
-          # Suppress printing so the final output is json-parseable
-          with redirect_stdout(open(os.devnull, "w")):
-              means, stds = compute_summary_statistics(train_folder)
-
-          output_dict = {"classes": classes, "n_classes": n_classes, "means": means, "stds": stds}
-
-          json.dump(output_dict, sys.stdout)
+          sys.argv = [
+              "/app/tree_classification_framework/compute_summary_statistics.py",
+              "{{inputs.parameters.dataset-folder}}",
+              "--num-files", "{{inputs.parameters.num-files}}",
+          ]
+          runpy.run_path(sys.argv[0], run_name="__main__")
 
     - name: train-model
       inputs:
