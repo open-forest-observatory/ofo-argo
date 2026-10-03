@@ -491,7 +491,7 @@ argo submit -n argo metashape-workflow.yaml \
   -p CONFIG_LIST=/data/argo-input/derek-photogrammetry-20261001/configs/config-list.txt \
   -p TEMP_WORKING_DIR=/data/argo-output/temp-dir/derek-photogrammetry-20261001-temp \
   -p S3_BUCKET_INTERNAL=ofo-internal \
-  -p S3_PHOTOGRAMMETRY_DIR=photogrammetry-outputs_derek-20261001 \
+  -p S3_PHOTOGRAMMETRY_DIR=photogrammetry-outputs \
   -p PHOTOGRAMMETRY_CONFIG_ID=03 \
   -p COMPLETION_LOG_PATH=/data/argo-input/derek-photogrammetry-20261001/configs/completion-log-default.jsonl \
   -p WORKFLOW_UTILS_IMAGE_TAG=latest \
