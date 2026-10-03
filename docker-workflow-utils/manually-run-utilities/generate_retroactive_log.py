@@ -22,6 +22,11 @@ Environment variables for S3:
     S3_ENDPOINT: S3 endpoint URL (for non-AWS S3)
     AWS_ACCESS_KEY_ID: Access key
     AWS_SECRET_ACCESS_KEY: Secret key
+
+
+TODO: We ultimately want a pipeline that deletes the raw photogrammetry products after
+postprocessing, so we may not need to check the public bucket for postprocess completions. For now,
+we check both buckets to be safe.
 """
 
 import argparse
