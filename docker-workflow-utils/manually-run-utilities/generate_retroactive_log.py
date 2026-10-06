@@ -44,8 +44,9 @@ except ImportError:
     print("Error: boto3 required. Install with: pip install boto3", file=sys.stderr)
     sys.exit(1)
 
-# Sentinel file pattern that indicates a completed project
-SENTINEL_PATTERN = re.compile(r"_report\.pdf$")
+# Sentinel file pattern that indicates a completed project (we are assuming any project will have at
+# least one CHM file)
+SENTINEL_PATTERN = re.compile(r".*_chm-.*\.tiff?$", re.IGNORECASE)
 
 
 def get_s3_client():
