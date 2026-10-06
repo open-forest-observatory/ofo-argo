@@ -426,7 +426,8 @@ def postprocess_photogrammetry_containerized(
         product_file_paths: List of paths to photogrammetry product files
 
     Returns:
-        True on success, raises exception on failure
+        True on success, raises exception on failure. Any failed product raises
+        immediately, so an incomplete product set is never uploaded.
     """
     print(f"Starting post-processing for mission: {mission_id}")
 
@@ -503,19 +504,14 @@ def postprocess_photogrammetry_containerized(
         print(f"Processing {len(raster_files)} raster files")
 
         for _, row in raster_files.iterrows():
-            try:
-                crop_raster_save_cog(
-                    raster_filepath=row["full_path"],
-                    output_filepath=os.path.join(
-                        postprocessed_path, "full", row["postprocessed_filename"]
-                    ),
-                    mission_polygon=mission_polygon,
-                )
-
-            except Exception as e:
-                print(
-                    f"  Warning: Failed to process {row['photogrammetry_output_filename']}: {e}"
-                )
+            print(f"  Cropping {row['photogrammetry_output_filename']}")
+            crop_raster_save_cog(
+                raster_filepath=row["full_path"],
+                output_filepath=os.path.join(
+                    postprocessed_path, "full", row["postprocessed_filename"]
+                ),
+                mission_polygon=mission_polygon,
+            )
 
     ## Create CHMs
 
@@ -546,30 +542,26 @@ def postprocess_photogrammetry_containerized(
             "postprocessed_filepath"
         ].iloc[0]
 
-        try:
-            chm_data, chm_profile = make_chm(dsm_filepath, dtm_filepath)
+        chm_data, chm_profile = make_chm(dsm_filepath, dtm_filepath)
 
-            # Update profile for COG
-            chm_profile.update(
-                {
-                    "driver": "COG",
-                    "compress": "deflate",
-                    "tiled": True,
-                    "BIGTIFF": "IF_SAFER",
-                }
-            )
+        # Update profile for COG
+        chm_profile.update(
+            {
+                "driver": "COG",
+                "compress": "deflate",
+                "tiled": True,
+                "BIGTIFF": "IF_SAFER",
+            }
+        )
 
-            # Write CHM
-            chm_filename = f"{mission_id}_chm-ptcloud.tif"
-            chm_filepath = os.path.join(postprocessed_path, "full", chm_filename)
+        # Write CHM
+        chm_filename = f"{mission_id}_chm-ptcloud.tif"
+        chm_filepath = os.path.join(postprocessed_path, "full", chm_filename)
 
-            with rasterio.open(chm_filepath, "w", **chm_profile) as dst:
-                dst.write(chm_data, 1)
+        with rasterio.open(chm_filepath, "w", **chm_profile) as dst:
+            dst.write(chm_data, 1)
 
-            print(f"Successfully created CHM: {chm_filename}")
-
-        except Exception as e:
-            print(f"Failed to create chm-ptcloud: {e}")
+        print(f"Successfully created CHM: {chm_filename}")
 
     # Try to create chm-mesh
     if "dsm-mesh" in available_types and "dtm-ptcloud" in available_types:
@@ -581,30 +573,26 @@ def postprocess_photogrammetry_containerized(
             "postprocessed_filepath"
         ].iloc[0]
 
-        try:
-            chm_data, chm_profile = make_chm(dsm_filepath, dtm_filepath)
+        chm_data, chm_profile = make_chm(dsm_filepath, dtm_filepath)
 
-            # Update profile for COG
-            chm_profile.update(
-                {
-                    "driver": "COG",
-                    "compress": "deflate",
-                    "tiled": True,
-                    "BIGTIFF": "IF_SAFER",
-                }
-            )
+        # Update profile for COG
+        chm_profile.update(
+            {
+                "driver": "COG",
+                "compress": "deflate",
+                "tiled": True,
+                "BIGTIFF": "IF_SAFER",
+            }
+        )
 
-            # Write CHM
-            chm_filename = f"{mission_id}_chm-mesh.tif"
-            chm_filepath = os.path.join(postprocessed_path, "full", chm_filename)
+        # Write CHM
+        chm_filename = f"{mission_id}_chm-mesh.tif"
+        chm_filepath = os.path.join(postprocessed_path, "full", chm_filename)
 
-            with rasterio.open(chm_filepath, "w", **chm_profile) as dst:
-                dst.write(chm_data, 1)
+        with rasterio.open(chm_filepath, "w", **chm_profile) as dst:
+            dst.write(chm_data, 1)
 
-            print(f"Successfully created CHM: {chm_filename}")
-
-        except Exception as e:
-            print(f"Failed to create chm-mesh: {e}")
+        print(f"Successfully created CHM: {chm_filename}")
 
     ## Create thumbnails
 
@@ -617,17 +605,13 @@ def postprocess_photogrammetry_containerized(
     print(f"Creating thumbnails for {len(tif_files)} raster files")
 
     for tif_file in tif_files:
-        try:
-            tif_file_path = os.path.join(full_output_dir, tif_file)
-            thumbnail_filename = os.path.splitext(tif_file)[0] + ".png"
-            thumbnail_filepath = os.path.join(
-                postprocessed_path, "thumbnails", thumbnail_filename
-            )
+        tif_file_path = os.path.join(full_output_dir, tif_file)
+        thumbnail_filename = os.path.splitext(tif_file)[0] + ".png"
+        thumbnail_filepath = os.path.join(
+            postprocessed_path, "thumbnails", thumbnail_filename
+        )
 
-            create_thumbnail(tif_file_path, thumbnail_filepath, max_dim=output_max_dim)
-
-        except Exception as e:
-            print(f"Warning: Failed to create thumbnail for {tif_file}: {e}")
+        create_thumbnail(tif_file_path, thumbnail_filepath, max_dim=output_max_dim)
 
     # Create the height above ground file
     # Check if both input files exist
@@ -653,14 +637,11 @@ def postprocess_photogrammetry_containerized(
             postprocessed_path, "full", f"{mission_id}_camera-locations.gpkg"
         )
 
-        try:
-            height_above_ground = compute_height_above_ground(
-                camera_file=cameras_file, dtm_file=DTM_file
-            )
-            height_above_ground.to_file(output_file)
-            print(f"Successfully created height above ground: {output_file.name}")
-        except Exception as e:
-            print(f"Failed to compute height above ground: {e}")
+        height_above_ground = compute_height_above_ground(
+            camera_file=cameras_file, dtm_file=DTM_file
+        )
+        height_above_ground.to_file(output_file)
+        print(f"Successfully created height above ground: {output_file.name}")
     else:
         print(
             "Skipping height above ground computation (missing cameras.xml or dtm-ptcloud.tif)"
@@ -676,16 +657,11 @@ def postprocess_photogrammetry_containerized(
         print(f"Copying {len(other_files)} non-raster files")
 
         for _, row in other_files.iterrows():
-            try:
-                output_filepath = os.path.join(
-                    postprocessed_path, "full", row["postprocessed_filename"]
-                )
-                shutil.copy(row["full_path"], output_filepath)
-                print(f"  Copied: {row['postprocessed_filename']}")
-            except Exception as e:
-                print(
-                    f"Warning: Failed to copy {row['photogrammetry_output_filename']}: {e}"
-                )
+            output_filepath = os.path.join(
+                postprocessed_path, "full", row["postprocessed_filename"]
+            )
+            shutil.copy(row["full_path"], output_filepath)
+            print(f"  Copied: {row['postprocessed_filename']}")
 
     # Count output files
     full_files = os.listdir(os.path.join(postprocessed_path, "full"))
