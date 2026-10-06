@@ -506,7 +506,9 @@ def postprocess_photogrammetry_containerized(
             try:
                 crop_raster_save_cog(
                     raster_filepath=row["full_path"],
-                    output_filepath=postprocessed_path / row["postprocessed_filename"],
+                    output_filepath=os.path.join(
+                        postprocessed_path, "full", row["postprocessed_filename"]
+                    ),
                     mission_polygon=mission_polygon,
                 )
 
