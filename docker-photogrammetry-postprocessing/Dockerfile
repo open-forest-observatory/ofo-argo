@@ -24,15 +24,12 @@ RUN pip3 install --no-cache-dir -r requirements.txt
 # Copy files
 COPY postprocessing/ postprocessing/
 COPY entrypoint.py .
-COPY docker-entrypoint.sh .
 COPY pyproject.toml .
 
 # Install the package so postprocess is importable from anywhere
 RUN pip3 install --no-cache-dir -e .
 
-# Make scripts executable
-RUN chmod +x docker-entrypoint.sh
-RUN chmod +x entrypoint.py
+# Print output immediately so it appears in container logs
+ENV PYTHONUNBUFFERED=1
 
-
-ENTRYPOINT ["./docker-entrypoint.sh"]
+ENTRYPOINT ["python3", "/app/entrypoint.py"]

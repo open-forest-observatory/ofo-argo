@@ -151,6 +151,16 @@ spec:
         feature.node.kubernetes.io/workload-type: cpu
       container:
         image: ghcr.io/open-forest-observatory/photogrammetry-postprocessing:{{workflow.parameters.POSTPROCESSING_IMAGE_TAG}}
+        args:
+          - "--project-name={{inputs.parameters.project-name}}"
+          - "--s3-bucket-internal={{workflow.parameters.S3_BUCKET_INTERNAL}}"
+          - "--s3-photogrammetry-dir={{workflow.parameters.S3_PHOTOGRAMMETRY_DIR}}"
+          - "--photogrammetry-config-subfolder={{inputs.parameters.photogrammetry-config-subfolder}}"
+          - "--s3-bucket-input-boundary={{workflow.parameters.S3_BUCKET_PUBLIC}}"
+          - "--input-boundary-dir={{workflow.parameters.S3_BOUNDARY_DIR}}"
+          - "--s3-bucket-public={{workflow.parameters.S3_BUCKET_PUBLIC}}"
+          - "--s3-postprocessed-dir={{workflow.parameters.S3_POSTPROCESSED_DIR}}"
+          - "--working-dir={{workflow.parameters.TEMP_WORKING_DIR}}/{{workflow.name}}/{{inputs.parameters.project-name}}/postprocessing"
         volumeMounts:
           - name: data
             mountPath: /data
@@ -165,34 +175,16 @@ spec:
               secretKeyRef:
                 name: s3-credentials
                 key: endpoint
-          - name: S3_ACCESS_KEY
+          - name: AWS_ACCESS_KEY_ID
             valueFrom:
               secretKeyRef:
                 name: s3-credentials
                 key: access_key
-          - name: S3_SECRET_KEY
+          - name: AWS_SECRET_ACCESS_KEY
             valueFrom:
               secretKeyRef:
                 name: s3-credentials
                 key: secret_key
-          - name: S3_BUCKET_INTERNAL
-            value: "{{workflow.parameters.S3_BUCKET_INTERNAL}}"
-          - name: S3_PHOTOGRAMMETRY_DIR
-            value: "{{workflow.parameters.S3_PHOTOGRAMMETRY_DIR}}"
-          - name: PHOTOGRAMMETRY_CONFIG_SUBFOLDER
-            value: "{{inputs.parameters.photogrammetry-config-subfolder}}"
-          - name: PROJECT_NAME
-            value: "{{inputs.parameters.project-name}}"
-          - name: S3_BUCKET_INPUT_BOUNDARY
-            value: "{{workflow.parameters.S3_BUCKET_PUBLIC}}"
-          - name: INPUT_BOUNDARY_DIR
-            value: "{{workflow.parameters.S3_BOUNDARY_DIR}}"
-          - name: S3_BUCKET_PUBLIC
-            value: "{{workflow.parameters.S3_BUCKET_PUBLIC}}"
-          - name: S3_POSTPROCESSED_DIR
-            value: "{{workflow.parameters.S3_POSTPROCESSED_DIR}}"
-          - name: TEMP_WORKING_DIR_POSTPROCESSING
-            value: "{{workflow.parameters.TEMP_WORKING_DIR}}/{{workflow.name}}/{{inputs.parameters.project-name}}/postprocessing"
         resources:
           requests:
             cpu: "12"

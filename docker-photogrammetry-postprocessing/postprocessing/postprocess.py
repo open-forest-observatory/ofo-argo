@@ -405,7 +405,7 @@ def create_thumbnail(tif_filepath, output_path, max_dim=800):
 
 
 def postprocess_photogrammetry_containerized(
-    mission_id, boundary_file_path, product_file_paths
+    mission_id, boundary_file_path, product_file_paths, working_dir, output_max_dim=800
 ):
     """
     Main post-processing function for a single mission.
@@ -424,6 +424,8 @@ def postprocess_photogrammetry_containerized(
         mission_id: Mission identifier (used for naming output files, not directory structure)
         boundary_file_path: Path to mission boundary polygon file
         product_file_paths: List of paths to photogrammetry product files
+        working_dir: Local working directory; outputs are written to working_dir/output
+        output_max_dim: Maximum dimension in pixels of the generated thumbnails
 
     Returns:
         True on success, raises exception on failure. Any failed product raises
@@ -442,7 +444,6 @@ def postprocess_photogrammetry_containerized(
         )
 
     # Create output directories (no mission subdirectory)
-    working_dir = os.environ.get("TEMP_WORKING_DIR_POSTPROCESSING", "/tmp/processing")
     postprocessed_path = f"{working_dir}/output"
     create_dir(os.path.join(postprocessed_path, "full"))
     create_dir(os.path.join(postprocessed_path, "thumbnails"))
@@ -595,8 +596,6 @@ def postprocess_photogrammetry_containerized(
         print(f"Successfully created CHM: {chm_filename}")
 
     ## Create thumbnails
-
-    output_max_dim = int(os.environ.get("OUTPUT_MAX_DIM", "800"))
 
     # List all TIF files in output folder
     full_output_dir = os.path.join(postprocessed_path, "full")

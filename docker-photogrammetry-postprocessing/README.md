@@ -35,52 +35,60 @@ For the standalone docker image to work, there needs to exist a directory in the
 
 ## Run Command
 
+S3 credentials are passed as environment variables, and everything else is passed as command-line arguments.
+
 ```bash
 docker run --rm \
   -e S3_ENDPOINT=https://js2.jetstream-cloud.org:8001 \
   -e S3_PROVIDER=Other \
-  -e S3_ACCESS_KEY=<your_access_key> \
-  -e S3_SECRET_KEY=<your_secret_key> \
-  -e S3_BUCKET_INTERNAL=ofo-internal \
-  -e S3_PHOTOGRAMMETRY_DIR=gillan_oct10 \
-  -e PHOTOGRAMMETRY_CONFIG_SUBFOLDER=photogrammetry_01 \
-  -e S3_BUCKET_INPUT_BOUNDARY=ofo-public \
-  -e INPUT_BOUNDARY_DIR=jgillan_test \
-  -e S3_BUCKET_PUBLIC=ofo-public \
-  -e S3_POSTPROCESSED_DIR=jgillan_test \
-  -e PROJECT_NAME=benchmarking-greasewood \
-  -e OUTPUT_MAX_DIM=800 \
-  -e TEMP_WORKING_DIR_POSTPROCESSING=/tmp/processing \
-  ghcr.io/open-forest-observatory/photogrammetry-postprocessing:1.6
+  -e AWS_ACCESS_KEY_ID=<your_access_key> \
+  -e AWS_SECRET_ACCESS_KEY=<your_secret_key> \
+  ghcr.io/open-forest-observatory/photogrammetry-postprocessing:1.6 \
+  --project-name=benchmarking-greasewood \
+  --s3-bucket-internal=ofo-internal \
+  --s3-photogrammetry-dir=gillan_oct10 \
+  --photogrammetry-config-subfolder=photogrammetry_01 \
+  --s3-bucket-input-boundary=ofo-public \
+  --input-boundary-dir=jgillan_test \
+  --s3-bucket-public=ofo-public \
+  --s3-postprocessed-dir=jgillan_test \
+  --output-max-dim=800 \
+  --working-dir=/tmp/processing
 ```
+
+Outside of Docker, the same arguments can be passed to `python3 entrypoint.py` directly, with the S3 environment variables set and rclone installed. Run `python3 entrypoint.py --help` to list all arguments.
+
+### Environment variables
 
 *S3_ENDPOINT* is the url of the Jetstream2s S3 storage
 
-*S3_PROVIDER* keep as 'Other'
+*S3_PROVIDER* **optional**, keep as 'Other' (the default)
 
-*S3_ACCESS_KEY* is the access key for OFOs S3 buckets
+*AWS_ACCESS_KEY_ID* is the access key for OFOs S3 buckets
 
-*S3_SECRET_KEY* is the secret key for OFOs S3 buckets
+*AWS_SECRET_ACCESS_KEY* is the secret key for OFOs S3 buckets
 
-*S3_BUCKET_INTERNAL* is the S3 bucket for internal/intermediate outputs where raw Metashape products (orthomosaics, point clouds, DEMs) reside. Currently `ofo-internal`.
+### Arguments
 
-*S3_PHOTOGRAMMETRY_DIR* is the parent directory in S3 where existing Metashape products reside. When combined with PHOTOGRAMMETRY_CONFIG_SUBFOLDER, the full path becomes `{S3_PHOTOGRAMMETRY_DIR}/{PHOTOGRAMMETRY_CONFIG_SUBFOLDER}/`.
+*--project-name* is the name of the project you want to process. This docker container will only process one project name.
 
-*PHOTOGRAMMETRY_CONFIG_SUBFOLDER* **optional** parameter specifying the photogrammetry configuration subfolder name (e.g., `photogrammetry_01`, `photogrammetry_02`). Used to construct the input path (`{S3_PHOTOGRAMMETRY_DIR}/{PHOTOGRAMMETRY_CONFIG_SUBFOLDER}/`) and output directory (`{S3_POSTPROCESSED_DIR}/{mission_name}/{PHOTOGRAMMETRY_CONFIG_SUBFOLDER}/`). If not specified or set to empty string, products are read from and written to directories without the subfolder (e.g., `{S3_PHOTOGRAMMETRY_DIR}/` and `{S3_POSTPROCESSED_DIR}/{mission_name}/`).
+*--s3-bucket-internal* is the S3 bucket for internal/intermediate outputs where raw Metashape products (orthomosaics, point clouds, DEMs) reside. Currently `ofo-internal`.
 
-*S3_BUCKET_INPUT_BOUNDARY* is the bucket where the mission boundary polygons reside. These are used to clip imagery products. Currently in `ofo-public` (same as S3_BUCKET_PUBLIC).
+*--s3-photogrammetry-dir* is the parent directory in S3 where existing Metashape products reside. When combined with `--photogrammetry-config-subfolder`, the full path becomes `{s3-photogrammetry-dir}/{photogrammetry-config-subfolder}/`.
 
-*INPUT_BOUNDARY_DIR* is the parent directory in S3_BUCKET_PUBLIC where the mission boundary polygons reside. Expected subdirectory structure: `<INPUT_BOUNDARY_DIR>/<mission_name>/metadata-mission/<mission_name>_mission-metadata.gpkg`.
+*--photogrammetry-config-subfolder* **optional** argument specifying the photogrammetry configuration subfolder name (e.g., `photogrammetry_01`, `photogrammetry_02`). Used to construct the input path (`{s3-photogrammetry-dir}/{photogrammetry-config-subfolder}/`) and output directory (`{s3-postprocessed-dir}/{mission_name}/{photogrammetry-config-subfolder}/`). If not specified or set to empty string, products are read from and written to directories without the subfolder (e.g., `{s3-photogrammetry-dir}/` and `{s3-postprocessed-dir}/{mission_name}/`).
 
-*S3_BUCKET_PUBLIC* is the S3 bucket for public/final outputs (postprocessed, clipped products ready for distribution). Currently `ofo-public`.
+*--s3-bucket-input-boundary* is the bucket where the mission boundary polygons reside. These are used to clip imagery products. Currently in `ofo-public` (same as `--s3-bucket-public`).
 
-*S3_POSTPROCESSED_DIR* is the parent directory where the postprocessed products will be stored. Products are organized as `{S3_POSTPROCESSED_DIR}/{mission_name}/{PHOTOGRAMMETRY_CONFIG_SUBFOLDER}/` when the subfolder is specified, or `{S3_POSTPROCESSED_DIR}/{mission_name}/` when not specified.
+*--input-boundary-dir* is the parent directory in `--s3-bucket-input-boundary` where the mission boundary polygons reside. Expected subdirectory structure: `<input-boundary-dir>/<mission_name>/metadata-mission/<mission_name>_mission-metadata.gpkg`.
 
-*PROJECT_NAME* is the name of the project you want to process. This docker container will only process one project name.
+*--s3-bucket-public* is the S3 bucket for public/final outputs (postprocessed, clipped products ready for distribution). Currently `ofo-public`.
 
-*OUTPUT_MAX_DIM* **optional** parameter to specify the max dimensions of thumbnails. Defaults to 800 pixels.
+*--s3-postprocessed-dir* **optional** argument for the parent directory where the postprocessed products will be stored. Defaults to `processed`. Products are organized as `{s3-postprocessed-dir}/{mission_name}/{photogrammetry-config-subfolder}/` when the subfolder is specified, or `{s3-postprocessed-dir}/{mission_name}/` when not specified.
 
-*TEMP_WORKING_DIR_POSTPROCESSING* **optional** parameter specifying the directory within the container where the imagery products are downloaded to and postprocessed. The typical place is `/tmp/processing` which means the data will be downloaded to the processing computer and postprocessed there. You have the ability to change the TEMP_WORKING_DIR_POSTPROCESSING to a persistent volume (PVC).
+*--output-max-dim* **optional** argument to specify the max dimensions of thumbnails. Defaults to 800 pixels.
+
+*--working-dir* **optional** argument specifying the directory within the container where the imagery products are downloaded to and postprocessed. Defaults to `/tmp/processing`, which means the data will be downloaded to the processing computer and postprocessed there. You have the ability to change the working directory to a persistent volume (PVC).
 
 
 
@@ -90,7 +98,7 @@ docker run --rm \
 ## Outputs
 
 ```
-S3:ofo-public/S3_POSTPROCESSED_DIR/dataset1/photogrammetry_01/
+S3:ofo-public/<s3-postprocessed-dir>/dataset1/photogrammetry_01/
 ├── full/
 │   ├── mission_ortho-dtm-ptcloud.tif
 │   ├── mission_dsm-ptcloud.tif
@@ -128,12 +136,12 @@ This document describes the sequential execution flow of the photogrammetry post
 ## Container Startup Chain
 
 ```
-docker run → Dockerfile ENTRYPOINT → docker-entrypoint.sh → entrypoint.py → postprocess.py
+docker run → Dockerfile ENTRYPOINT → entrypoint.py → postprocess.py
 ```
 
 When the container starts, it follows this three-phase execution sequence:
 
-1. **Phase 1**: Shell-based validation and setup (`docker-entrypoint.sh`)
+1. **Phase 1**: Argument parsing and validation (`entrypoint.py`)
 2. **Phase 2**: Python orchestration and S3 operations (`entrypoint.py`)
 3. **Phase 3**: Geospatial processing functions (`postprocess.py`)
 
@@ -150,52 +158,43 @@ When the container starts, it follows this three-phase execution sequence:
                  │
                  ▼
 ┌─────────────────────────────────────────────────────────────┐
-│ PHASE 1: docker-entrypoint.sh                               │
+│ PHASE 1: entrypoint.py (parse_args, validate_environment)  │
 ├─────────────────────────────────────────────────────────────┤
-│ 1. Set default values for optional env vars                 │
-│    ├─> TEMP_WORKING_DIR_POSTPROCESSING (default: /tmp/processing) │
-│    ├─> OUTPUT_MAX_DIM (default: 800)                        │
-│    ├─> S3_PROVIDER (default: Other)                         │
-│    ├─> S3_BUCKET_PUBLIC (default: S3_BUCKET_INTERNAL)          │
-│    └─> S3_POSTPROCESSED_DIR (default: processed)            │
+│ 1. Parse command-line arguments (exit if required missing) │
+│    └─> Apply defaults for optional arguments                │
 │                                                             │
-│ 2. Print environment variables                              │
+│ 2. Print configuration                                      │
 │                                                             │
 │ 3. Validate required env vars (exit if missing):            │
 │    ├─> S3_ENDPOINT                                          │
-│    ├─> S3_ACCESS_KEY                                        │
-│    ├─> S3_SECRET_KEY                                        │
-│    ├─> S3_BUCKET_INTERNAL                                   │
-│    ├─> S3_BUCKET_INPUT_BOUNDARY                             │
-│    └─> PROJECT_NAME                                         │
+│    ├─> AWS_ACCESS_KEY_ID                                    │
+│    └─> AWS_SECRET_ACCESS_KEY                                │
 │                                                             │
-│ 4. Test rclone installation (exit if missing)               │
-│                                                             │
-│ 5. exec python3 /app/entrypoint.py                          │
+│ 4. Check rclone is installed (exit if missing)              │
 └────────────────┬────────────────────────────────────────────┘
                  │
                  ▼
 ┌─────────────────────────────────────────────────────────────┐
 │ PHASE 2: entrypoint.py (main function)                      │
 ├─────────────────────────────────────────────────────────────┤
-│ 1. Validate TEMP_WORKING_DIR_POSTPROCESSING exists and is writable │
+│ 1. Validate working directory exists and is writable        │
 │    └─> Create directory if needed                           │
 │                                                             │
 │ 2. Create working directory structure                       │
-│    ├─> $TEMP_WORKING_DIR_POSTPROCESSING/input/              │
-│    ├─> $TEMP_WORKING_DIR_POSTPROCESSING/boundary/           │
-│    └─> $TEMP_WORKING_DIR_POSTPROCESSING/output/             │
+│    ├─> $WORKING_DIR/input/              │
+│    ├─> $WORKING_DIR/boundary/           │
+│    └─> $WORKING_DIR/output/             │
 │                                                             │
 │ 3. download_photogrammetry_products()                       │
 │    ├─> Use rclone with S3 command-line flags                │
-│    ├─> Download files matching PROJECT_NAME prefix          │
-│    ├─> Save to $TEMP_WORKING_DIR_POSTPROCESSING/input/{project_name}/ │
+│    ├─> Download files matching project name prefix          │
+│    ├─> Save to $WORKING_DIR/input/{project_name}/ │
 │    └─> Return: project_name                                 │
 │                                                             │
 │ 4. download_boundary_polygons(mission_name)                 │
 │    ├─> Extract base mission name (strip numeric prefix)     │
 │    ├─> Use rclone with S3 command-line flags                │
-│    └─> Download .gpkg to $TEMP_WORKING_DIR_POSTPROCESSING/boundary/{mission}/ │
+│    └─> Download .gpkg to $WORKING_DIR/boundary/{mission}/ │
 │                                                             │
 │ 5. detect_and_match_missions()                              │
 │    ├─> Match product files to boundary file                 │
@@ -206,14 +205,14 @@ When the container starts, it follows this three-phase execution sequence:
 │    │   (calls Phase 3)                                    │ │
 │    │                                                      │ │
 │    ├─> upload_processed_products(mission_id)              │ │
-│    │   ├─> Get PHOTOGRAMMETRY_CONFIG_SUBFOLDER (may be empty) │ │
+│    │   ├─> Use photogrammetry config subfolder (may be empty) │ │
 │    │   └─> Upload to S3:{mission_id}/{subfolder}/ (or skip subfolder if empty) │ │
 │    │                                                      │ │
 │    └─> cleanup_working_directory(mission_id)              │ │
-│        ├─> Delete $TEMP_WORKING_DIR_POSTPROCESSING/input/{mission_id}/ │ │
-│        ├─> Delete $TEMP_WORKING_DIR_POSTPROCESSING/boundary/{mission_id}/ │ │
-│        ├─> Delete $TEMP_WORKING_DIR_POSTPROCESSING/output/full/{mission_id}_* │ │
-│        └─> Delete $TEMP_WORKING_DIR_POSTPROCESSING/output/thumbnails/{mission_id}_* │ │
+│        ├─> Delete $WORKING_DIR/input/{mission_id}/ │ │
+│        ├─> Delete $WORKING_DIR/boundary/{mission_id}/ │ │
+│        ├─> Delete $WORKING_DIR/output/full/{mission_id}_* │ │
+│        └─> Delete $WORKING_DIR/output/thumbnails/{mission_id}_* │ │
 │                                                            │ │
 │ 7. Print summary and exit                                  │ │
 └────────────────────────────────────────────────────────────┼─┘
@@ -228,8 +227,8 @@ When the container starts, it follows this three-phase execution sequence:
 │    └─> Product files exist                                  │
 │                                                             │
 │ 2. Create output directories:                               │
-│    ├─> $TEMP_WORKING_DIR_POSTPROCESSING/output/full/        │
-│    └─> $TEMP_WORKING_DIR_POSTPROCESSING/output/thumbnails/  │
+│    ├─> $WORKING_DIR/output/full/        │
+│    └─> $WORKING_DIR/output/thumbnails/  │
 │                                                             │
 │ 3. Read mission boundary polygon (GeoDataFrame)             │
 │                                                             │
@@ -261,7 +260,7 @@ When the container starts, it follows this three-phase execution sequence:
 │                                                             │
 │ 8. FOR EACH .tif file in output/full/:                      │
 │    └─> create_thumbnail()                                   │
-│        ├─> Calculate scale factor (max dim = OUTPUT_MAX_DIM)│
+│        ├─> Calculate scale factor (max dim = --output-max-dim)│
 │        ├─> Read raster at reduced resolution                │
 │        ├─> Render with matplotlib colormap                  │
 │        └─> Save PNG to output/thumbnails/                   │
@@ -276,32 +275,36 @@ When the container starts, it follows this three-phase execution sequence:
 
 <br/>
 
-## Phase 1: Shell Validation (docker-entrypoint.sh)
+## Phase 1: Argument Parsing and Validation (entrypoint.py)
 
-The bash script performs initial validation and sets up the environment before handing off to Python.
+`parse_args()` and `validate_environment()` check the configuration before any data is transferred.
 
 ### Key Responsibilities:
-- **Single Source of Truth for Defaults**: All optional environment variable defaults are set here at the top of the script
-- **Environment Validation**: Checks for required S3 credentials and configuration
-- **Dependency Verification**: Confirms rclone is installed and functional
+- **Single Source of Truth for Defaults**: All defaults for optional arguments are set in `parse_args()`
+- **Configuration Validation**: argparse exits if a required argument is missing; `validate_environment()` exits if an S3 credential is missing
+- **Dependency Verification**: Confirms rclone is installed
 - **Fail-Fast Behavior**: Exits immediately if validation fails, preventing wasted S3 bandwidth
 
-### Environment Variables Validated:
-**Required** (container exits if missing):
+### Required (container exits if missing):
+Environment variables:
 - `S3_ENDPOINT` - S3 service endpoint URL
-- `S3_ACCESS_KEY` - S3 access key
-- `S3_SECRET_KEY` - S3 secret key
-- `S3_BUCKET_INTERNAL` - Bucket containing raw Metashape outputs (internal/intermediate)
-- `S3_BUCKET_INPUT_BOUNDARY` - Bucket containing mission boundary files
-- `PROJECT_NAME` - Specific project to process
+- `AWS_ACCESS_KEY_ID` - S3 access key
+- `AWS_SECRET_ACCESS_KEY` - S3 secret key
 
-**Optional** (defaults applied):
-- `TEMP_WORKING_DIR_POSTPROCESSING` → `/tmp/processing`
-- `OUTPUT_MAX_DIM` → `800`
-- `PHOTOGRAMMETRY_CONFIG_SUBFOLDER` → `""` (empty string, skips subfolder)
+Arguments:
+- `--project-name` - Specific project to process
+- `--s3-bucket-internal` - Bucket containing raw Metashape outputs (internal/intermediate)
+- `--s3-photogrammetry-dir` - Directory containing the Metashape outputs
+- `--s3-bucket-input-boundary` - Bucket containing mission boundary files
+- `--input-boundary-dir` - Directory containing mission boundary files
+- `--s3-bucket-public` - Bucket for the final postprocessed outputs
+
+### Optional (defaults applied):
 - `S3_PROVIDER` → `Other`
-- `S3_BUCKET_PUBLIC` → `{S3_BUCKET_INTERNAL}`
-- `S3_POSTPROCESSED_DIR` → `processed`
+- `--photogrammetry-config-subfolder` → `""` (empty string, skips subfolder)
+- `--s3-postprocessed-dir` → `processed`
+- `--working-dir` → `/tmp/processing`
+- `--output-max-dim` → `800`
 
 ---
 
@@ -314,17 +317,17 @@ The Python script orchestrates data movement between S3 and local filesystem, ma
 ### Key Functions:
 
 #### `get_s3_flags()`
-Builds rclone command-line flags for S3 authentication. Uses the **flag-based approach** (not config files) for consistency with Argo workflows.
+Builds rclone command-line flags for S3. Uses the **flag-based approach** (not config files) for consistency with Argo workflows. Credentials are not passed as flags; `--s3-env-auth` makes rclone read `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` from the environment, so they don't appear in the process list.
 
-Returns: `['--s3-provider', ..., '--s3-endpoint', ..., '--s3-access-key-id', ..., '--s3-secret-access-key', ...]`
+Returns: `['--s3-provider', ..., '--s3-endpoint', ..., '--s3-env-auth']`
 
 #### `download_photogrammetry_products()`
 Downloads Metashape outputs from flat S3 directory structure.
 
 Process:
-1. Reads `PROJECT_NAME` from environment
-2. Uses rclone to copy files matching `{PROJECT_NAME}_*` pattern
-3. Saves to `$TEMP_WORKING_DIR_POSTPROCESSING/input/{project_name}/`
+1. Takes the project name from `--project-name`
+2. Uses rclone to copy files matching `{project_name}_*` pattern
+3. Saves to `$WORKING_DIR/input/{project_name}/`
 4. Returns the project name
 
 #### `download_boundary_polygons(mission_name)`
@@ -332,7 +335,7 @@ Downloads mission boundary polygon (`.gpkg` file) from nested S3 structure.
 
 Process:
 1. Constructs path: `{boundary_dir}/{mission_name}/metadata-mission/{mission_name}_mission-metadata.gpkg`
-2. Downloads to `$TEMP_WORKING_DIR_POSTPROCESSING/boundary/{mission_name}/`
+2. Downloads to `$WORKING_DIR/boundary/{mission_name}/`
 3. Returns True/False for success
 
 #### `detect_and_match_missions()`
@@ -351,31 +354,31 @@ Returns dict:
 Uploads processed outputs to mission-specific S3 directories.
 
 Process:
-1. Reads `PHOTOGRAMMETRY_CONFIG_SUBFOLDER` environment variable (defaults to empty string)
+1. Takes the photogrammetry config subfolder from `--photogrammetry-config-subfolder` (defaults to empty string)
 2. Constructs remote path: `{mission_id}/{subfolder}/` (subfolder skipped if empty)
-3. Uploads files from `$TEMP_WORKING_DIR_POSTPROCESSING/output/full/` and `thumbnails/`
+3. Uploads files from `$WORKING_DIR/output/full/` and `thumbnails/`
 4. Only uploads files matching `{mission_id}_*` pattern
 
 Examples:
-- `PHOTOGRAMMETRY_CONFIG_SUBFOLDER=''` (empty) → `mission/`
-- `PHOTOGRAMMETRY_CONFIG_SUBFOLDER='photogrammetry_01'` → `mission/photogrammetry_01/`
-- `PHOTOGRAMMETRY_CONFIG_SUBFOLDER='photogrammetry_02'` → `mission/photogrammetry_02/`
+- `--photogrammetry-config-subfolder=` (empty) → `mission/`
+- `--photogrammetry-config-subfolder=photogrammetry_01` → `mission/photogrammetry_01/`
+- `--photogrammetry-config-subfolder=photogrammetry_02` → `mission/photogrammetry_02/`
 
 #### `cleanup_working_directory(mission_id)`
 **Parallel-safe cleanup** that only deletes mission-specific files.
 
 Deletes:
-- `$TEMP_WORKING_DIR_POSTPROCESSING/input/{mission_id}/` (entire directory)
-- `$TEMP_WORKING_DIR_POSTPROCESSING/boundary/{mission_id}/` (entire directory)
-- `$TEMP_WORKING_DIR_POSTPROCESSING/output/full/{mission_id}_*` (files only)
-- `$TEMP_WORKING_DIR_POSTPROCESSING/output/thumbnails/{mission_id}_*` (files only)
+- `$WORKING_DIR/input/{mission_id}/` (entire directory)
+- `$WORKING_DIR/boundary/{mission_id}/` (entire directory)
+- `$WORKING_DIR/output/full/{mission_id}_*` (files only)
+- `$WORKING_DIR/output/thumbnails/{mission_id}_*` (files only)
 
-**Why mission-specific?** Multiple containers can safely share the same `TEMP_WORKING_DIR_POSTPROCESSING` (e.g., mounted PVC) during parallel Argo processing without interfering with each other.
+**Why mission-specific?** Multiple containers can safely share the same working directory (e.g., mounted PVC) during parallel Argo processing without interfering with each other.
 
 #### `main()`
 Primary execution function that coordinates the entire workflow:
 
-1. Validates `TEMP_WORKING_DIR_POSTPROCESSING` exists and is writable
+1. Validates the working directory exists and is writable
 2. Downloads photogrammetry products
 3. Downloads boundary polygon
 4. Matches products to boundary
@@ -428,7 +431,7 @@ Process:
    - `chm-*` → `viridis` (height)
 4. Saves as PNG with transparent background for nodata
 
-#### `postprocess_photogrammetry_containerized(mission_id, boundary_file, product_files)`
+#### `postprocess_photogrammetry_containerized(mission_id, boundary_file, product_files, working_dir, output_max_dim)`
 Main processing coordinator called from `entrypoint.py`.
 
 Workflow:
@@ -449,10 +452,10 @@ Workflow:
 
 ## Working Directory Structure
 
-During processing, the `TEMP_WORKING_DIR_POSTPROCESSING` (default: `/tmp/processing`) contains:
+During processing, the working directory (`--working-dir`, default: `/tmp/processing`) contains:
 
 ```
-$TEMP_WORKING_DIR_POSTPROCESSING/
+$WORKING_DIR/
 ├── input/
 │   └── {project_name}/              # Downloaded Metashape products
 │       ├── mission_dsm-ptcloud.tif
@@ -475,7 +478,7 @@ $TEMP_WORKING_DIR_POSTPROCESSING/
         └── ...
 ```
 
-**Parallel Processing Note**: Multiple containers can safely use the same `TEMP_WORKING_DIR_POSTPROCESSING` (e.g., mounted PVC) because cleanup is mission-specific. Each container only deletes its own mission's subdirectories and files.
+**Parallel Processing Note**: Multiple containers can safely use the same working directory (e.g., mounted PVC) because cleanup is mission-specific. Each container only deletes its own mission's subdirectories and files.
 
 ---
 
@@ -486,7 +489,7 @@ $TEMP_WORKING_DIR_POSTPROCESSING/
 Processed products are uploaded to mission-specific directories:
 
 ```
-S3:{S3_BUCKET_PUBLIC}/{S3_POSTPROCESSED_DIR}/
+S3:{s3-bucket-public}/{s3-postprocessed-dir}/
 └── {mission_name}/
     ├── photogrammetry_00/
     │   ├── full/
@@ -512,7 +515,7 @@ S3:{S3_BUCKET_PUBLIC}/{S3_POSTPROCESSED_DIR}/
         └── thumbnails/
 ```
 
-The `photogrammetry_NN` subfolder is determined by the `PHOTOGRAMMETRY_CONFIG_SUBFOLDER` parameter. If the parameter is empty or not set, products are stored directly under the mission name without a subfolder.
+The `photogrammetry_NN` subfolder is determined by the `--photogrammetry-config-subfolder` argument. If the parameter is empty or not set, products are stored directly under the mission name without a subfolder.
 
 ---
 
