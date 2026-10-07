@@ -4,8 +4,8 @@ Main entrypoint for photogrammetry post-processing container.
 Handles S3 downloads/uploads, mission detection, and orchestration.
 
 Configuration is passed as command-line arguments. S3 credentials are read from
-environment variables (S3_ENDPOINT, AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, and
-optionally S3_PROVIDER) so that they are not exposed in the process list or workflow spec.
+environment variables (S3_ENDPOINT, RCLONE_S3_ACCESS_KEY_ID, RCLONE_S3_SECRET_ACCESS_KEY,
+and optionally S3_PROVIDER) so that they are not exposed in the process list or workflow spec.
 """
 
 import argparse
@@ -19,7 +19,11 @@ from pathlib import Path
 # Import processing functions
 from postprocessing import postprocess_photogrammetry_containerized
 
-REQUIRED_S3_ENV_VARS = ["S3_ENDPOINT", "AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY"]
+REQUIRED_S3_ENV_VARS = [
+    "S3_ENDPOINT",
+    "RCLONE_S3_ACCESS_KEY_ID",
+    "RCLONE_S3_SECRET_ACCESS_KEY",
+]
 
 
 def parse_args():
@@ -105,15 +109,14 @@ def validate_environment():
 def get_s3_flags():
     """Build common S3 flags for rclone commands.
 
-    Credentials are not passed as flags: --s3-env-auth makes rclone read
-    AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY from the environment.
+    Credentials are not passed as flags: rclone reads RCLONE_S3_ACCESS_KEY_ID and
+    RCLONE_S3_SECRET_ACCESS_KEY from the environment directly.
     """
     return [
         "--s3-provider",
         os.environ.get("S3_PROVIDER", "Other"),
         "--s3-endpoint",
         os.environ.get("S3_ENDPOINT"),
-        "--s3-env-auth",
     ]
 
 
@@ -237,6 +240,7 @@ def download_photogrammetry_products(
     ] + get_s3_flags()
 
     try:
+        print(f"DEBUG rclone command: {' '.join(copy_cmd)}")  # TEMP: remove after debugging
         subprocess.run(copy_cmd, check=True)
         print("Download completed")
         files = os.listdir(local_input_dir) if os.path.exists(local_input_dir) else []
@@ -298,6 +302,7 @@ def download_boundary_polygons(
     ] + get_s3_flags()
 
     try:
+        print(f"DEBUG rclone command: {' '.join(copy_cmd)}")  # TEMP: remove after debugging
         subprocess.run(copy_cmd, check=True)
         print("Download completed")
         if os.path.exists(local_boundary_file):
@@ -442,6 +447,7 @@ def upload_processed_products(
     ] + get_s3_flags()
 
     try:
+        print(f"DEBUG rclone command: {' '.join(cmd)}")  # TEMP: remove after debugging
         subprocess.run(cmd, check=True)
         print(f"Upload completed for mission: {mission_id}")
     except subprocess.CalledProcessError as e:

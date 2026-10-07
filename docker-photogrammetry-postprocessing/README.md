@@ -42,8 +42,8 @@ S3 credentials are passed as environment variables, and everything else is passe
 docker run --rm \
   -e S3_ENDPOINT=https://js2.jetstream-cloud.org:8001 \
   -e S3_PROVIDER=Other \
-  -e AWS_ACCESS_KEY_ID=<your_access_key> \
-  -e AWS_SECRET_ACCESS_KEY=<your_secret_key> \
+  -e RCLONE_S3_ACCESS_KEY_ID=<your_access_key> \
+  -e RCLONE_S3_SECRET_ACCESS_KEY=<your_secret_key> \
   ghcr.io/open-forest-observatory/photogrammetry-postprocessing:latest \
   --project-name=benchmarking-greasewood \
   --s3-bucket-internal=ofo-internal \
@@ -65,9 +65,9 @@ Outside of Docker, the same arguments can be passed to `python3 entrypoint.py` d
 
 *S3_PROVIDER* **optional**, keep as 'Other' (the default)
 
-*AWS_ACCESS_KEY_ID* is the access key for OFOs S3 buckets
+*RCLONE_S3_ACCESS_KEY_ID* is the access key for OFOs S3 buckets
 
-*AWS_SECRET_ACCESS_KEY* is the secret key for OFOs S3 buckets
+*RCLONE_S3_SECRET_ACCESS_KEY* is the secret key for OFOs S3 buckets
 
 ### Arguments
 
@@ -170,8 +170,8 @@ When the container starts, it follows this three-phase execution sequence:
 │                                                             │
 │ 3. Validate required env vars (exit if missing):            │
 │    ├─> S3_ENDPOINT                                          │
-│    ├─> AWS_ACCESS_KEY_ID                                    │
-│    └─> AWS_SECRET_ACCESS_KEY                                │
+│    ├─> RCLONE_S3_ACCESS_KEY_ID                              │
+│    └─> RCLONE_S3_SECRET_ACCESS_KEY                          │
 │                                                             │
 │ 4. Check rclone is installed (exit if missing)              │
 └────────────────┬────────────────────────────────────────────┘
@@ -293,8 +293,8 @@ When the container starts, it follows this three-phase execution sequence:
 ### Required (container exits if missing):
 Environment variables:
 - `S3_ENDPOINT` - S3 service endpoint URL
-- `AWS_ACCESS_KEY_ID` - S3 access key
-- `AWS_SECRET_ACCESS_KEY` - S3 secret key
+- `RCLONE_S3_ACCESS_KEY_ID` - S3 access key
+- `RCLONE_S3_SECRET_ACCESS_KEY` - S3 secret key
 
 Arguments:
 - `--project-name` - Specific project to process
@@ -322,9 +322,9 @@ The Python script orchestrates data movement between S3 and local filesystem, ma
 ### Key Functions:
 
 #### `get_s3_flags()`
-Builds rclone command-line flags for S3. Uses the **flag-based approach** (not config files) for consistency with Argo workflows. Credentials are not passed as flags; `--s3-env-auth` makes rclone read `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` from the environment, so they don't appear in the process list.
+Builds rclone command-line flags for S3. Uses the **flag-based approach** (not config files) for consistency with Argo workflows. Credentials are not passed as flags; rclone reads `RCLONE_S3_ACCESS_KEY_ID` and `RCLONE_S3_SECRET_ACCESS_KEY` from the environment directly (every rclone flag can be set as an `RCLONE_*` env var), so they don't appear in the process list.
 
-Returns: `['--s3-provider', ..., '--s3-endpoint', ..., '--s3-env-auth']`
+Returns: `['--s3-provider', ..., '--s3-endpoint', ...]`
 
 #### `download_photogrammetry_products(project_name, input_bucket, s3_photogrammetry_dir, photogrammetry_config_subfolder, working_dir)`
 Downloads Metashape outputs from flat S3 directory structure.
