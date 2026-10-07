@@ -589,6 +589,88 @@ spec:
                   "{\"b\": 0.025, \"c\": 0.0625}"
                 ]
 
+    # This script takes in the full file of field trees and plot bounds and the registration file.
+    # The first check is be whether the registration file passes the quality check. If so, it
+    # extracts the appropriate subset of field trees and plot bounds and then shifts them based on the
+    # shift contained in the registration file. Finally, these files are written out.
+    - name: prepare-field-data
+      inputs:
+        parameters:
+          - name: drone-ground-pair-name
+          - name: ground-plot-id
+          - name: field-trees-file
+          - name: field-bounds-file
+          - name: registration-file
+          - name: registration-quality-threshold
+          - name: field-trees-output-file
+          - name: field-bounds-output-file
+      nodeSelector:
+        feature.node.kubernetes.io/workload-type: cpu
+      script:
+        # Note this only relies on core geopandas functionality but this means this image will be cached
+        # for the following step.
+        image: ghcr.io/open-forest-observatory/tree-registration-and-matching:{{workflow.parameters.TRAM_IMAGE_TAG}}
+        volumeMounts:
+          - name: data
+            mountPath: /data
+        resources:
+          requests:
+            cpu: 1
+            memory: "4Gi"
+          limits:
+            memory: "4Gi"
+        command: ["python"]
+        source: |
+          from pathlib import Path
+
+          import geopandas as gpd
+          import pandas as pd
+
+          # Input variables
+          ground_plot_id = "{{inputs.parameters.ground-plot-id}}"
+          field_trees_file = "{{inputs.parameters.field-trees-file}}"
+          field_bounds_file = "{{inputs.parameters.field-bounds-file}}"
+          registration_file = "{{inputs.parameters.registration-file}}"
+          registration_quality_threshold = float("{{inputs.parameters.registration-quality-threshold}}")
+          field_trees_output_file = Path("{{inputs.parameters.field-trees-output-file}}")
+          field_bounds_output_file = Path("{{inputs.parameters.field-bounds-output-file}}")
+
+          # First check the registration quality to see if this whole step should fail
+          registration = pd.read_csv(registration_file)
+
+          # See if it passes the quality threshold
+          ratio_quality_metric = registration["ratio_quality_metric"].iloc[0]
+          if ratio_quality_metric < registration_quality_threshold:
+              raise ValueError(f"The quality metric ({ratio_quality_metric}) is less than the threshold ({registration_quality_threshold})")
+
+          # Read the other products, which contain the data for all plots
+          field_trees = gpd.read_file(field_trees_file)
+          field_bounds = gpd.read_file(field_bounds_file)
+
+          # Subset to the specified plot
+          field_trees = field_trees.query("plot_id==@ground_plot_id")
+          field_bounds = field_bounds.query("plot_id==@ground_plot_id")
+
+          # Determine the shift that the CRS needs to be interpreted in
+          working_CRS = registration["shift_CRS"].iloc[0]
+
+          # Apply the shift
+          x_shift = registration["estimated_shift_x"].iloc[0]
+          y_shift = registration["estimated_shift_y"].iloc[0]
+
+          field_trees.to_crs(working_CRS, inplace=True)
+          field_bounds.to_crs(working_CRS, inplace=True)
+
+          field_trees.geometry = field_trees.geometry.translate(xoff=x_shift, yoff=y_shift)
+          field_bounds.geometry = field_bounds.geometry.translate(xoff=x_shift, yoff=y_shift)
+
+          # Save out the result
+          field_trees_output_file.parent.mkdir(exist_ok=True, parents=True)
+          field_bounds_output_file.parent.mkdir(exist_ok=True, parents=True)
+          field_trees.to_file(field_trees_output_file)
+          field_bounds.to_file(field_bounds_output_file)
+
+
     # Apply the registration shift to align field tree coordinates with the drone data, then
     # spatially join to match each field tree to a detected tree crown. The task fails if the
     # registration quality score is below REGISTRATION_QUALITY_THRESHOLD.
