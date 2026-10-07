@@ -400,10 +400,12 @@ The processing module performs raster operations, CHM generation, COG creation, 
 Crops a raster to mission boundary and saves as Cloud Optimized GeoTIFF.
 
 Process:
-1. Opens source raster with rasterio
-2. Reprojects mission polygon to match raster CRS
-3. Masks raster using polygon geometry (RGB orthomosaics get a 4-band output with an alpha mask)
+1. Opens source raster with rasterio to read its CRS, grid and nodata
+2. Reprojects mission polygon to match raster CRS and writes it as a temporary cutline
+3. Runs `gdalwarp` with the cutline (RGB orthomosaics get a 4-band output with an alpha mask)
 4. Writes cropped raster as COG with compression
+
+`gdalwarp` processes the raster in blocks, so memory use stays bounded (a few GB) even for very large orthomosaics. The output grid is pinned to the source grid (same CRS and resolution, pixel-aligned bounds, `-r near -et 0`), so pixel values are copied exactly with no resampling.
 
 #### `make_chm(dsm_filepath, dtm_filepath)`
 Generates a Canopy Height Model by subtracting DTM from DSM.

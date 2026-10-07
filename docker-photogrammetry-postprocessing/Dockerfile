@@ -1,3 +1,4 @@
+# Before upgrading this base image, see the notes in crop_raster_save_cog (postprocessing/postprocess.py)
 FROM ghcr.io/osgeo/gdal:ubuntu-small-3.8.4
 
 # Install system dependencies
