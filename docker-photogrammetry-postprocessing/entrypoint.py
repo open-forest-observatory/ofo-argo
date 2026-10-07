@@ -444,6 +444,8 @@ def upload_processed_products(
         "5",
         "--retries-sleep",
         "15s",
+        "--stats",
+        "30s",
     ] + get_s3_flags()
 
     try:
