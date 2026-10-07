@@ -180,6 +180,28 @@ spec:
                 - name: local-dir
                   value: "{{workflow.parameters.TEMP_FOLDER}}/{{workflow.name}}/{{inputs.parameters.drone-ground-pair-name}}"
 
+          - name: prepare-field-data
+            template: prepare-field-data
+            depends: "download-non-image-files.Succeeded"
+            arguments:
+              parameters:
+                - name: drone-ground-pair-name
+                  value: "{{inputs.parameters.drone-ground-pair-name}}"
+                - name: ground-plot-id
+                  value: "{{inputs.parameters.ground-plot-id}}"
+                - name: field-trees-file
+                  value: "{{workflow.parameters.FIELD_TREES_FILE}}"
+                - name: field-bounds-file
+                  value: "{{workflow.parameters.FIELD_PLOTS_FILE}}"
+                - name: registration-file
+                  value: '{{=jsonpath(tasks["download-non-image-files"].outputs.parameters["local-files"], "$.registration")}}'
+                - name: registration-quality-threshold
+                  value: "{{workflow.parameters.REGISTRATION_QUALITY_THRESHOLD}}"
+                - name: field-trees-output-file
+                  value: "{{workflow.parameters.TEMP_FOLDER}}/{{workflow.name}}/{{inputs.parameters.drone-ground-pair-name}}/{{inputs.parameters.drone-ground-pair-name}}_field-trees.gpkg"
+                - name: field-bounds-output-file
+                  value: "{{workflow.parameters.TEMP_FOLDER}}/{{workflow.name}}/{{inputs.parameters.drone-ground-pair-name}}/{{inputs.parameters.drone-ground-pair-name}}_field-bounds.gpkg"
+
           - name: detect-trees
             template: detect-trees
             depends: "download-non-image-files.Succeeded"
@@ -198,7 +220,7 @@ spec:
 
           - name: match-field-attributes
             template: match-field-attributes
-            depends: "detect-trees.Succeeded"
+            depends: "detect-trees.Succeeded && prepare-field-data.Succeeded"
             arguments:
               parameters:
                 - name: drone-ground-pair-name
