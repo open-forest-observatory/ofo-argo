@@ -7,6 +7,8 @@ Also computes the height above ground for each camera which was aligned by photo
 
 import os
 import shutil
+import subprocess
+import tempfile
 from pathlib import Path
 
 import geopandas as gpd
@@ -14,8 +16,7 @@ import matplotlib
 import numpy as np
 import pandas as pd
 import rasterio
-from rasterio.enums import ColorInterp
-from rasterio.mask import mask
+from rasterio.features import geometry_window
 from rasterio.warp import Resampling, calculate_default_transform, reproject
 from shapely.geometry import Point
 
@@ -96,87 +97,6 @@ def _is_rgb_orthomosaic(src):
     return src.dtypes[0] == "uint8" and src.count in (3, 4)
 
 
-def _crop_rgb_orthomosaic(src, geometries, output_filename):
-    """
-    Crop an RGB orthomosaic and return 4-band uint8 with alpha mask.
-
-    Handles both 3-band and 4-band uint8 inputs. The output is always
-    4-band uint8 where band 4 is an alpha mask (0=nodata, 255=valid).
-
-    Args:
-        src: Open rasterio dataset
-        geometries: Geometries to use for masking
-        output_filename: Output filename (for logging)
-
-    Returns:
-        Tuple of (cropped_data, cropped_transform, profile, colorinterp)
-    """
-    has_alpha = src.count == 4
-
-    # Preserve color interpretation from input, adding alpha if needed
-    if has_alpha:
-        print(
-            f"  {output_filename}: 4-band uint8 with alpha detected, preserving format"
-        )
-        colorinterp = list(src.colorinterp)
-    else:
-        print(f"  {output_filename}: 3-band uint8 detected, adding alpha band")
-        colorinterp = list(src.colorinterp) + [ColorInterp.alpha]
-
-    # Read RGB bands (first 3 bands)
-    # Use nodata=0 for the mask operation on RGB bands
-    cropped_rgb, cropped_transform = mask(
-        src, geometries, crop=True, indexes=[1, 2, 3], nodata=0, filled=True
-    )
-
-    # Create alpha band: 255 where valid, 0 where nodata
-    # Start with all zeros (nodata)
-    alpha_band = np.zeros(
-        (1, cropped_rgb.shape[1], cropped_rgb.shape[2]), dtype=np.uint8
-    )
-
-    if has_alpha:
-        # Read and crop the existing alpha band
-        cropped_alpha, _ = mask(
-            src, geometries, crop=True, indexes=[4], nodata=0, filled=True
-        )
-        # Alpha is valid (255) only where:
-        # 1. Original alpha was valid (non-zero)
-        # 2. Pixel is inside the crop polygon (handled by mask with nodata=0)
-        alpha_band = cropped_alpha
-    else:
-        # For 3-band input, create alpha from the mask operation
-        # Pixels inside polygon get alpha=255, outside get alpha=0
-        # We need to re-run mask to get the valid mask
-        cropped_with_mask, _ = mask(
-            src, geometries, crop=True, indexes=[1], filled=False
-        )
-        # Where mask is False (valid data), set alpha to 255
-        alpha_band[0] = np.where(cropped_with_mask.mask[0], 0, 255).astype(np.uint8)
-
-    # Combine RGB + alpha
-    cropped_data = np.vstack([cropped_rgb, alpha_band])
-
-    # Build profile for 4-band uint8 output
-    profile = src.profile.copy()
-    profile.update(
-        {
-            "driver": "COG",
-            "compress": "deflate",
-            "tiled": True,
-            "height": cropped_data.shape[1],
-            "width": cropped_data.shape[2],
-            "transform": cropped_transform,
-            "count": 4,
-            "dtype": "uint8",
-            "nodata": None,  # Alpha band handles nodata
-            "BIGTIFF": "IF_SAFER",
-        }
-    )
-
-    return cropped_data, cropped_transform, profile, colorinterp
-
-
 def crop_raster_save_cog(
     raster_filepath: str | Path,
     output_filepath: str | Path,
@@ -188,40 +108,94 @@ def crop_raster_save_cog(
     For RGB orthomosaics (3 or 4 band uint8), outputs 4-band uint8 with alpha mask.
     For other rasters, uses standard nodata value handling.
 
+    Cropping is done with gdalwarp, which processes the raster in blocks so memory use
+    stays bounded regardless of raster size. The output grid is pinned to the source
+    grid (same CRS, resolution, and pixel-aligned bounds) with nearest-neighbor sampling
+    and an exact transform, so pixel values are copied without resampling.
+
     Args:
-        raster_filepath (str | Path): Path to input raster file
-        output_filepath (str | Path): Path to save output file after cropping
-        mission_polygon (GeoDataFrame): GeoDataFrame containing mission boundary polygon
+        raster_filepath: Path to input raster file
+        output_filepath: Path to output COG file
+        mission_polygon: GeoDataFrame containing mission boundary polygon
     """
     # Ensure output_filepath is a Path object
     output_filepath = Path(output_filepath)
 
-    # Read raster
     with rasterio.open(raster_filepath) as src:
         # Reproject mission polygon to match raster CRS
         mission_polygon_matched = mission_polygon.to_crs(src.crs)
 
-        # Get geometries for masking
         # Note, if there are multiple rows in the boundaries geodataframe, this takes only the area
         # in the interesction of all of them.
-        geometries = [mission_polygon_matched.geometry.intersection_all()]
+        geometry = mission_polygon_matched.geometry.intersection_all()
 
-        # Handle RGB orthomosaics specially (3 or 4 band uint8)
-        colorinterp = None
+        # Pixel-aligned bounds of the crop, matching what rasterio.mask(crop=True) would produce
+        window = geometry_window(src, [geometry])
+        left, bottom, right, top = rasterio.windows.bounds(window, src.transform)
+        x_res, y_res = src.res
+
+        # Why the gdalwarp CLI rather than rasterio.mask or the GDAL Python bindings (gdal.Warp):
+        # - rasterio.mask reads the whole cropped area into memory (~23 GiB per copy for a
+        #   75k x 82k RGBA orthomosaic), which exceeded the pod memory limit. gdalwarp works in
+        #   blocks and peaked at ~3 GiB on that file.
+        # - The base image (osgeo/gdal ubuntu-small-3.8.4) ships GDAL Python bindings compiled
+        #   against NumPy 1.x, but requirements.txt installs NumPy 2.x, which breaks osgeo.gdal_array
+        #   (and gdal.UseExceptions(), which imports it). The CLI has no Python dependency.
+        #
+        # To switch to the Python bindings (gdal.Warp with the same options), upgrade the base
+        # image. Tested with ubuntu-small-3.13.3 (Ubuntu 26.04, Python 3.14, NumPy 2.3), where the
+        # bindings work. That upgrade requires:
+        # - Dockerfile: replace `RUN pip3 install --upgrade pip` with
+        #   `ENV PIP_BREAK_SYSTEM_PACKAGES=1` (or use a venv); Ubuntu 26.04 blocks system pip
+        #   installs (PEP 668) and the build fails otherwise.
+        # - Writing COGs directly from the warp (-of COG / format="COG") is ~1.7x slower in
+        #   GDAL 3.13 than 3.8 for large orthomosaics. Warp to a temporary tiled GTiff and then
+        #   gdal.Translate / gdal_translate to COG instead, which is as fast as before.
+        # - Expect these output differences (cropped and CHM pixel values were identical):
+        #   GDAL 3.13 builds one fewer COG overview level, so thumbnails (read from overviews)
+        #   differ slightly, and pandas 3 makes photogrammetry_ground_elevation in
+        #   camera-locations.gpkg float64 instead of float32.
+        cmd = [
+            "gdalwarp",
+            "-of", "COG",
+            "-te", repr(left), repr(bottom), repr(right), repr(top),
+            "-tr", repr(x_res), repr(y_res),
+            "-r", "near",
+            "-et", "0",
+            "-wm", "2048",
+            "-multi",
+            # Bound the block cache so memory use doesn't scale with raster size
+            "--config", "GDAL_CACHEMAX", "2048",
+            # Parallel compression; parallel warping (-wo NUM_THREADS) is ~4x slower with a cutline
+            "-co", "NUM_THREADS=ALL_CPUS",
+            "-co", "COMPRESS=DEFLATE",
+            "-co", "BIGTIFF=IF_SAFER",
+            "-overwrite",
+        ]  # fmt: skip
+
         if _is_rgb_orthomosaic(src):
-            cropped_data, cropped_transform, profile, colorinterp = (
-                _crop_rgb_orthomosaic(src, geometries, output_filepath.name)
-            )
+            # An existing alpha band (4-band input) is used as the source mask; -dstalpha
+            # writes an alpha band that is 0 outside the polygon or where the source was masked
+            if src.count == 4:
+                print(
+                    f"  {output_filepath.name}: 4-band uint8 with alpha detected, preserving format"
+                )
+            else:
+                print(
+                    f"  {output_filepath.name}: 3-band uint8 detected, adding alpha band"
+                )
+            cmd += ["-dstalpha"]
         else:
             # Standard handling for non-RGB rasters (elevation data, etc.)
             # Determine nodata value and output dtype
             output_dtype = None
             if src.nodata is not None:
                 nodata_value = src.nodata
+                cmd += ["-srcnodata", repr(src.nodata)]
             elif src.dtypes[0] == "uint8":
                 # Single-band uint8 without nodata: promote to int16
                 nodata_value = -32767
-                output_dtype = "int16"
+                output_dtype = "Int16"
                 print(
                     f"  Warning: {output_filepath.name} has no nodata defined. "
                     "Promoting uint8 to int16 to enable nodata masking."
@@ -231,40 +205,17 @@ def crop_raster_save_cog(
 
             # Convert float64 to float32 to save space
             if src.dtypes[0] == "float64":
-                output_dtype = "float32"
+                output_dtype = "Float32"
 
-            # Crop raster to polygon, explicitly setting nodata outside polygon
-            cropped_data, cropped_transform = mask(
-                src, geometries, crop=True, nodata=nodata_value, filled=True
-            )
-
-            # Update metadata for COG
-            profile = src.profile.copy()
-            profile.update(
-                {
-                    "driver": "COG",
-                    "compress": "deflate",
-                    "tiled": True,
-                    "height": cropped_data.shape[1],
-                    "width": cropped_data.shape[2],
-                    "transform": cropped_transform,
-                    "nodata": nodata_value,
-                    "BIGTIFF": "IF_SAFER",
-                }
-            )
-
-            # Apply dtype conversion if needed
+            cmd += ["-dstnodata", repr(nodata_value)]
             if output_dtype is not None:
-                profile["dtype"] = output_dtype
-                cropped_data = cropped_data.astype(output_dtype)
+                cmd += ["-ot", output_dtype]
 
-        # Write output
-        with rasterio.open(output_filepath, "w", **profile) as dst:
-            dst.write(cropped_data)
-
-            # Set color interpretation for RGBA so GIS software recognizes alpha band
-            if colorinterp is not None:
-                dst.colorinterp = colorinterp
+        with tempfile.TemporaryDirectory(dir=output_filepath.parent) as tmp_dir:
+            cutline_path = os.path.join(tmp_dir, "cutline.gpkg")
+            gpd.GeoDataFrame(geometry=[geometry], crs=src.crs).to_file(cutline_path)
+            cmd += ["-cutline", cutline_path, str(raster_filepath), str(output_filepath)]
+            subprocess.run(cmd, check=True)
 
     print(f"  Saved COG: {output_filepath}")
 
@@ -405,7 +356,7 @@ def create_thumbnail(tif_filepath, output_path, max_dim=800):
 
 
 def postprocess_photogrammetry_containerized(
-    mission_id, boundary_file_path, product_file_paths
+    mission_id, boundary_file_path, product_file_paths, working_dir, output_max_dim=800
 ):
     """
     Main post-processing function for a single mission.
@@ -424,6 +375,8 @@ def postprocess_photogrammetry_containerized(
         mission_id: Mission identifier (used for naming output files, not directory structure)
         boundary_file_path: Path to mission boundary polygon file
         product_file_paths: List of paths to photogrammetry product files
+        working_dir: Local working directory; outputs are written to working_dir/output
+        output_max_dim: Maximum dimension in pixels of the generated thumbnails
 
     Returns:
         True on success, raises exception on failure. Any failed product raises
@@ -442,7 +395,6 @@ def postprocess_photogrammetry_containerized(
         )
 
     # Create output directories (no mission subdirectory)
-    working_dir = os.environ.get("TEMP_WORKING_DIR_POSTPROCESSING", "/tmp/processing")
     postprocessed_path = f"{working_dir}/output"
     create_dir(os.path.join(postprocessed_path, "full"))
     create_dir(os.path.join(postprocessed_path, "thumbnails"))
@@ -595,8 +547,6 @@ def postprocess_photogrammetry_containerized(
         print(f"Successfully created CHM: {chm_filename}")
 
     ## Create thumbnails
-
-    output_max_dim = int(os.environ.get("OUTPUT_MAX_DIM", "800"))
 
     # List all TIF files in output folder
     full_output_dir = os.path.join(postprocessed_path, "full")
