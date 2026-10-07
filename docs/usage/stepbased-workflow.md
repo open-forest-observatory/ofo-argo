@@ -549,14 +549,14 @@ argo submit -n argo postprocessing-workflow.yaml \
 | `CONFIG_LIST` | Same as metashape workflow — the same config list can be used for both |
 | `TEMP_WORKING_DIR` | **Absolute path** for temporary postprocessing files |
 | `PHOTOGRAMMETRY_CONFIG_ID` | Same config ID used for metashape — determines where to find raw products in S3 |
-| `S3_BUCKET_INTERNAL` | S3 bucket where raw Metashape products are stored (read by postprocessing) |
-| `S3_PHOTOGRAMMETRY_DIR` | S3 directory where raw Metashape outputs are stored |
+| `S3_BUCKET_INTERNAL` | **Required.** S3 bucket where raw Metashape products are stored (read by postprocessing) |
+| `S3_PHOTOGRAMMETRY_DIR` | **Required.** S3 directory where raw Metashape outputs are stored |
 | `S3_BUCKET_PUBLIC` | S3 bucket for public/final outputs (postprocessed products) and boundary files (typically `ofo-public`) |
-| `S3_POSTPROCESSED_DIR` | S3 directory name for postprocessed outputs. Example: `drone/missions_03` |
-| `S3_BOUNDARY_DIR` | Parent directory in `S3_BUCKET_PUBLIC` where mission boundary polygons reside. Example: `drone/missions_03` |
+| `S3_POSTPROCESSED_DIR` | **Required.** S3 directory name for postprocessed outputs. Example: `drone/missions_03` |
+| `S3_BOUNDARY_DIR` | **Required.** Parent directory in `S3_BUCKET_PUBLIC` where mission boundary polygons reside. Example: `drone/missions_03` |
 | `WORKFLOW_UTILS_IMAGE_TAG` | Docker image tag for argo-workflow-utils container (default: `latest`) |
 | `POSTPROCESSING_IMAGE_TAG` | Docker image tag for the photogrammetry-postprocessing container (default: `latest`) |
-| `COMPLETION_LOG_PATH` | Path to completion log file. **Required** — the postprocessing workflow uses this to find projects with completed metashape phase |
+| `COMPLETION_LOG_PATH` | **Required.** Path to completion log file. The postprocessing workflow uses this to find projects with completed metashape phase |
 | `SKIP_IF_COMPLETE` | Skip projects that already have a completed postprocess phase in the completion log (default: `"false"`) |
 
 **Secrets configuration:**

@@ -212,7 +212,7 @@ def download_photogrammetry_products(
         "/"
     )
 
-    print(f"Downloading products from: {remote_base_path}")
+    print(f"Downloading files from {remote_base_path} to {local_input_dir}")
     print(f"Filtering files with prefix: {project_name}_")
 
     # Download all files matching the project prefix directly to input/
@@ -238,6 +238,7 @@ def download_photogrammetry_products(
 
     try:
         subprocess.run(copy_cmd, check=True)
+        print("Download completed")
         files = os.listdir(local_input_dir) if os.path.exists(local_input_dir) else []
 
         if not files:
@@ -282,6 +283,8 @@ def download_boundary_polygons(
         local_boundary_dir, f"{mission_name}_mission-metadata.gpkg"
     )
 
+    print(f"Downloading file from {remote_boundary_file} to {local_boundary_file}")
+
     copy_cmd = [
         "rclone",
         "copyto",
@@ -296,6 +299,7 @@ def download_boundary_polygons(
 
     try:
         subprocess.run(copy_cmd, check=True)
+        print("Download completed")
         if os.path.exists(local_boundary_file):
             print(f"Successfully downloaded boundary file")
             return True
