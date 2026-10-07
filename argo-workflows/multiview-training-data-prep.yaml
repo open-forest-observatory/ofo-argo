@@ -185,8 +185,6 @@ spec:
             depends: "download-non-image-files.Succeeded"
             arguments:
               parameters:
-                - name: drone-ground-pair-name
-                  value: "{{inputs.parameters.drone-ground-pair-name}}"
                 - name: ground-plot-id
                   value: "{{inputs.parameters.ground-plot-id}}"
                 - name: field-trees-file
@@ -223,24 +221,16 @@ spec:
             depends: "detect-trees.Succeeded && prepare-field-data.Succeeded"
             arguments:
               parameters:
-                - name: drone-ground-pair-name
-                  value: "{{inputs.parameters.drone-ground-pair-name}}"
-                - name: ground-plot-id
-                  value: "{{inputs.parameters.ground-plot-id}}"
                 - name: field-trees-file
-                  value: "{{workflow.parameters.FIELD_TREES_FILE}}"
+                  value: "{{workflow.parameters.TEMP_FOLDER}}/{{workflow.name}}/{{inputs.parameters.drone-ground-pair-name}}/{{inputs.parameters.drone-ground-pair-name}}_field-trees.gpkg"
                 - name: field-bounds-file
-                  value: "{{workflow.parameters.FIELD_PLOTS_FILE}}"
+                  value: "{{workflow.parameters.TEMP_FOLDER}}/{{workflow.name}}/{{inputs.parameters.drone-ground-pair-name}}/{{inputs.parameters.drone-ground-pair-name}}_field-bounds.gpkg"
                 - name: drone-trees-file
                   value: "{{tasks.detect-trees.outputs.parameters.detected-tree-tops-file}}"
                 - name: drone-crowns-file
                   value: "{{tasks.detect-trees.outputs.parameters.detected-tree-crowns-file}}"
-                - name: registration-file
-                  value: '{{=jsonpath(tasks["download-non-image-files"].outputs.parameters["local-files"], "$.registration")}}'
                 - name: output-file
                   value: "{{workflow.parameters.TEMP_FOLDER}}/{{workflow.name}}/{{inputs.parameters.drone-ground-pair-name}}/{{inputs.parameters.drone-ground-pair-name}}_matched-tree-crowns.gpkg"
-                - name: registration-quality-threshold
-                  value: "{{workflow.parameters.REGISTRATION_QUALITY_THRESHOLD}}"
 
           - name: render-instance-labels
             template: render-instance-labels
@@ -618,7 +608,6 @@ spec:
     - name: prepare-field-data
       inputs:
         parameters:
-          - name: drone-ground-pair-name
           - name: ground-plot-id
           - name: field-trees-file
           - name: field-bounds-file
@@ -698,8 +687,6 @@ spec:
     - name: match-field-attributes
       inputs:
         parameters:
-          - name: drone-ground-pair-name
-          - name: ground-plot-id
           - name: field-trees-file
           - name: field-bounds-file
           - name: drone-trees-file
@@ -720,7 +707,7 @@ spec:
             memory: "8Gi"
         command: [
           "python",
-          "-m", "tree_registration_and_matching.entrypoints.match_field_attributes_to_drone.py",
+          "-m", "tree_registration_and_matching.entrypoints.match_field_attributes_to_drone",
           "{{inputs.parameters.field-trees-file}}",
           "{{inputs.parameters.drone-trees-file}}",
           "{{inputs.parameters.drone-crowns-file}}",
