@@ -214,7 +214,12 @@ def crop_raster_save_cog(
         with tempfile.TemporaryDirectory(dir=output_filepath.parent) as tmp_dir:
             cutline_path = os.path.join(tmp_dir, "cutline.gpkg")
             gpd.GeoDataFrame(geometry=[geometry], crs=src.crs).to_file(cutline_path)
-            cmd += ["-cutline", cutline_path, str(raster_filepath), str(output_filepath)]
+            cmd += [
+                "-cutline",
+                cutline_path,
+                str(raster_filepath),
+                str(output_filepath),
+            ]
             subprocess.run(cmd, check=True)
 
     print(f"  Saved COG: {output_filepath}")

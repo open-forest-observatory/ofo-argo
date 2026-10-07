@@ -149,9 +149,7 @@ def setup_working_directory(working_dir):
             os.makedirs(working_dir, exist_ok=True)
             print(f"Created working directory: {working_dir}")
         except Exception as e:
-            print(
-                f"ERROR: Cannot create working directory '{working_dir}': {e}"
-            )
+            print(f"ERROR: Cannot create working directory '{working_dir}': {e}")
             sys.exit(1)
 
     # Validate working directory is writable
@@ -240,7 +238,9 @@ def download_photogrammetry_products(
     ] + get_s3_flags()
 
     try:
-        print(f"DEBUG rclone command: {' '.join(copy_cmd)}")  # TEMP: remove after debugging
+        print(
+            f"DEBUG rclone command: {' '.join(copy_cmd)}"
+        )  # TEMP: remove after debugging
         subprocess.run(copy_cmd, check=True)
         print("Download completed")
         files = os.listdir(local_input_dir) if os.path.exists(local_input_dir) else []
@@ -302,7 +302,9 @@ def download_boundary_polygons(
     ] + get_s3_flags()
 
     try:
-        print(f"DEBUG rclone command: {' '.join(copy_cmd)}")  # TEMP: remove after debugging
+        print(
+            f"DEBUG rclone command: {' '.join(copy_cmd)}"
+        )  # TEMP: remove after debugging
         subprocess.run(copy_cmd, check=True)
         print("Download completed")
         if os.path.exists(local_boundary_file):
