@@ -180,6 +180,26 @@ spec:
                 - name: local-dir
                   value: "{{workflow.parameters.TEMP_FOLDER}}/{{workflow.name}}/{{inputs.parameters.drone-ground-pair-name}}"
 
+          - name: prepare-field-data
+            template: prepare-field-data
+            depends: "download-non-image-files.Succeeded"
+            arguments:
+              parameters:
+                - name: ground-plot-id
+                  value: "{{inputs.parameters.ground-plot-id}}"
+                - name: field-trees-file
+                  value: "{{workflow.parameters.FIELD_TREES_FILE}}"
+                - name: field-bounds-file
+                  value: "{{workflow.parameters.FIELD_PLOTS_FILE}}"
+                - name: registration-file
+                  value: '{{=jsonpath(tasks["download-non-image-files"].outputs.parameters["local-files"], "$.registration")}}'
+                - name: registration-quality-threshold
+                  value: "{{workflow.parameters.REGISTRATION_QUALITY_THRESHOLD}}"
+                - name: field-trees-output-file
+                  value: "{{workflow.parameters.TEMP_FOLDER}}/{{workflow.name}}/{{inputs.parameters.drone-ground-pair-name}}/field-trees.gpkg"
+                - name: field-bounds-output-file
+                  value: "{{workflow.parameters.TEMP_FOLDER}}/{{workflow.name}}/{{inputs.parameters.drone-ground-pair-name}}/field-bounds.gpkg"
+
           - name: detect-trees
             template: detect-trees
             depends: "download-non-image-files.Succeeded"
@@ -198,27 +218,19 @@ spec:
 
           - name: match-field-attributes
             template: match-field-attributes
-            depends: "detect-trees.Succeeded"
+            depends: "detect-trees.Succeeded && prepare-field-data.Succeeded"
             arguments:
               parameters:
-                - name: drone-ground-pair-name
-                  value: "{{inputs.parameters.drone-ground-pair-name}}"
-                - name: ground-plot-id
-                  value: "{{inputs.parameters.ground-plot-id}}"
                 - name: field-trees-file
-                  value: "{{workflow.parameters.FIELD_TREES_FILE}}"
+                  value: "{{workflow.parameters.TEMP_FOLDER}}/{{workflow.name}}/{{inputs.parameters.drone-ground-pair-name}}/field-trees.gpkg"
                 - name: field-bounds-file
-                  value: "{{workflow.parameters.FIELD_PLOTS_FILE}}"
+                  value: "{{workflow.parameters.TEMP_FOLDER}}/{{workflow.name}}/{{inputs.parameters.drone-ground-pair-name}}/field-bounds.gpkg"
                 - name: drone-trees-file
                   value: "{{tasks.detect-trees.outputs.parameters.detected-tree-tops-file}}"
                 - name: drone-crowns-file
                   value: "{{tasks.detect-trees.outputs.parameters.detected-tree-crowns-file}}"
-                - name: registration-file
-                  value: '{{=jsonpath(tasks["download-non-image-files"].outputs.parameters["local-files"], "$.registration")}}'
                 - name: output-file
                   value: "{{workflow.parameters.TEMP_FOLDER}}/{{workflow.name}}/{{inputs.parameters.drone-ground-pair-name}}/{{inputs.parameters.drone-ground-pair-name}}_matched-tree-crowns.gpkg"
-                - name: registration-quality-threshold
-                  value: "{{workflow.parameters.REGISTRATION_QUALITY_THRESHOLD}}"
 
           - name: render-instance-labels
             template: render-instance-labels
@@ -589,25 +601,25 @@ spec:
                   "{\"b\": 0.025, \"c\": 0.0625}"
                 ]
 
-    # Apply the registration shift to align field tree coordinates with the drone data, then
-    # spatially join to match each field tree to a detected tree crown. The task fails if the
-    # registration quality score is below REGISTRATION_QUALITY_THRESHOLD.
-    # Outputs a GeoDataFrame of detected crowns that have a field species match.
-    - name: match-field-attributes
+    # This script takes in the full file of field trees and plot bounds and the registration file.
+    # The first check is be whether the registration file passes the quality check. If so, it
+    # extracts the appropriate subset of field trees and plot bounds and then shifts them based on the
+    # shift contained in the registration file. Finally, these files are written out.
+    - name: prepare-field-data
       inputs:
         parameters:
-          - name: drone-ground-pair-name
           - name: ground-plot-id
           - name: field-trees-file
           - name: field-bounds-file
-          - name: drone-trees-file
-          - name: drone-crowns-file
           - name: registration-file
-          - name: output-file
           - name: registration-quality-threshold
+          - name: field-trees-output-file
+          - name: field-bounds-output-file
       nodeSelector:
         feature.node.kubernetes.io/workload-type: cpu
       script:
+        # Note this only relies on core geopandas functionality but this means this image will be cached
+        # for the following step.
         image: ghcr.io/open-forest-observatory/tree-registration-and-matching:{{workflow.parameters.TRAM_IMAGE_TAG}}
         volumeMounts:
           - name: data
@@ -617,39 +629,24 @@ spec:
             cpu: 1
             memory: "4Gi"
           limits:
-            memory: "8Gi"
+            memory: "4Gi"
         command: ["python"]
         source: |
           from pathlib import Path
 
           import geopandas as gpd
           import pandas as pd
-          from tree_registration_and_matching.add_attributes import match_field_and_drone_trees
-          from tree_registration_and_matching.utils import ensure_height_is_present, is_overstory
 
           # Input variables
-          pair_name = "{{inputs.parameters.drone-ground-pair-name}}"
           ground_plot_id = "{{inputs.parameters.ground-plot-id}}"
           field_trees_file = "{{inputs.parameters.field-trees-file}}"
           field_bounds_file = "{{inputs.parameters.field-bounds-file}}"
-          drone_trees_file = "{{inputs.parameters.drone-trees-file}}"
-          drone_crowns_file = "{{inputs.parameters.drone-crowns-file}}"
           registration_file = "{{inputs.parameters.registration-file}}"
           registration_quality_threshold = float("{{inputs.parameters.registration-quality-threshold}}")
+          field_trees_output_file = Path("{{inputs.parameters.field-trees-output-file}}")
+          field_bounds_output_file = Path("{{inputs.parameters.field-bounds-output-file}}")
 
-          output_file = Path("{{inputs.parameters.output-file}}")
-
-          # Read all the products
-          field_trees = gpd.read_file(field_trees_file)
-          field_bounds = gpd.read_file(field_bounds_file)
-
-          drone_trees = gpd.read_file(drone_trees_file)
-          drone_crowns = gpd.read_file(drone_crowns_file)
-
-          # Subset to the specified plot
-          field_trees = field_trees.query("plot_id==@ground_plot_id")
-          field_bounds = field_bounds.query("plot_id==@ground_plot_id")
-
+          # First check the registration quality to see if this whole step should fail
           registration = pd.read_csv(registration_file)
 
           # See if it passes the quality threshold
@@ -657,9 +654,16 @@ spec:
           if ratio_quality_metric < registration_quality_threshold:
               raise ValueError(f"The quality metric ({ratio_quality_metric}) is less than the threshold ({registration_quality_threshold})")
 
+          # Read the other products, which contain the data for all plots
+          field_trees = gpd.read_file(field_trees_file)
+          field_bounds = gpd.read_file(field_bounds_file)
+
+          # Subset to the specified plot
+          field_trees = field_trees.query("plot_id==@ground_plot_id")
+          field_bounds = field_bounds.query("plot_id==@ground_plot_id")
+
           # Determine the shift that the CRS needs to be interpreted in
           working_CRS = registration["shift_CRS"].iloc[0]
-          drone_crown_crs = drone_crowns.crs
 
           # Apply the shift
           x_shift = registration["estimated_shift_x"].iloc[0]
@@ -671,56 +675,45 @@ spec:
           field_trees.geometry = field_trees.geometry.translate(xoff=x_shift, yoff=y_shift)
           field_bounds.geometry = field_bounds.geometry.translate(xoff=x_shift, yoff=y_shift)
 
-          print(f"A total of {len(field_trees)} were present")
-          # The decay class specifies how severely a dead trees is decaying. At values above decay class 2,
-          # it is expected that the stem may be broken. This would cause issues estimating the height from
-          # DBH, and likely suggests a tree that will overall not be reconstructed well. Therefore, these
-          # trees are dropped prior to matching.
-          decay_mask = (field_trees.decay_class > 2)
-          print(f"Removing {decay_mask.sum()} trees due to decay")
-          field_trees = field_trees[~decay_mask]
-          # Impute height for as many trees as possible, using other attributes
-          field_trees = ensure_height_is_present(field_trees)
-          # Remove understory trees
-          overstory_mask = is_overstory(field_trees)
-          print(f"Removing {(~overstory_mask).sum()} trees due to being understory")
-          field_trees = field_trees[overstory_mask]
+          # Save out the result
+          field_trees_output_file.parent.mkdir(exist_ok=True, parents=True)
+          field_bounds_output_file.parent.mkdir(exist_ok=True, parents=True)
+          field_trees.to_file(field_trees_output_file)
+          field_bounds.to_file(field_bounds_output_file)
 
-          print(f"Matching {len(field_trees)} field trees to {len(drone_trees)} drone trees")
-          # Perform matching
-          drone_crowns_with_additional_attributes = match_field_and_drone_trees(
-              field_trees=field_trees,
-              drone_trees=drone_trees,
-              drone_crowns=drone_crowns,
-              field_perim=field_bounds,
-              keep_only_matched_crowns=True,
-          )
 
-          # Convert back to the original drone CRS
-          drone_crowns_with_additional_attributes.to_crs(drone_crown_crs, inplace=True)
-          print(f"Matched {len(drone_crowns_with_additional_attributes)} trees")
-
-          # Drop crowns matched to field trees with no species code
-          drone_crowns_with_additional_attributes = drone_crowns_with_additional_attributes.dropna(subset=["species_code"])
-          # Drop any dead trees. Note that there may be classes other than "L" (live) in the output
-          # but these are assumed to be live as well.
-          drone_crowns_with_additional_attributes = drone_crowns_with_additional_attributes[
-              drone_crowns_with_additional_attributes.live_dead != "D"
-          ]
-          # Drop any crowns that were less than 10m tall
-          drone_crowns_with_additional_attributes = drone_crowns_with_additional_attributes[
-              drone_crowns_with_additional_attributes.height_field > 10
-          ]
-          final_n_matched = len(drone_crowns_with_additional_attributes)
-          print(f"After filtering all matched trees, {final_n_matched} trees remain")
-
-          print(f"Matched {final_n_matched} trees")
-          if final_n_matched >= 10:
-              # Save the drone crowns with additional field attributes to the file
-              output_file.parent.mkdir(exist_ok=True, parents=True)
-              drone_crowns_with_additional_attributes.to_file(output_file)
-          else:
-              raise ValueError(f"Not enough matched trees (only {final_n_matched})")
+    # Match the field and drone trees spatially. Outputs a GeoDataFrame of detected crowns that have
+    # a field tree match.
+    - name: match-field-attributes
+      inputs:
+        parameters:
+          - name: field-trees-file
+          - name: field-bounds-file
+          - name: drone-trees-file
+          - name: drone-crowns-file
+          - name: output-file
+      nodeSelector:
+        feature.node.kubernetes.io/workload-type: cpu
+      container:
+        image: ghcr.io/open-forest-observatory/tree-registration-and-matching:{{workflow.parameters.TRAM_IMAGE_TAG}}
+        volumeMounts:
+          - name: data
+            mountPath: /data
+        resources:
+          requests:
+            cpu: 1
+            memory: "8Gi"
+          limits:
+            memory: "8Gi"
+        command: [
+          "python",
+          "-m", "tree_registration_and_matching.entrypoints.match_field_attributes_to_drone",
+          "{{inputs.parameters.field-trees-file}}",
+          "{{inputs.parameters.drone-trees-file}}",
+          "{{inputs.parameters.drone-crowns-file}}",
+          "{{inputs.parameters.field-bounds-file}}",
+          "{{inputs.parameters.output-file}}",
+           ]
 
 
     - name: render-instance-labels
