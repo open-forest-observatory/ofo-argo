@@ -196,9 +196,9 @@ spec:
                 - name: registration-quality-threshold
                   value: "{{workflow.parameters.REGISTRATION_QUALITY_THRESHOLD}}"
                 - name: field-trees-output-file
-                  value: "{{workflow.parameters.TEMP_FOLDER}}/{{workflow.name}}/{{inputs.parameters.drone-ground-pair-name}}/{{inputs.parameters.drone-ground-pair-name}}_field-trees.gpkg"
+                  value: "{{workflow.parameters.TEMP_FOLDER}}/{{workflow.name}}/{{inputs.parameters.drone-ground-pair-name}}/field-trees.gpkg"
                 - name: field-bounds-output-file
-                  value: "{{workflow.parameters.TEMP_FOLDER}}/{{workflow.name}}/{{inputs.parameters.drone-ground-pair-name}}/{{inputs.parameters.drone-ground-pair-name}}_field-bounds.gpkg"
+                  value: "{{workflow.parameters.TEMP_FOLDER}}/{{workflow.name}}/{{inputs.parameters.drone-ground-pair-name}}/field-bounds.gpkg"
 
           - name: detect-trees
             template: detect-trees
@@ -222,9 +222,9 @@ spec:
             arguments:
               parameters:
                 - name: field-trees-file
-                  value: "{{workflow.parameters.TEMP_FOLDER}}/{{workflow.name}}/{{inputs.parameters.drone-ground-pair-name}}/{{inputs.parameters.drone-ground-pair-name}}_field-trees.gpkg"
+                  value: "{{workflow.parameters.TEMP_FOLDER}}/{{workflow.name}}/{{inputs.parameters.drone-ground-pair-name}}/field-trees.gpkg"
                 - name: field-bounds-file
-                  value: "{{workflow.parameters.TEMP_FOLDER}}/{{workflow.name}}/{{inputs.parameters.drone-ground-pair-name}}/{{inputs.parameters.drone-ground-pair-name}}_field-bounds.gpkg"
+                  value: "{{workflow.parameters.TEMP_FOLDER}}/{{workflow.name}}/{{inputs.parameters.drone-ground-pair-name}}/field-bounds.gpkg"
                 - name: drone-trees-file
                   value: "{{tasks.detect-trees.outputs.parameters.detected-tree-tops-file}}"
                 - name: drone-crowns-file
