@@ -7,6 +7,7 @@ import subprocess
 from datetime import datetime, timedelta
 from pathlib import Path
 
+import matplotlib.pyplot as plt
 import pandas as pd
 
 
@@ -127,7 +128,23 @@ def main(
     end_dt = (datetime.strptime(collect_end_datetime, "%Y-%m-%d %H:%M")) + timedelta(
         seconds=time_bounds_tolerance
     )
-    exif = exif[(exif.DateTimeOriginal >= start_dt) & (exif.DateTimeOriginal <= end_dt)]
+    rows_matching_time_constraints = (exif.DateTimeOriginal >= start_dt) & (
+        exif.DateTimeOriginal <= end_dt
+    )
+
+    if rows_matching_time_constraints.sum() == 0:
+        plt.scatter(exif.DateTimeOriginal.to_datetime(), 0)
+        plt.scatter(
+            [start_dt, end_dt],
+            0,
+            c="r",
+            s=20,
+        )
+        plt.savefig(output_data_folder, "timestamps.png")
+        raise ValueError("No rows match the contraints")
+
+    # Subset to matching rows
+    exif = exif[rows_matching_time_constraints]
 
     # Check for large gaps in the timestamps
     max_delta_seconds = exif.DateTimeOriginal.diff().dt.total_seconds().max()
