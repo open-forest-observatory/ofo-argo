@@ -6,6 +6,7 @@ import shutil
 import subprocess
 from datetime import datetime, timedelta
 from pathlib import Path
+import numpy as np
 
 import matplotlib.pyplot as plt
 import pandas as pd
@@ -90,6 +91,13 @@ def main(
     Raises:
         ValueError: if the maximum delta between timestamps is larger than max_allowable_delta
     """
+    # Create an output folder based on the output folder / collect_id
+    output_folder = Path(output_data_folder, f"{collect_id}/images")
+    # remove old folder, if present
+    shutil.rmtree(output_folder, ignore_errors=True)
+    # And recreate
+    output_folder.mkdir(parents=True, exist_ok=True)
+
     print("Searching for files")
     # Find all files in the folder
     matching_files = list(input_data_folder.rglob("*"))
@@ -133,15 +141,17 @@ def main(
     )
 
     if rows_matching_time_constraints.sum() == 0:
-        plt.scatter(exif.DateTimeOriginal.to_datetime(), 0)
+        plt.scatter(exif.DateTimeOriginal.to_numpy(), np.zeros_like(exif.DateTimeOriginal))
         plt.scatter(
             [start_dt, end_dt],
-            0,
+            [0, 0],
             c="r",
             s=20,
         )
-        plt.savefig(output_data_folder, "timestamps.png")
-        raise ValueError("No rows match the contraints")
+        plt.xlim((start_dt - timedelta(seconds=time_bounds_tolerance * 10), end_dt + timedelta(seconds=time_bounds_tolerance * 10 )))
+        timestamp_vis_file = output_folder / "timestamps.png"
+        plt.savefig(timestamp_vis_file)
+        raise ValueError(f"No rows match the contraints. Saving visualization to {timestamp_vis_file}")
 
     # Subset to matching rows
     exif = exif[rows_matching_time_constraints]
@@ -170,12 +180,6 @@ def main(
     matching_files = exif.SourceFile.to_list()
     print(f"Found {len(matching_files)} files within the specified datetime range")
 
-    # Create an output folder based on the output folder / collect_id
-    output_folder = Path(output_data_folder, f"{collect_id}/images")
-    # remove old folder, if present
-    shutil.rmtree(output_folder, ignore_errors=True)
-    # And recreate
-    output_folder.mkdir(parents=True, exist_ok=True)
 
     # Hardlink all files to that location
     # The output format should be {collect_id}/images/{collect_id}_{image_id:06d}.JPG
