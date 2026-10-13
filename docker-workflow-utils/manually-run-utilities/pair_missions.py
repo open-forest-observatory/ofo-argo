@@ -589,19 +589,27 @@ def main():
 
     args = parser.parse_args()
 
+    # Unpack args into plain variables (easy to override when debugging)
+    bucket = args.bucket
+    missions_prefix = args.missions_prefix
+    local_missions = args.local_missions
+    local_images = args.local_images
+    local_output_composites_folder = args.local_output_composites_folder
+    s3_upload_composites_folder = args.s3_upload_composites_folder
+
     # Expand ~ in paths
-    if args.local_missions:
-        args.local_missions = os.path.expanduser(args.local_missions)
-    if args.local_images:
-        args.local_images = os.path.expanduser(args.local_images)
-    if args.local_output_composites_folder:
-        args.local_output_composites_folder = os.path.expanduser(
-            args.local_output_composites_folder
+    if local_missions:
+        local_missions = os.path.expanduser(local_missions)
+    if local_images:
+        local_images = os.path.expanduser(local_images)
+    if local_output_composites_folder:
+        local_output_composites_folder = os.path.expanduser(
+            local_output_composites_folder
         )
 
     # Validate args
-    using_s3 = args.bucket and args.missions_prefix
-    using_local = args.local_missions and args.local_images
+    using_s3 = bucket and missions_prefix
+    using_local = local_missions and local_images
     if not using_s3 and not using_local:
         parser.error(
             "Provide either --bucket + --missions-prefix or "
@@ -615,16 +623,16 @@ def main():
         missions_path = os.path.join(tmpdir, "missions.gpkg")
         images_path = os.path.join(tmpdir, "images.gpkg")
 
-        missions_key = f"{args.missions_prefix}/metadata-missions-compiled.gpkg"
-        images_key = f"{args.missions_prefix}/metadata-images-compiled.gpkg"
+        missions_key = f"{missions_prefix}/metadata-missions-compiled.gpkg"
+        images_key = f"{missions_prefix}/metadata-images-compiled.gpkg"
 
-        print(f"Downloading s3://{args.bucket}/{missions_key}", file=sys.stderr)
-        download_s3_file(client, args.bucket, missions_key, missions_path)
-        print(f"Downloading s3://{args.bucket}/{images_key}", file=sys.stderr)
-        download_s3_file(client, args.bucket, images_key, images_path)
+        print(f"Downloading s3://{bucket}/{missions_key}", file=sys.stderr)
+        download_s3_file(client, bucket, missions_key, missions_path)
+        print(f"Downloading s3://{bucket}/{images_key}", file=sys.stderr)
+        download_s3_file(client, bucket, images_key, images_path)
     else:
-        missions_path = args.local_missions
-        images_path = args.local_images
+        missions_path = local_missions
+        images_path = local_images
 
     missions_gdf = gpd.read_file(missions_path)
     images_gdf = gpd.read_file(images_path)
@@ -684,14 +692,10 @@ def main():
 
     wrote_anything = False
 
-    if args.local_output_composites_folder:
-        os.makedirs(args.local_output_composites_folder, exist_ok=True)
-        pairs_path = os.path.join(
-            args.local_output_composites_folder, polygons_filename
-        )
-        images_out_path = os.path.join(
-            args.local_output_composites_folder, images_filename
-        )
+    if local_output_composites_folder:
+        os.makedirs(local_output_composites_folder, exist_ok=True)
+        pairs_path = os.path.join(local_output_composites_folder, polygons_filename)
+        images_out_path = os.path.join(local_output_composites_folder, images_filename)
 
         pair_polygons_out.to_file(pairs_path, driver="GPKG")
         print(f"\nWrote {pairs_path}", file=sys.stderr)
@@ -699,8 +703,8 @@ def main():
         print(f"Wrote {images_out_path}", file=sys.stderr)
         wrote_anything = True
 
-    if args.s3_upload_composites_folder:
-        if not args.bucket:
+    if s3_upload_composites_folder:
+        if not bucket:
             print(
                 "ERROR: --s3-upload-composites-folder requires --bucket",
                 file=sys.stderr,
@@ -711,19 +715,19 @@ def main():
             client = get_s3_client()
 
         # Write to a temp dir if we haven't saved locally
-        if not args.local_output_composites_folder:
+        if not local_output_composites_folder:
             tmpout = tempfile.mkdtemp()
             pairs_path = os.path.join(tmpout, polygons_filename)
             images_out_path = os.path.join(tmpout, images_filename)
             pair_polygons_out.to_file(pairs_path, driver="GPKG")
             selected_images_out.to_file(images_out_path, driver="GPKG")
 
-        pairs_key = f"{args.s3_upload_composites_folder}/{polygons_filename}"
-        images_key = f"{args.s3_upload_composites_folder}/{images_filename}"
-        upload_s3_file(client, args.bucket, pairs_key, pairs_path)
-        print(f"\nUploaded s3://{args.bucket}/{pairs_key}", file=sys.stderr)
-        upload_s3_file(client, args.bucket, images_key, images_out_path)
-        print(f"Uploaded s3://{args.bucket}/{images_key}", file=sys.stderr)
+        pairs_key = f"{s3_upload_composites_folder}/{polygons_filename}"
+        images_key = f"{s3_upload_composites_folder}/{images_filename}"
+        upload_s3_file(client, bucket, pairs_key, pairs_path)
+        print(f"\nUploaded s3://{bucket}/{pairs_key}", file=sys.stderr)
+        upload_s3_file(client, bucket, images_key, images_out_path)
+        print(f"Uploaded s3://{bucket}/{images_key}", file=sys.stderr)
         wrote_anything = True
 
     if not wrote_anything:
