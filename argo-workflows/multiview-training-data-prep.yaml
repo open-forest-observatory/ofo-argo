@@ -46,10 +46,10 @@ spec:
       # composite "{mission_hn}_{mission_lo}" ID for a paired photogrammetry run or the mission_id of a single drone dataset.
       # The mesh CRS is parsed automatically from the photogrammetry log file and does not need to be provided.
       - name: DATASETS_FILE
-      # Path to the file of field trees for all plots, with a `plot_id` column
-      - name: FIELD_TREES_FILE
-      # Path to the file of plot boundaries for all plots, with a `plot_id` column
-      - name: FIELD_PLOTS_FILE
+      # Path to the file of ground reference trees for all plots, with a `plot_id` column
+      - name: GROUND_REFERENCE_TREES_FILE
+      # Path to the file of ground reference plot boundaries for all plots, with a `plot_id` column
+      - name: GROUND_REFERENCE_PLOTS_FILE
       # The path to the live/dead classification model weights file
       - name: LD_MODEL_PATH
       # The path to the live/dead classification model config file (.py)
@@ -180,25 +180,25 @@ spec:
                 - name: local-dir
                   value: "{{workflow.parameters.TEMP_FOLDER}}/{{workflow.name}}/{{inputs.parameters.drone-ground-pair-name}}"
 
-          - name: prepare-field-data
-            template: prepare-field-data
+          - name: prepare-ground-reference-data
+            template: prepare-ground-reference-data
             depends: "download-non-image-files.Succeeded"
             arguments:
               parameters:
                 - name: ground-plot-id
                   value: "{{inputs.parameters.ground-plot-id}}"
-                - name: field-trees-file
-                  value: "{{workflow.parameters.FIELD_TREES_FILE}}"
-                - name: field-bounds-file
-                  value: "{{workflow.parameters.FIELD_PLOTS_FILE}}"
+                - name: ground-reference-trees-file
+                  value: "{{workflow.parameters.GROUND_REFERENCE_TREES_FILE}}"
+                - name: ground-reference-bounds-file
+                  value: "{{workflow.parameters.GROUND_REFERENCE_PLOTS_FILE}}"
                 - name: registration-file
                   value: '{{=jsonpath(tasks["download-non-image-files"].outputs.parameters["local-files"], "$.registration")}}'
                 - name: registration-quality-threshold
                   value: "{{workflow.parameters.REGISTRATION_QUALITY_THRESHOLD}}"
-                - name: field-trees-output-file
-                  value: "{{workflow.parameters.TEMP_FOLDER}}/{{workflow.name}}/{{inputs.parameters.drone-ground-pair-name}}/field-trees.gpkg"
-                - name: field-bounds-output-file
-                  value: "{{workflow.parameters.TEMP_FOLDER}}/{{workflow.name}}/{{inputs.parameters.drone-ground-pair-name}}/field-bounds.gpkg"
+                - name: ground-reference-trees-output-file
+                  value: "{{workflow.parameters.TEMP_FOLDER}}/{{workflow.name}}/{{inputs.parameters.drone-ground-pair-name}}/ground-reference-trees.gpkg"
+                - name: ground-reference-bounds-output-file
+                  value: "{{workflow.parameters.TEMP_FOLDER}}/{{workflow.name}}/{{inputs.parameters.drone-ground-pair-name}}/ground-reference-bounds.gpkg"
 
           - name: detect-trees
             template: detect-trees
@@ -216,15 +216,15 @@ spec:
                 - name: chip-stride
                   value: "{{workflow.parameters.TREE_DETECTION_CHIP_STRIDE}}"
 
-          - name: match-field-attributes
-            template: match-field-attributes
-            depends: "detect-trees.Succeeded && prepare-field-data.Succeeded"
+          - name: match-ground-reference-attributes
+            template: match-ground-reference-attributes
+            depends: "detect-trees.Succeeded && prepare-ground-reference-data.Succeeded"
             arguments:
               parameters:
-                - name: field-trees-file
-                  value: "{{workflow.parameters.TEMP_FOLDER}}/{{workflow.name}}/{{inputs.parameters.drone-ground-pair-name}}/field-trees.gpkg"
-                - name: field-bounds-file
-                  value: "{{workflow.parameters.TEMP_FOLDER}}/{{workflow.name}}/{{inputs.parameters.drone-ground-pair-name}}/field-bounds.gpkg"
+                - name: ground-reference-trees-file
+                  value: "{{workflow.parameters.TEMP_FOLDER}}/{{workflow.name}}/{{inputs.parameters.drone-ground-pair-name}}/ground-reference-trees.gpkg"
+                - name: ground-reference-bounds-file
+                  value: "{{workflow.parameters.TEMP_FOLDER}}/{{workflow.name}}/{{inputs.parameters.drone-ground-pair-name}}/ground-reference-bounds.gpkg"
                 - name: drone-trees-file
                   value: "{{tasks.detect-trees.outputs.parameters.detected-tree-tops-file}}"
                 - name: drone-crowns-file
@@ -234,7 +234,7 @@ spec:
 
           - name: render-instance-labels
             template: render-instance-labels
-            depends: "download-non-image-files.Succeeded && match-field-attributes.Succeeded"
+            depends: "download-non-image-files.Succeeded && match-ground-reference-attributes.Succeeded"
             arguments:
               parameters:
                 - name: mesh-file
@@ -243,7 +243,7 @@ spec:
                   value: '{{=jsonpath(tasks["download-non-image-files"].outputs.parameters["local-files"], "$.camera")}}'
                 - name: dtm-file
                   value: '{{=jsonpath(tasks["download-non-image-files"].outputs.parameters["local-files"], "$.dtm")}}'
-                # Render only matched crowns (trees that have field species labels)
+                # Render only matched crowns (trees that have ground reference species labels)
                 - name: trees-file
                   value: "{{workflow.parameters.TEMP_FOLDER}}/{{workflow.name}}/{{inputs.parameters.drone-ground-pair-name}}/{{inputs.parameters.drone-ground-pair-name}}_matched-tree-crowns.gpkg"
                 - name: mesh-crs
@@ -283,7 +283,7 @@ spec:
 
           - name: assign-live-dead-to-crowns
             template: assign-live-dead-to-crowns
-            depends: "classify-chips-live-dead.Succeeded && match-field-attributes.Succeeded"
+            depends: "classify-chips-live-dead.Succeeded && match-ground-reference-attributes.Succeeded"
             arguments:
               parameters:
                 - name: input-crowns-file
@@ -601,20 +601,20 @@ spec:
                   "{\"b\": 0.025, \"c\": 0.0625}"
                 ]
 
-    # This script takes in the full file of field trees and plot bounds and the registration file.
+    # This script takes in the full file of ground reference trees and plot bounds and the registration file.
     # The first check is be whether the registration file passes the quality check. If so, it
-    # extracts the appropriate subset of field trees and plot bounds and then shifts them based on the
+    # extracts the appropriate subset of ground reference trees and plot bounds and then shifts them based on the
     # shift contained in the registration file. Finally, these files are written out.
-    - name: prepare-field-data
+    - name: prepare-ground-reference-data
       inputs:
         parameters:
           - name: ground-plot-id
-          - name: field-trees-file
-          - name: field-bounds-file
+          - name: ground-reference-trees-file
+          - name: ground-reference-bounds-file
           - name: registration-file
           - name: registration-quality-threshold
-          - name: field-trees-output-file
-          - name: field-bounds-output-file
+          - name: ground-reference-trees-output-file
+          - name: ground-reference-bounds-output-file
       nodeSelector:
         feature.node.kubernetes.io/workload-type: cpu
       script:
@@ -638,13 +638,13 @@ spec:
           import pandas as pd
 
           # Input variables
-          ground_plot_id = "{{inputs.parameters.ground-plot-id}}"
-          field_trees_file = "{{inputs.parameters.field-trees-file}}"
-          field_bounds_file = "{{inputs.parameters.field-bounds-file}}"
+          ground_reference_plot_id = "{{inputs.parameters.ground-plot-id}}"
+          ground_reference_trees_file = "{{inputs.parameters.ground-reference-trees-file}}"
+          ground_reference_bounds_file = "{{inputs.parameters.ground-reference-bounds-file}}"
           registration_file = "{{inputs.parameters.registration-file}}"
           registration_quality_threshold = float("{{inputs.parameters.registration-quality-threshold}}")
-          field_trees_output_file = Path("{{inputs.parameters.field-trees-output-file}}")
-          field_bounds_output_file = Path("{{inputs.parameters.field-bounds-output-file}}")
+          ground_reference_trees_output_file = Path("{{inputs.parameters.ground-reference-trees-output-file}}")
+          ground_reference_bounds_output_file = Path("{{inputs.parameters.ground-reference-bounds-output-file}}")
 
           # First check the registration quality to see if this whole step should fail
           registration = pd.read_csv(registration_file)
@@ -655,12 +655,12 @@ spec:
               raise ValueError(f"The quality metric ({ratio_quality_metric}) is less than the threshold ({registration_quality_threshold})")
 
           # Read the other products, which contain the data for all plots
-          field_trees = gpd.read_file(field_trees_file)
-          field_bounds = gpd.read_file(field_bounds_file)
+          ground_reference_trees = gpd.read_file(ground_reference_trees_file)
+          ground_reference_bounds = gpd.read_file(ground_reference_bounds_file)
 
           # Subset to the specified plot
-          field_trees = field_trees.query("plot_id==@ground_plot_id")
-          field_bounds = field_bounds.query("plot_id==@ground_plot_id")
+          ground_reference_trees = ground_reference_trees.query("plot_id==@ground_reference_plot_id")
+          ground_reference_bounds = ground_reference_bounds.query("plot_id==@ground_reference_plot_id")
 
           # Determine the shift that the CRS needs to be interpreted in
           working_CRS = registration["shift_CRS"].iloc[0]
@@ -669,26 +669,26 @@ spec:
           x_shift = registration["estimated_shift_x"].iloc[0]
           y_shift = registration["estimated_shift_y"].iloc[0]
 
-          field_trees.to_crs(working_CRS, inplace=True)
-          field_bounds.to_crs(working_CRS, inplace=True)
+          ground_reference_trees.to_crs(working_CRS, inplace=True)
+          ground_reference_bounds.to_crs(working_CRS, inplace=True)
 
-          field_trees.geometry = field_trees.geometry.translate(xoff=x_shift, yoff=y_shift)
-          field_bounds.geometry = field_bounds.geometry.translate(xoff=x_shift, yoff=y_shift)
+          ground_reference_trees.geometry = ground_reference_trees.geometry.translate(xoff=x_shift, yoff=y_shift)
+          ground_reference_bounds.geometry = ground_reference_bounds.geometry.translate(xoff=x_shift, yoff=y_shift)
 
           # Save out the result
-          field_trees_output_file.parent.mkdir(exist_ok=True, parents=True)
-          field_bounds_output_file.parent.mkdir(exist_ok=True, parents=True)
-          field_trees.to_file(field_trees_output_file)
-          field_bounds.to_file(field_bounds_output_file)
+          ground_reference_trees_output_file.parent.mkdir(exist_ok=True, parents=True)
+          ground_reference_bounds_output_file.parent.mkdir(exist_ok=True, parents=True)
+          ground_reference_trees.to_file(ground_reference_trees_output_file)
+          ground_reference_bounds.to_file(ground_reference_bounds_output_file)
 
 
-    # Match the field and drone trees spatially. Outputs a GeoDataFrame of detected crowns that have
-    # a field tree match.
-    - name: match-field-attributes
+    # Match the ground reference and drone trees spatially. Outputs a geofile of detected crowns that have
+    # a ground reference tree match, with the attributes from matching ground reference trees added.
+    - name: match-ground-reference-attributes
       inputs:
         parameters:
-          - name: field-trees-file
-          - name: field-bounds-file
+          - name: ground-reference-trees-file
+          - name: ground-reference-bounds-file
           - name: drone-trees-file
           - name: drone-crowns-file
           - name: output-file
@@ -708,10 +708,10 @@ spec:
         command: [
           "python",
           "-m", "tree_registration_and_matching.entrypoints.match_field_attributes_to_drone",
-          "{{inputs.parameters.field-trees-file}}",
+          "{{inputs.parameters.ground-reference-trees-file}}",
           "{{inputs.parameters.drone-trees-file}}",
           "{{inputs.parameters.drone-crowns-file}}",
-          "{{inputs.parameters.field-bounds-file}}",
+          "{{inputs.parameters.ground-reference-bounds-file}}",
           "{{inputs.parameters.output-file}}",
            ]
 
