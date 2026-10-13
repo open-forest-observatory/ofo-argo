@@ -143,6 +143,71 @@ def upload_s3_file(client, bucket, key, local_path):
 
 
 # ---------------------------------------------------------------------------
+# AGL sanity check
+# ---------------------------------------------------------------------------
+
+
+def apply_nominal_agl_fallback(missions_gdf, images_gdf):
+    """
+    Replace photogrammetry-derived AGL with nominal AGL for missions whose
+    per-image photogrammetry AGL contains negative values (a sign of a warped
+    reconstruction or bad ground model).
+
+    Uses the same middle-80% trim as the agl_mean / agl_fidelity computation so
+    that a few stray near-ground images (e.g. takeoff/landing) don't trigger it.
+    For flagged missions, agl_mean is set to altitude_agl_nominal and
+    agl_fidelity is set to NaN (which passes the fidelity check).
+    """
+    agl_col = next(
+        (
+            c
+            for c in ["altitude_agl", "photogrammetry_altitude_agl"]
+            if c in images_gdf.columns
+        ),
+        None,
+    )
+    if agl_col is None:
+        print(
+            "WARNING: no per-image AGL column in images file; skipping negative-AGL "
+            "check",
+            file=sys.stderr,
+        )
+        return missions_gdf
+
+    agl = pd.to_numeric(images_gdf[agl_col], errors="coerce")
+    agl_by_mission = pd.DataFrame(
+        {"mission_id": images_gdf["mission_id"], "agl": agl}
+    ).dropna()
+
+    def has_negative_core(a):
+        core = a[(a > a.quantile(0.1)) & (a < a.quantile(0.9))]
+        return (core < 0).any()
+
+    negative = agl_by_mission.groupby("mission_id")["agl"].apply(has_negative_core)
+    flagged = set(negative[negative].index)
+
+    missions = missions_gdf.copy()
+    mask = missions["mission_id"].isin(flagged)
+    if mask.any():
+        missions["agl_mean"] = pd.to_numeric(missions["agl_mean"], errors="coerce")
+        missions["agl_fidelity"] = pd.to_numeric(
+            missions["agl_fidelity"], errors="coerce"
+        )
+        missions.loc[mask, "agl_mean"] = pd.to_numeric(
+            missions.loc[mask, "altitude_agl_nominal"], errors="coerce"
+        )
+        missions.loc[mask, "agl_fidelity"] = np.nan
+        for _, row in missions[mask].sort_values("mission_id").iterrows():
+            print(
+                f"WARNING: mission {row['mission_id']} has negative photogrammetry "
+                f"AGL values; falling back to nominal AGL ({row['agl_mean']} m)",
+                file=sys.stderr,
+            )
+
+    return missions
+
+
+# ---------------------------------------------------------------------------
 # Classification
 # ---------------------------------------------------------------------------
 
@@ -641,6 +706,9 @@ def main():
         f"Loaded {len(missions_gdf)} missions, {len(images_gdf)} images",
         file=sys.stderr,
     )
+
+    # ---- Fall back to nominal AGL where photogrammetry AGL is broken --------
+    missions_gdf = apply_nominal_agl_fallback(missions_gdf, images_gdf)
 
     # ---- Find pairs -------------------------------------------------------
     pairs = find_valid_pairs(missions_gdf)
