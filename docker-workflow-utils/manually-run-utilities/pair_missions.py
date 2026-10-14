@@ -143,6 +143,71 @@ def upload_s3_file(client, bucket, key, local_path):
 
 
 # ---------------------------------------------------------------------------
+# AGL sanity check
+# ---------------------------------------------------------------------------
+
+
+def apply_nominal_agl_fallback(missions_gdf, images_gdf):
+    """
+    Replace photogrammetry-derived AGL with nominal AGL for missions whose
+    per-image photogrammetry AGL contains negative values (a sign of a warped
+    reconstruction or bad ground model).
+
+    Uses the same middle-80% trim as the agl_mean / agl_fidelity computation so
+    that a few stray near-ground images (e.g. takeoff/landing) don't trigger it.
+    For flagged missions, agl_mean is set to altitude_agl_nominal and
+    agl_fidelity is set to NaN (which passes the fidelity check).
+    """
+    agl_col = next(
+        (
+            c
+            for c in ["altitude_agl", "photogrammetry_altitude_agl"]
+            if c in images_gdf.columns
+        ),
+        None,
+    )
+    if agl_col is None:
+        print(
+            "WARNING: no per-image AGL column in images file; skipping negative-AGL "
+            "check",
+            file=sys.stderr,
+        )
+        return missions_gdf
+
+    agl = pd.to_numeric(images_gdf[agl_col], errors="coerce")
+    agl_by_mission = pd.DataFrame(
+        {"mission_id": images_gdf["mission_id"], "agl": agl}
+    ).dropna()
+
+    def has_negative_core(a):
+        core = a[(a > a.quantile(0.1)) & (a < a.quantile(0.9))]
+        return (core < 0).any()
+
+    negative = agl_by_mission.groupby("mission_id")["agl"].apply(has_negative_core)
+    flagged = set(negative[negative].index)
+
+    missions = missions_gdf.copy()
+    mask = missions["mission_id"].isin(flagged)
+    if mask.any():
+        missions["agl_mean"] = pd.to_numeric(missions["agl_mean"], errors="coerce")
+        missions["agl_fidelity"] = pd.to_numeric(
+            missions["agl_fidelity"], errors="coerce"
+        )
+        missions.loc[mask, "agl_mean"] = pd.to_numeric(
+            missions.loc[mask, "altitude_agl_nominal"], errors="coerce"
+        )
+        missions.loc[mask, "agl_fidelity"] = np.nan
+        for _, row in missions[mask].sort_values("mission_id").iterrows():
+            print(
+                f"WARNING: mission {row['mission_id']} has negative photogrammetry "
+                f"AGL values; falling back to nominal AGL ({row['agl_mean']} m)",
+                file=sys.stderr,
+            )
+
+    return missions
+
+
+# ---------------------------------------------------------------------------
 # Classification
 # ---------------------------------------------------------------------------
 
@@ -589,19 +654,27 @@ def main():
 
     args = parser.parse_args()
 
+    # Unpack args into plain variables (easy to override when debugging)
+    bucket = args.bucket
+    missions_prefix = args.missions_prefix
+    local_missions = args.local_missions
+    local_images = args.local_images
+    local_output_composites_folder = args.local_output_composites_folder
+    s3_upload_composites_folder = args.s3_upload_composites_folder
+
     # Expand ~ in paths
-    if args.local_missions:
-        args.local_missions = os.path.expanduser(args.local_missions)
-    if args.local_images:
-        args.local_images = os.path.expanduser(args.local_images)
-    if args.local_output_composites_folder:
-        args.local_output_composites_folder = os.path.expanduser(
-            args.local_output_composites_folder
+    if local_missions:
+        local_missions = os.path.expanduser(local_missions)
+    if local_images:
+        local_images = os.path.expanduser(local_images)
+    if local_output_composites_folder:
+        local_output_composites_folder = os.path.expanduser(
+            local_output_composites_folder
         )
 
     # Validate args
-    using_s3 = args.bucket and args.missions_prefix
-    using_local = args.local_missions and args.local_images
+    using_s3 = bucket and missions_prefix
+    using_local = local_missions and local_images
     if not using_s3 and not using_local:
         parser.error(
             "Provide either --bucket + --missions-prefix or "
@@ -615,16 +688,16 @@ def main():
         missions_path = os.path.join(tmpdir, "missions.gpkg")
         images_path = os.path.join(tmpdir, "images.gpkg")
 
-        missions_key = f"{args.missions_prefix}/metadata-missions-compiled.gpkg"
-        images_key = f"{args.missions_prefix}/metadata-images-compiled.gpkg"
+        missions_key = f"{missions_prefix}/metadata-missions-compiled.gpkg"
+        images_key = f"{missions_prefix}/metadata-images-compiled.gpkg"
 
-        print(f"Downloading s3://{args.bucket}/{missions_key}", file=sys.stderr)
-        download_s3_file(client, args.bucket, missions_key, missions_path)
-        print(f"Downloading s3://{args.bucket}/{images_key}", file=sys.stderr)
-        download_s3_file(client, args.bucket, images_key, images_path)
+        print(f"Downloading s3://{bucket}/{missions_key}", file=sys.stderr)
+        download_s3_file(client, bucket, missions_key, missions_path)
+        print(f"Downloading s3://{bucket}/{images_key}", file=sys.stderr)
+        download_s3_file(client, bucket, images_key, images_path)
     else:
-        missions_path = args.local_missions
-        images_path = args.local_images
+        missions_path = local_missions
+        images_path = local_images
 
     missions_gdf = gpd.read_file(missions_path)
     images_gdf = gpd.read_file(images_path)
@@ -633,6 +706,9 @@ def main():
         f"Loaded {len(missions_gdf)} missions, {len(images_gdf)} images",
         file=sys.stderr,
     )
+
+    # ---- Fall back to nominal AGL where photogrammetry AGL is broken --------
+    missions_gdf = apply_nominal_agl_fallback(missions_gdf, images_gdf)
 
     # ---- Find pairs -------------------------------------------------------
     pairs = find_valid_pairs(missions_gdf)
@@ -684,14 +760,10 @@ def main():
 
     wrote_anything = False
 
-    if args.local_output_composites_folder:
-        os.makedirs(args.local_output_composites_folder, exist_ok=True)
-        pairs_path = os.path.join(
-            args.local_output_composites_folder, polygons_filename
-        )
-        images_out_path = os.path.join(
-            args.local_output_composites_folder, images_filename
-        )
+    if local_output_composites_folder:
+        os.makedirs(local_output_composites_folder, exist_ok=True)
+        pairs_path = os.path.join(local_output_composites_folder, polygons_filename)
+        images_out_path = os.path.join(local_output_composites_folder, images_filename)
 
         pair_polygons_out.to_file(pairs_path, driver="GPKG")
         print(f"\nWrote {pairs_path}", file=sys.stderr)
@@ -699,8 +771,8 @@ def main():
         print(f"Wrote {images_out_path}", file=sys.stderr)
         wrote_anything = True
 
-    if args.s3_upload_composites_folder:
-        if not args.bucket:
+    if s3_upload_composites_folder:
+        if not bucket:
             print(
                 "ERROR: --s3-upload-composites-folder requires --bucket",
                 file=sys.stderr,
@@ -711,19 +783,19 @@ def main():
             client = get_s3_client()
 
         # Write to a temp dir if we haven't saved locally
-        if not args.local_output_composites_folder:
+        if not local_output_composites_folder:
             tmpout = tempfile.mkdtemp()
             pairs_path = os.path.join(tmpout, polygons_filename)
             images_out_path = os.path.join(tmpout, images_filename)
             pair_polygons_out.to_file(pairs_path, driver="GPKG")
             selected_images_out.to_file(images_out_path, driver="GPKG")
 
-        pairs_key = f"{args.s3_upload_composites_folder}/{polygons_filename}"
-        images_key = f"{args.s3_upload_composites_folder}/{images_filename}"
-        upload_s3_file(client, args.bucket, pairs_key, pairs_path)
-        print(f"\nUploaded s3://{args.bucket}/{pairs_key}", file=sys.stderr)
-        upload_s3_file(client, args.bucket, images_key, images_out_path)
-        print(f"Uploaded s3://{args.bucket}/{images_key}", file=sys.stderr)
+        pairs_key = f"{s3_upload_composites_folder}/{polygons_filename}"
+        images_key = f"{s3_upload_composites_folder}/{images_filename}"
+        upload_s3_file(client, bucket, pairs_key, pairs_path)
+        print(f"\nUploaded s3://{bucket}/{pairs_key}", file=sys.stderr)
+        upload_s3_file(client, bucket, images_key, images_out_path)
+        print(f"Uploaded s3://{bucket}/{images_key}", file=sys.stderr)
         wrote_anything = True
 
     if not wrote_anything:
