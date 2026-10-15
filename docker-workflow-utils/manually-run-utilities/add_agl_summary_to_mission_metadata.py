@@ -69,6 +69,16 @@ except ImportError:
     sys.exit(1)
 
 
+# Column names used by older versions of the photogrammetry postprocessing, mapped to current names
+LEGACY_CAMERA_COLUMN_NAMES = {
+    "altitude": "photogrammetry_altitude_agl",
+    "altitude_agl": "photogrammetry_altitude_agl",
+    "ground_elevation": "photogrammetry_ground_elevation",
+    "valid_dtm": "photogrammetry_valid_dtm",
+    "camera_aligned": "photogrammetry_camera_aligned",
+}
+
+
 def get_s3_client():
     """Create S3 client with optional custom endpoint.
 
@@ -197,6 +207,14 @@ def process_mission(
 
         # Read camera locations and compute summary
         camera_gdf = gpd.read_file(local_camera)
+        # Camera-locations files from older postprocessing versions use unprefixed column names
+        camera_gdf = camera_gdf.rename(
+            columns={
+                old: new
+                for old, new in LEGACY_CAMERA_COLUMN_NAMES.items()
+                if old in camera_gdf.columns and new not in camera_gdf.columns
+            }
+        )
 
         if "photogrammetry_altitude_agl" not in camera_gdf.columns:
             return (
@@ -218,6 +236,11 @@ def process_mission(
 
         # Read image locations
         image_gdf = gpd.read_file(local_image_metadata)
+        # Drop photogrammetry columns left by a previous run so they are replaced rather than
+        # duplicated with _x/_y suffixes
+        image_gdf = image_gdf.drop(
+            columns=[c for c in camera_gdf.columns if c != "image_id"], errors="ignore"
+        )
         # Merge the photogrammetry data into the initial imagery metadata
         image_gdf = image_gdf.merge(camera_gdf, on="image_id")
 
