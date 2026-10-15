@@ -58,6 +58,15 @@ Splits the monolithic composite outputs from `pair_missions.py` into per-composi
 - **Output:** Per-composite metadata folders uploaded to `{S3_COMPOSITE_MISSIONS_PATH}/{composite_id}/metadata-images/` and `.../metadata-mission/`
 - **Auth:** rclone `js2s3` remote (`RCLONE_CONFIG_JS2S3_*`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`)
 
+### `add_agl_summary_to_composite_metadata.py`
+
+**Run after composite photogrammetry.** Composite equivalent of step 1. For each composite, downloads the camera-locations file from the composite's own photogrammetry run, replaces the per-image `photogrammetry_*` columns in the composite image metadata with the composite-run values, and writes `agl_mean` and `agl_fidelity` for each component mission (the hn and lo rows of the composite mission metadata). Safe to re-run.
+
+- **Input:** Per-composite metadata and camera-locations files on S3 (`{composites_prefix}/{composite_id}/`)
+- **Output:** Updated composite mission and image metadata GeoPackages re-uploaded to the same S3 paths
+- **Auth:** boto3 (`S3_ENDPOINT`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`)
+- **Usage:** `python add_agl_summary_to_composite_metadata.py --bucket ofo-public --composites-prefix drone/mission-composites_01 --photogrammetry-subfolder photogrammetry_03 [--dry-run] [--composites ID ...]`
+
 ---
 
 ## Workflow management utilities
