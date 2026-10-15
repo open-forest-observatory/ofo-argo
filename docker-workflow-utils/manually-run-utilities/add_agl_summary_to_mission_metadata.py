@@ -218,6 +218,11 @@ def process_mission(
 
         # Read image locations
         image_gdf = gpd.read_file(local_image_metadata)
+        # Drop photogrammetry columns left by a previous run so they are replaced rather than
+        # duplicated with _x/_y suffixes
+        image_gdf = image_gdf.drop(
+            columns=[c for c in camera_gdf.columns if c != "image_id"], errors="ignore"
+        )
         # Merge the photogrammetry data into the initial imagery metadata
         image_gdf = image_gdf.merge(camera_gdf, on="image_id")
 
