@@ -13,20 +13,20 @@ The path of this file is included as the "s3_imagery_subset_path" attribute.
 
 Dependencies: geopandas, pyyaml
 
-Note that the following credentials must be configured to access S3:
-* S3_PROVIDER: S3 provider for rclone (e.g., 'Ceph', 'AWS')
-* S3_ENDPOINT: S3 endpoint URL
-* S3_ACCESS_KEY: S3 access key ID
-* S3_SECRET_KEY: S3 secret access key
+Uploads use the js2s3 rclone remote, configured via environment variables (no config file needed):
+* RCLONE_CONFIG_JS2S3_TYPE: Set to "s3"
+* RCLONE_CONFIG_JS2S3_PROVIDER: S3 provider (e.g., "Other")
+* RCLONE_CONFIG_JS2S3_ENDPOINT: S3 endpoint URL
+* RCLONE_CONFIG_JS2S3_ENV_AUTH: Set to "true" to use AWS env vars for auth
+* AWS_ACCESS_KEY_ID: S3 access key
+* AWS_SECRET_ACCESS_KEY: S3 secret key
 """
 
 import copy
 import math
-import os
 import subprocess
 import tempfile
 from pathlib import Path
-from typing import List
 
 import geopandas as gpd
 import yaml
@@ -63,24 +63,13 @@ S3_COMPOSITE_MISSIONS_PATH = "ofo-public/drone/mission-composites_01"
 # cluster's s3-credentials Kubernetes secret.
 S3_DRONE_MISSIONS_PATH = "ofo-public/drone/missions_03"
 
+# rclone remote used to upload the image subset files
+RCLONE_REMOTE = "js2s3"
+
 
 # =============================================================================
 # Helper Functions
 # =============================================================================
-def get_s3_flags() -> List[str]:
-    """Build common S3 authentication flags for rclone commands."""
-    return [
-        "--s3-provider",
-        os.environ.get("S3_PROVIDER", ""),
-        "--s3-endpoint",
-        os.environ.get("S3_ENDPOINT", ""),
-        "--s3-access-key-id",
-        os.environ.get("S3_ACCESS_KEY", ""),
-        "--s3-secret-access-key",
-        os.environ.get("S3_SECRET_KEY", ""),
-    ]
-
-
 def upload_subset_file(image_ids: list[str], s3_path: str) -> None:
     """
     Write a list of image IDs to a temporary file and upload it to S3.
@@ -92,10 +81,7 @@ def upload_subset_file(image_ids: list[str], s3_path: str) -> None:
     Raises:
         subprocess.CalledProcessError: If upload fails
     """
-    # Use rclone's on-the-fly backend syntax (:s3:) which configures the
-    # S3 backend using command-line flags rather than a config file.
-    # This avoids needing a pre-configured remote like "js2s3:".
-    rclone_url = f":s3:{s3_path}"
+    rclone_url = f"{RCLONE_REMOTE}:{s3_path}"
 
     with tempfile.NamedTemporaryFile(mode="w") as tmp_subset_file:
         for image_id in image_ids:
@@ -122,7 +108,7 @@ def upload_subset_file(image_ids: list[str], s3_path: str) -> None:
             "15s",
             "--stats",
             "30s",
-        ] + get_s3_flags()
+        ]
         subprocess.run(cmd, check=True)
 
 
