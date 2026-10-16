@@ -111,6 +111,10 @@ def load_completion_log(log_path: str) -> Dict[str, Set[str]]:
     Supports both the current 'phase' field and the legacy 'completion_level' field
     for backward compatibility with existing logs.
 
+    A completed postprocess phase implies a completed metashape phase, since postprocessing
+    runs on metashape outputs. This covers projects whose metashape completion was never
+    logged (e.g., retroactive logs built after raw metashape products were removed).
+
     Args:
         log_path: Path to JSON Lines completion log
 
@@ -143,6 +147,10 @@ def load_completion_log(log_path: str) -> Dict[str, Set[str]]:
                     f"Warning: Skipping malformed line {line_num} in completion log: {e}",
                     file=sys.stderr,
                 )
+
+    for phases in completions.values():
+        if "postprocess" in phases:
+            phases.add("metashape")
 
     return completions
 

@@ -753,7 +753,7 @@ The completion log is a JSON Lines file (`.jsonl`) where each line represents a 
 
 - **Use separate log files for different configs** (e.g., `completion-log-default.jsonl`, `completion-log-highres.jsonl`)
 - Each project can have at most two entries in a log file: one for `metashape` and one for `postprocess`
-- If multiple entries exist for the same project, the highest phase is used (`postprocess` > `metashape`)
+- A logged `postprocess` phase also counts as `metashape` complete, so a project with only a `postprocess` entry (e.g., from a retroactive log built after raw Metashape products were removed) is skipped by the Metashape workflow and passes the postprocessing workflow's `metashape` gate
 - The log file is created automatically if it doesn't exist
 - Concurrent writes from parallel projects are handled safely with file locking
 

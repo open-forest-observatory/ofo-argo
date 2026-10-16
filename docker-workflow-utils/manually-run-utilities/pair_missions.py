@@ -65,7 +65,12 @@ LO_PITCH_MIN = 18
 LO_PITCH_MAX = 38
 
 # Minimum terrain-follow fidelity (0–100 scale) for either type
-MIN_FIDELITY = 50
+MIN_FIDELITY = 30
+
+# Negative-AGL fallback: if a mission's Nth-lowest per-image photogrammetry AGL
+# is below this value (metres), use nominal AGL instead of photogrammetry AGL
+NEGATIVE_AGL_RANK = 10
+NEGATIVE_AGL_M = -10
 
 # Temporal pairing criterion: maximum difference in days between missions
 MAX_DATE_DIFF_DAYS = (
@@ -150,12 +155,11 @@ def upload_s3_file(client, bucket, key, local_path):
 def apply_nominal_agl_fallback(missions_gdf, images_gdf):
     """
     Replace photogrammetry-derived AGL with nominal AGL for missions whose
-    per-image photogrammetry AGL contains negative values (a sign of a warped
+    per-image photogrammetry AGL is substantially negative (a sign of a warped
     reconstruction or bad ground model).
 
-    Uses the same middle-80% trim as the agl_mean / agl_fidelity computation so
-    that a few stray near-ground images (e.g. takeoff/landing) don't trigger it.
-    For flagged missions, agl_mean is set to altitude_agl_nominal and
+    A mission is flagged if its NEGATIVE_AGL_RANK-th lowest image AGL is below
+    NEGATIVE_AGL_M, so that a few stray images don't trigger it. For flagged missions, agl_mean is set to altitude_agl_nominal and
     agl_fidelity is set to NaN (which passes the fidelity check).
     """
     agl_col = next(
@@ -179,11 +183,11 @@ def apply_nominal_agl_fallback(missions_gdf, images_gdf):
         {"mission_id": images_gdf["mission_id"], "agl": agl}
     ).dropna()
 
-    def has_negative_core(a):
-        core = a[(a > a.quantile(0.1)) & (a < a.quantile(0.9))]
-        return (core < 0).any()
+    def has_negative_agl(a):
+        lowest = a.nsmallest(NEGATIVE_AGL_RANK)
+        return len(lowest) == NEGATIVE_AGL_RANK and lowest.iloc[-1] < NEGATIVE_AGL_M
 
-    negative = agl_by_mission.groupby("mission_id")["agl"].apply(has_negative_core)
+    negative = agl_by_mission.groupby("mission_id")["agl"].apply(has_negative_agl)
     flagged = set(negative[negative].index)
 
     missions = missions_gdf.copy()
