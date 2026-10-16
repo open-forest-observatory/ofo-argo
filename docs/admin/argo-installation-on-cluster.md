@@ -70,6 +70,15 @@ kubectl create namespace argo
 kubectl apply -n argo -f https://github.com/argoproj/argo-workflows/releases/download/${ARGO_WORKFLOWS_VERSION}/install.yaml
 ```
 
+!!! warning "Re-applying `install.yaml` wipes the workflow controller configuration"
+    `install.yaml` includes an empty `workflow-controller-configmap`. Re-applying it later (e.g. to
+    upgrade Argo or repair the install) silently erases our custom configuration: S3 log archiving,
+    pod GC, eviction protection, and pod-packing affinity. Workflows keep running, but their logs
+    are no longer archived. This happened on our cluster around May 2026 and went unnoticed for
+    five months. **Every time you apply `install.yaml`, re-run the steps in
+    [Configure workflow controller](#configure-workflow-controller-delete-completed-pods-and-use-s3-for-artifact-and-log-storage)
+    afterwards.**
+
 Optionally, check that the pods are running:
 
 ```bash
@@ -157,7 +166,16 @@ Check that the configmap was applied correctly:
 kubectl get configmap workflow-controller-configmap -n argo -o yaml
 ```
 
-You should see the `artifactRepository` section with the S3 configuration.
+You should see the `artifactRepository` section with the S3 configuration. If `data` is missing
+or empty, the configuration has been wiped (most likely by a re-apply of `install.yaml`; see the
+warning above) and needs to be re-applied.
+
+To confirm logs are actually reaching S3, check that a recently completed workflow has a folder in
+the bucket:
+
+```bash
+rclone lsf js2s3:ofo-internal/argo-logs-artifacts/<workflow-name>/
+```
 
 ## Test the installation
 
