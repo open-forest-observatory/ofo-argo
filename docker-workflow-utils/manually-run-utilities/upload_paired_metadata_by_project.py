@@ -1,3 +1,4 @@
+import argparse
 import subprocess
 import sys
 from pathlib import Path
@@ -21,12 +22,60 @@ def rclone_copy(src, dst):
     subprocess.run(cmd, check=True)
 
 
+def list_existing_composites():
+    """Return the composite IDs that already have both metadata files on S3."""
+    remote = f"{RCLONE_REMOTE}:{S3_COMPOSITE_MISSIONS_PATH}"
+    cmd = [
+        "rclone",
+        "lsf",
+        remote,
+        "--recursive",
+        "--files-only",
+        "--max-depth",
+        "3",
+        "--include",
+        "*/metadata-images/*_image-metadata.gpkg",
+        "--include",
+        "*/metadata-mission/*_mission-metadata.gpkg",
+    ]
+    print(f"Listing existing composites in {remote}", file=sys.stderr)
+    result = subprocess.run(cmd, check=True, capture_output=True, text=True)
+
+    # Paths look like {composite_id}/metadata-images/{composite_id}_image-metadata.gpkg
+    found = {}
+    for path in result.stdout.splitlines():
+        composite_id, subfolder, _ = path.split("/")
+        found.setdefault(composite_id, set()).add(subfolder)
+
+    return {
+        composite_id
+        for composite_id, subfolders in found.items()
+        if subfolders == {"metadata-images", "metadata-mission"}
+    }
+
+
+parser = argparse.ArgumentParser(
+    description="Split composite metadata into per-composite folders and upload to S3."
+)
+parser.add_argument(
+    "--skip-existing",
+    action="store_true",
+    help="Skip composites whose image and mission metadata files already exist on S3.",
+)
+args = parser.parse_args()
+
 imagery_metadata = gpd.read_file(IMAGERY_METADATA_FILE)
 boundary_metadata = gpd.read_file(BOUNDARY_METADATA_FILE)
+
+existing_composites = list_existing_composites() if args.skip_existing else set()
 
 # Iterate over the unique mission IDs
 # Subset the images and boundaries for each mission
 for composite_id in boundary_metadata["composite_id"].unique():
+
+    if composite_id in existing_composites:
+        print(f"Skipping composite {composite_id}: already exists on S3")
+        continue
 
     mission_images = imagery_metadata[imagery_metadata["composite_id"] == composite_id]
     mission_boundaries = boundary_metadata[
