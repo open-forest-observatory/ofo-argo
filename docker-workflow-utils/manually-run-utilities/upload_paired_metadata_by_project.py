@@ -1,3 +1,24 @@
+"""
+Split the composite outputs of pair_missions.py into per-composite metadata folders
+and upload each folder to S3.
+
+Outputs (per composite, locally under OUTPUT_FOLDER and on S3 under
+S3_COMPOSITE_MISSIONS_PATH):
+  - {composite_id}/metadata-images/{composite_id}_image-metadata.gpkg
+  - {composite_id}/metadata-mission/{composite_id}_mission-metadata.gpkg
+
+Usage:
+    # Edit the path constants below, then process and upload all composites:
+    python upload_paired_metadata_by_project.py
+
+    # Skip composites whose image and mission metadata files already exist on S3:
+    python upload_paired_metadata_by_project.py --skip-existing
+
+Requirements:
+    - geopandas
+    - rclone with a configured js2s3 remote (RCLONE_CONFIG_JS2S3_* env vars)
+"""
+
 import argparse
 import subprocess
 import sys
@@ -5,10 +26,10 @@ from pathlib import Path
 
 import geopandas as gpd
 
-IMAGERY_METADATA_FILE = "/ofo-share/repos/david/ofo-argo/scratch/paired-photogrammetry/selected-composites-images.gpkg"
-BOUNDARY_METADATA_FILE = "/ofo-share/repos/david/ofo-argo/scratch/paired-photogrammetry/selected-composites-polygons.gpkg"
+IMAGERY_METADATA_FILE = "/ofo-share/scratch/derek/tmp_pairing/selected-composites-images.gpkg"
+BOUNDARY_METADATA_FILE = "/ofo-share/scratch/derek/tmp_pairing/selected-composites-polygons.gpkg"
 OUTPUT_FOLDER = (
-    "/ofo-share/repos/david/ofo-argo/scratch/paired-photogrammetry/per-mission-metadata"
+    "/ofo-share/scratch/derek/tmp_pairing/per-mission-metadata"
 )
 
 RCLONE_REMOTE = "js2s3"
