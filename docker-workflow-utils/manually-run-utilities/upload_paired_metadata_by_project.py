@@ -26,11 +26,13 @@ from pathlib import Path
 
 import geopandas as gpd
 
-IMAGERY_METADATA_FILE = "/ofo-share/scratch/derek/tmp_pairing/selected-composites-images.gpkg"
-BOUNDARY_METADATA_FILE = "/ofo-share/scratch/derek/tmp_pairing/selected-composites-polygons.gpkg"
-OUTPUT_FOLDER = (
-    "/ofo-share/scratch/derek/tmp_pairing/per-mission-metadata"
+IMAGERY_METADATA_FILE = (
+    "/ofo-share/scratch/derek/tmp_pairing/selected-composites-images.gpkg"
 )
+BOUNDARY_METADATA_FILE = (
+    "/ofo-share/scratch/derek/tmp_pairing/selected-composites-polygons.gpkg"
+)
+OUTPUT_FOLDER = "/ofo-share/scratch/derek/tmp_pairing/per-mission-metadata"
 
 RCLONE_REMOTE = "js2s3"
 S3_COMPOSITE_MISSIONS_PATH = "ofo-public/drone/mission-composites_01"
