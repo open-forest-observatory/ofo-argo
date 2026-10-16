@@ -37,20 +37,20 @@ import yaml
 
 # Path to the GeoPackage containing which images were selected
 COMPOSITE_IMAGES_GPKG_PATH = Path(
-    "/ofo-share/repos/david/ofo-argo/scratch/paired-photogrammetry/selected-composites-images.gpkg"
+    "/ofo-share/scratch/derek/tmp_pairing/selected-composites-images.gpkg"
 )
 MISSION_METADATA_GPKG_PATH = Path(
-    "/ofo-share/repos/david/ofo-argo/scratch/paired-photogrammetry/metadata-missions-compiled.gpkg"
+    "/ofo-share/scratch/derek/tmp_pairing/metadata-missions-compiled.gpkg"
 )
 
 # Path to the base automate-metashape configuration YAML
 BASE_CONFIG_PATH = Path(
-    "/ofo-share/repos/david/ofo-argo/photogrammetry-config-prep/config-prep-runs/run-03/input/config-base.yml"
+    "/ofo-share/repos/derek/ofo-argo/photogrammetry-config-prep/config-prep-runs/composite-run_02/config-base.yml"
 )
 
 # Output directory for derived config files
 OUTPUT_DIR_CONFIGS = Path(
-    "/ofo-share/repos/david/ofo-argo/photogrammetry-config-prep/config-prep-runs/run-03/derived-configs"
+    "/ofo-share/argo-data/argo-input/derek-paired-20261016/configs"
 )
 # The path, starting at the bucket, for the subsets file that will be referenced in the config
 S3_COMPOSITE_MISSIONS_PATH = "ofo-public/drone/mission-composites_01"
