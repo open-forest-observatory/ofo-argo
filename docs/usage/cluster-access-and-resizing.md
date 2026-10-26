@@ -203,7 +203,7 @@ effort to prevent cycling. You can change the min and max bounds on the number o
 autoscaler will request:
 
 ```bash
-openstack coe nodegroup update ofocluster2 cpu-group replace min_node_count=1 max_node_count=1
+openstack coe nodegroup update ofocluster2 cpu-group --min-nodes 1 --max-nodes 1
 ```
 
 ### Drain/cordon nodes before downsizing or deleting
@@ -244,7 +244,7 @@ count. To prevent this, first reduce the max size of the nodegroup to 1 (the low
 then delete.
 
 ```bash
-openstack coe nodegroup update ofocluster2 $NODEGROUP_NAME min_node_count=1 max_node_count=1
+openstack coe nodegroup update ofocluster2 $NODEGROUP_NAME --min-nodes 1 --max-nodes 1
 openstack coe nodegroup delete ofocluster2 $NODEGROUP_NAME
 ```
 
