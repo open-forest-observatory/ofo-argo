@@ -160,7 +160,7 @@ python3 /app/generate_retroactive_log.py \
 
 **Arguments:**
 - `--internal-bucket`: S3 bucket for internal/Metashape products (required)
-- `--internal-prefix`: S3 prefix for Metashape products, including any config-specific subdirectories (required)
+- `--internal-prefix`: S3 prefix for Metashape products, including any config-specific subdirectories (required). Can be repeated to scan multiple prefixes; a project completed under more than one prefix is logged once with the latest timestamp, and overlaps are printed to the terminal
 - `--public-bucket`: S3 bucket for public/postprocessed products
 - `--public-prefix`: S3 prefix for postprocessed products
 - `--phase`: Which phases to detect (default: `both`)
@@ -181,6 +181,14 @@ python3 /app/generate_retroactive_log.py \
   --internal-prefix photogrammetry/default-run \
   --public-bucket ofo-public \
   --public-prefix postprocessed \
+  --output /data/argo-input/config-lists/completion-log-default.jsonl
+
+# Multiple internal prefixes (repeat --internal-prefix)
+python3 /app/generate_retroactive_log.py \
+  --internal-bucket ofo-internal \
+  --internal-prefix photogrammetry/default-run \
+  --internal-prefix photogrammetry/default-run-rerun \
+  --phase metashape \
   --output /data/argo-input/config-lists/completion-log-default.jsonl
 
 # Metashape only

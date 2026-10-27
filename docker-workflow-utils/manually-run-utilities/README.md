@@ -66,7 +66,7 @@ These scripts are independent of the paired photogrammetry pipeline and can be u
 
 ### `generate_retroactive_log.py`
 
-One-time bootstrap utility. Scans S3 for completed-run sentinel files (PDF reports) and generates a JSONL completion log for projects that finished before the logging feature was implemented. The output log can be used by `generate_remaining_configs.py` and by Argo's skip-if-complete logic.
+One-time bootstrap utility. Scans S3 for completed-run sentinel files (PDF reports) and generates a JSONL completion log for projects that finished before the logging feature was implemented. The output log can be used by `generate_remaining_configs.py` and by Argo's skip-if-complete logic. `--internal-prefix` may be repeated to scan multiple internal prefixes; projects found under more than one are logged once (latest timestamp) and the overlaps are printed to the terminal.
 
 - **Input:** S3 prefixes for internal (metashape) and public (postprocessed) products
 - **Output:** A JSONL completion log file

@@ -863,7 +863,7 @@ python docker-workflow-utils/manually-run-utilities/generate_retroactive_log.py 
 | Option | Description |
 |--------|-------------|
 | `--internal-bucket` | S3 bucket for internal/Metashape products |
-| `--internal-prefix` | S3 prefix for Metashape products, including any config-specific subdirectories (e.g., `photogrammetry/default-run` for default config, or `photogrammetry/default-run/photogrammetry_highres` for highres config) |
+| `--internal-prefix` | S3 prefix for Metashape products, including any config-specific subdirectories (e.g., `photogrammetry/default-run` for default config, or `photogrammetry/default-run/photogrammetry_highres` for highres config). Can be repeated to scan multiple prefixes; a project completed under more than one prefix is logged once with the latest timestamp, and overlaps are printed to the terminal |
 | `--public-bucket` | S3 bucket for public/postprocessed products |
 | `--public-prefix` | S3 prefix for postprocessed products |
 | `--phase` | Which completion phases to detect: `metashape`, `postprocess`, or `both` (default: `both`) |

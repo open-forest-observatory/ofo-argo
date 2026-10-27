@@ -162,6 +162,44 @@ def detect_completed_projects(
     return projects
 
 
+def detect_completed_projects_multi_prefix(
+    client, bucket: str, prefixes: List[str], label: str
+) -> Dict[str, datetime]:
+    """
+    Detect completed projects across several prefixes in one bucket.
+
+    A project found under more than one prefix keeps its latest timestamp. Projects
+    found under multiple prefixes are reported to stderr.
+
+    Returns dict mapping project_name -> latest LastModified timestamp.
+    """
+    merged: Dict[str, datetime] = {}
+    sources: Dict[str, List[str]] = {}
+
+    for prefix in prefixes:
+        found = detect_completed_projects(client, bucket, prefix, label)
+        for project_name, timestamp in found.items():
+            sources.setdefault(project_name, []).append(prefix)
+            if project_name not in merged or timestamp > merged[project_name]:
+                merged[project_name] = timestamp
+
+    if len(prefixes) > 1:
+        overlapping = {p: s for p, s in sources.items() if len(s) > 1}
+        print(
+            f"\n{label} summary across {len(prefixes)} prefixes: "
+            f"{len(merged)} unique projects, {len(overlapping)} found under "
+            f"more than one prefix",
+            file=sys.stderr,
+        )
+        for project_name in sorted(overlapping):
+            print(
+                f"  overlap: {project_name} -> {', '.join(overlapping[project_name])}",
+                file=sys.stderr,
+            )
+
+    return merged
+
+
 def generate_log_entries(
     metashape_projects: Dict[str, datetime],
     postprocess_projects: Dict[str, datetime],
@@ -217,6 +255,14 @@ Examples:
         --public-config-subfolder photogrammetry_03 \\
         --output completion-log-03.jsonl
 
+    # Multiple internal prefixes (repeat --internal-prefix); overlaps are reported
+    python generate_retroactive_log.py \\
+        --internal-bucket ofo-internal \\
+        --internal-prefix photogrammetry-outputs/photogrammetry_03 \\
+        --internal-prefix photogrammetry-outputs/photogrammetry_03_rerun \\
+        --phase metashape \\
+        --output completion-log-03.jsonl
+
     # Metashape only (no postprocess check)
     python generate_retroactive_log.py \\
         --internal-bucket ofo-internal \\
@@ -234,7 +280,11 @@ Examples:
     parser.add_argument(
         "--internal-prefix",
         required=True,
-        help="S3 prefix for metashape products (e.g., photogrammetry/default-run or photogrammetry/default-run/photogrammetry_highres)",
+        action="append",
+        help="S3 prefix for metashape products (e.g., photogrammetry/default-run or "
+        "photogrammetry/default-run/photogrammetry_highres). May be given multiple "
+        "times to scan several prefixes; a project completed under more than one "
+        "prefix is logged once, with the latest timestamp.",
     )
     parser.add_argument(
         "--public-bucket",
@@ -291,7 +341,7 @@ Examples:
     postprocess_projects: Dict[str, datetime] = {}
 
     if args.phase in ["metashape", "both"]:
-        metashape_projects = detect_completed_projects(
+        metashape_projects = detect_completed_projects_multi_prefix(
             client, args.internal_bucket, args.internal_prefix, "metashape"
         )
 
