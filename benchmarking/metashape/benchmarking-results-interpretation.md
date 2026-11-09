@@ -228,6 +228,26 @@ matching (i.e., save the bigger slices for the longer-running tasks where the ov
 greater impact). This assumes that there would be depthmapping and matching tasks trying to run at
 once.
 
+**Comparison of 2-slice vs 3-slice MIG for BuildDepthMaps:**
+
+Analysis of the benchmarking data shows that depth mapping (buildDepthMaps) on a 3-slice MIG
+(1x3g - NVIDIA A100-SXM4-40GB MIG 3g.20gb) is **1.27x faster** than on a 2-slice MIG
+(1x2g - NVIDIA A100-SXM4-40GB MIG 2g.10gb), or approximately **21% faster**.
+
+Detailed performance metrics across 3 test projects:
+- 2-slice MIG average: 7041.0 seconds (117.3 minutes)
+- 3-slice MIG average: 5551.3 seconds (92.5 minutes)
+- Time saved: 1489.7 seconds (24.8 minutes per project)
+
+However, from a cost-efficiency perspective, the 3-slice MIG uses 1.5x the GPU resources but only
+provides 1.27x speedup, resulting in a cost efficiency ratio of 0.85x. This means the **2-slice MIG
+is approximately 15% more cost-efficient** per GPU slice, though the 3-slice MIG completes jobs
+faster overall.
+
+Recommendation: Use 2-slice MIG for cost-efficiency, or 3-slice MIG when faster turnaround time is
+more important than cost. A reproducible analysis script is available at
+`benchmarking/metashape/scripts/analyze_mig_depth_mapping_performance.py`.
+
 Prudent resource requests are likely to request CPU and mem proportional to the fractional GPU slice
 (e.g. 1/7 of tot for 1-slice, 2/7 for 2), but maybe 10% less so the small daemons on the node don't
 bump the GPU jobs.
