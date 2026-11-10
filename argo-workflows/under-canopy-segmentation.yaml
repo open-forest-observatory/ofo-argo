@@ -64,6 +64,8 @@ spec:
         value: "main"
       - name: GEOGRAYPHER_IMAGE_TAG
         value: "main"
+      - name: MMSEGMENTATION_IMAGE_TAG
+        value: "main"
 
 
   # Defining where to read raw drone imagery data and write out imagery products to `/ofo-share`
@@ -123,8 +125,21 @@ spec:
               parameters:
                 - name: collect-id
                   value: "{{inputs.parameters.collect-id}}"
-                - name: image-dir
+                - name: image-folder
                   value: "{{workflow.parameters.TEMP_FOLDER}}/{{workflow.name}}/{{inputs.parameters.collect-id}}/imagery-downloads"
+          - name: segment-images
+            template: segment-images
+            depends: "chip-images.Succeeded"
+            arguments:
+              parameters:
+                - name: collect-id
+                  value: "{{inputs.parameters.collect-id}}"
+                - name: config-path
+                  value: "{{workflow.parameters.CONFIG_PATH}}"
+                - name: model-path
+                  value: "{{workflow.parameters.MODEL_PATH}}"
+                - name: image-folder
+                  value: "{{tasks.chip-images.outputs.parameters.output-folder}}"
 
 
 
@@ -273,7 +288,9 @@ spec:
       inputs:
         parameters:
           - name: collect-id
-          - name: image-dir
+          - name: image-folder
+          - name: output-folder
+            value: "{{workflow.parameters.TEMP_FOLDER}}/{{workflow.name}}/{{inputs.parameters.collect-id}}/chipped"
       container:
         image: ghcr.io/open-forest-observatory/geograypher:{{workflow.parameters.GEOGRAYPHER_IMAGE_TAG}}
         volumeMounts:
@@ -289,10 +306,41 @@ spec:
                   "python",
                   "-m",
                   "geograypher.entrypoints.equirectangular_to_cube_mapped",
-                  "{{inputs.parameters.image-dir}}",
-                  "{{workflow.parameters.TEMP_FOLDER}}/{{workflow.name}}/{{inputs.parameters.collect-id}}/chipped",
+                  "{{inputs.parameters.image-folder}}",
+                  "{{inputs.parameters.output-folder}}"
                 ]
       outputs:
         parameters:
-          - name: output-dir
-            value: "{{workflow.parameters.TEMP_FOLDER}}/{{workflow.name}}/{{inputs.parameters.collect-id}}/chipped"
+          - name: output-folder
+            value: "{{inputs.parameters.output-folder}}"
+
+    - name: segment-images
+      inputs:
+        parameters:
+          - name: collect-id
+          - name: config-path
+          - name: model-path
+          - name: image-folder
+          - name: output-folder
+            value: "{{workflow.parameters.TEMP_FOLDER}}/{{workflow.name}}/{{inputs.parameters.collect-id}}/segmented"
+      affinity: {}
+      container:
+        image: ghcr.io/open-forest-observatory/mmsegmentation:{{workflow.parameters.MMSEGMENTATION_IMAGE_TAG}}
+        volumeMounts:
+          - name: data
+            mountPath: /data
+        resources:
+          requests:
+            nvidia.com/gpu: 1
+        command: [
+                  "python",
+                  "/mmsegmentation/tools/inference.py",
+                  "{{inputs.parameters.config-path}}",
+                  "{{inputs.parameters.model-path}}",
+                  "{{inputs.parameters.image-folder}}",
+                  "{{inputs.parameters.output-folder}}",
+                ]
+      outputs:
+        parameters:
+          - name: output-folder
+            value: "{{inputs.parameters.output-folder}}"
