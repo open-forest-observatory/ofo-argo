@@ -83,7 +83,8 @@ spec:
       # The stride in pixels of the tree detection tiles
       - name: TREE_DETECTION_CHIP_STRIDE
         value: 3600
-      # Minimum registration shift quality score; pairs scoring below this threshold fail the task
+      # Maximum registration shift quality score; pairs scoring above this threshold fail the task
+      # Note this metric is defined such that lower is better
       - name: REGISTRATION_QUALITY_THRESHOLD
         value: 0.5  # TODO: Set appropriate threshold based on experiments (see issue #55)
       # Locations on the mesh below this height are masked
@@ -651,8 +652,8 @@ spec:
 
           # See if it passes the quality threshold
           ratio_quality_metric = registration["ratio_quality_metric"].iloc[0]
-          if ratio_quality_metric < registration_quality_threshold:
-              raise ValueError(f"The quality metric ({ratio_quality_metric}) is less than the threshold ({registration_quality_threshold})")
+          if ratio_quality_metric > registration_quality_threshold:
+              raise ValueError(f"The quality metric ({ratio_quality_metric}) is greater than the threshold ({registration_quality_threshold})")
 
           # Read the other products, which contain the data for all plots
           ground_reference_trees = gpd.read_file(ground_reference_trees_file)
