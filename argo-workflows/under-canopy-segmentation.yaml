@@ -62,6 +62,8 @@ spec:
       # The version of each Docker container to use
       - name: OFO_ARGO_UTILS_IMAGE_TAG
         value: "main"
+      - name: GEOGRAYPHER_IMAGE_TAG
+        value: "main"
 
 
   # Defining where to read raw drone imagery data and write out imagery products to `/ofo-share`
@@ -114,6 +116,16 @@ spec:
                   value: "[\"{{workflow.parameters.S3_IMAGERY_FOLDER}}/{{inputs.parameters.collect-id}}/images/{{inputs.parameters.collect-id}}_images.zip\"]"
                 - name: download-folder
                   value: "{{workflow.parameters.TEMP_FOLDER}}/{{workflow.name}}/{{inputs.parameters.collect-id}}/imagery-downloads"
+          - name: chip-images
+            template: chip-images
+            depends: "download-imagery.Succeeded"
+            arguments:
+              parameters:
+                - name: collect-id
+                  value: "{{inputs.parameters.collect-id}}"
+                - name: image-dir
+                  value: "{{workflow.parameters.TEMP_FOLDER}}/{{workflow.name}}/{{inputs.parameters.collect-id}}/imagery-downloads"
+
 
 
 # Definitions of individual steps (templates)
@@ -209,12 +221,12 @@ spec:
               > /tmp/file-paths.json
 
             echo "[download] File paths written to /tmp/file-paths.json"
-        #resources:
-        #  requests:
-        #    cpu: 1
-        #    memory: "2Gi"
-        #  limits:
-        #    memory: "4Gi"
+        resources:
+          requests:
+            cpu: 1
+            memory: "2Gi"
+          limits:
+            memory: "4Gi"
 
     - name: download-imagery
       inputs:
@@ -252,8 +264,35 @@ spec:
               secretKeyRef:
                 name: s3-credentials
                 key: secret_key
-        #resources:
-        #  requests:
-        #    cpu: "2"
-        #    memory: "2Gi"
+        resources:
+          requests:
+            cpu: "2"
+            memory: "2Gi"
 
+    - name: chip-images
+      inputs:
+        parameters:
+          - name: collect-id
+          - name: image-dir
+      container:
+        image: ghcr.io/open-forest-observatory/geograypher:{{workflow.parameters.GEOGRAYPHER_IMAGE_TAG}}
+        volumeMounts:
+          - name: data
+            mountPath: /data
+        resources:
+          requests:
+            cpu: 2
+            memory: "14Gi"
+          limits:
+            memory: "14Gi"
+        command: [
+                  "python",
+                  "-m",
+                  "geograypher.entrypoints.equirectangular_to_cube_mapped",
+                  "{{inputs.parameters.image-dir}}",
+                  "{{workflow.parameters.TEMP_FOLDER}}/{{workflow.name}}/{{inputs.parameters.collect-id}}/chipped",
+                ]
+      outputs:
+        parameters:
+          - name: output-dir
+            value: "{{workflow.parameters.TEMP_FOLDER}}/{{workflow.name}}/{{inputs.parameters.collect-id}}/chipped"
