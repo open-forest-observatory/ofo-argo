@@ -155,3 +155,29 @@ From there, a model is trained using the `MMPretrain` framework. Once trained, t
 - **`TRAINING_EPOCHS`** (default: `"10"`): Number of epochs to train for.
 
 - **`MMPRETRAIN_IMAGE_TAG`** (default: `"main"`): Version tag for the mmpretrain Docker image.
+
+# Segmenent under canopy meshes
+
+We have collected data from the forest understory (under canopy) using a GoPro360 action camera. This captures spherical panoramas representing data from all directions. The same photogrammetry workflow as used for over-canopy drone data can be run on these images to build a 3D model of the scene. From there, this workflow segments the mesh model into regions of different functional types.
+
+First, the photogrammetry products (mesh, mesh metadata, cameras, and log file) are downloaded from S3 along with the original images of the scene. Then, each image is resampled into six "perspective" views, representing a virtual camera that observes only one face of a cube, centered at the image location. Each of these perspective views is segmented using a computer vision model, which assigns a predicted class to each pixel. Each class represents a functional type of vegetation. Finally, these predictions are projected to the mesh using functionality from Geograypher.
+
+## Parameters
+
+- **`COLLECT_LIST_FILE`** (required): Path to a text file on the mounted volume listing the collects to process, one `collect_id` per line, zero-padded to six digits (e.g. `000031`). Blank lines are ignored. Each collect is processed independently and in parallel; if one fails, the others continue.
+
+- **`MODEL_PATH`** (required): Path to the trained MMSegmentation model weights (`.pth`) on the mounted volume.
+
+- **`CONFIG_PATH`** (required): Path to the MMSegmentation model config file (`.py`) on the mounted volume that matches `MODEL_PATH`.
+
+- **`S3_PHOTOGRAMMETRY_FOLDER`** (default: `"ofo-internal/photogrammetry-outputs-under-canopy-imagery"`): S3 folder holding the under-canopy photogrammetry products, including the bucket name and no trailing slash. It must contain `<collect_id>_cameras.xml`, `<collect_id>_mesh.ply`, `<collect_id>_mesh-metadata.xml` and `<collect_id>_log.txt` for each collect, in a single flat folder. The collect fails if any of these are missing.
+
+- **`S3_IMAGERY_FOLDER`** (default: `"ofo-public/under-canopy-imagery"`): S3 folder holding the ingested under-canopy imagery, including the bucket name and no trailing slash. Images are read from `<S3_IMAGERY_FOLDER>/<collect_id>/images/<collect_id>_images.zip`, the layout produced by the ingest under canopy data workflow.
+
+- **`TEMP_FOLDER`** (default: `"/data/argo-output/temp-dir"`): Base directory for temporary products. All temp outputs for a run are saved under `TEMP_FOLDER/<workflow-name>/<collect_id>/`.
+
+- **`OFO_ARGO_UTILS_IMAGE_TAG`** (default: `"main"`): Version tag for the argo-workflow-utils Docker image, used to download and unzip the imagery.
+
+- **`GEOGRAYPHER_IMAGE_TAG`** (default: `"main"`): Version tag for the geograypher Docker image, used to chip the equirectangular images into cube-map views and to project the segmentations onto the mesh.
+
+- **`MMSEGMENTATION_IMAGE_TAG`** (default: `"main"`): Version tag for the mmsegmentation Docker image, used to segment the chipped images.
