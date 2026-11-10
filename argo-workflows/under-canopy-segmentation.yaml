@@ -126,7 +126,7 @@ spec:
                 - name: collect-id
                   value: "{{inputs.parameters.collect-id}}"
                 - name: image-folder
-                  value: "{{workflow.parameters.TEMP_FOLDER}}/{{workflow.name}}/{{inputs.parameters.collect-id}}/imagery-downloads"
+                  value: "{{tasks.download-imagery.outputs.parameters.output-folder}}"
           - name: segment-images
             template: segment-images
             depends: "chip-images.Succeeded"
@@ -140,6 +140,27 @@ spec:
                   value: "{{workflow.parameters.MODEL_PATH}}"
                 - name: image-folder
                   value: "{{tasks.chip-images.outputs.parameters.output-folder}}"
+          - name: project-segmentations
+            template: project-segmentations
+            depends: "segment-images.Succeeded & download-photogrammetry-data.Succeeded"
+            arguments:
+              parameters:
+                - name: collect-id
+                  value: "{{inputs.parameters.collect-id}}"
+                - name: mesh-file
+                  value: '{{=jsonpath(tasks["download-photogrammetry-data"].outputs.parameters["local-files"], "$.mesh")}}'
+                - name: mesh-metadata-file
+                  value: '{{=jsonpath(tasks["download-photogrammetry-data"].outputs.parameters["local-files"], "$.mesh_metadata_file")}}'
+                - name: cameras-file
+                  value: '{{=jsonpath(tasks["download-photogrammetry-data"].outputs.parameters["local-files"], "$.cameras")}}'
+                - name: image-folder
+                  value: "{{tasks.download-imagery.outputs.parameters.output-folder}}"
+                - name: label-folder
+                  value: "{{tasks.segment-images.outputs.parameters.output-folder}}"
+                - name: original-image-folder
+                  value: '{{=jsonpath(tasks["download-photogrammetry-data"].outputs.parameters["local-files"], "$.photogrammetry_download_root")}}'
+                - name: predicted-face-classes-savefile
+                  value: "{{workflow.parameters.TEMP_FOLDER}}/{{workflow.name}}/{{inputs.parameters.collect-id}}/predicted_face_classes.npy"
 
 
 
@@ -208,7 +229,7 @@ spec:
             LOCAL_FOLDER="{{inputs.parameters.local-folder}}"
             S3_SRC="s3:{{inputs.parameters.s3-photogrammetry-folder}}"
             # TODO consider including the DTM, which is not currently computed
-            INCLUDES="--include ${COLLECT_ID}_cameras.xml --include ${COLLECT_ID}_mesh.ply --include ${COLLECT_ID}_mesh-metadata.xml"
+            INCLUDES="--include ${COLLECT_ID}_cameras.xml --include ${COLLECT_ID}_mesh.ply --include ${COLLECT_ID}_mesh-metadata.xml --include ${COLLECT_ID}_log.txt"
 
             mkdir -p "$LOCAL_FOLDER"
 
@@ -217,22 +238,50 @@ spec:
               --transfers 8 --checkers 8 --retries 5 --retries-sleep=15s \
               --stats 15s --stats-log-level NOTICE
 
-            CAMERA_FILE="${LOCAL_FOLDER}/${COLLECT_ID}_cameras.xml"
+            CAMERAS_FILE="${LOCAL_FOLDER}/${COLLECT_ID}_cameras.xml"
             MESH_FILE="${LOCAL_FOLDER}/${COLLECT_ID}_mesh.ply"
             MESH_METADATA_FILE="${LOCAL_FOLDER}/${COLLECT_ID}_mesh-metadata.xml"
+            LOG_FILE="${LOCAL_FOLDER}/${COLLECT_ID}_log.txt"
 
             # Verify all expected files were downloaded
-            for f in "$CAMERA_FILE" "$MESH_FILE" "$MESH_METADATA_FILE"; do
+            for f in "$CAMERAS_FILE" "$MESH_FILE" "$MESH_METADATA_FILE" "$LOG_FILE"; do
               if [ ! -f "$f" ]; then
                 echo "[download] ERROR: Expected file not found: $f"
                 exit 1
               fi
             done
-            echo "[download] All 3 expected files verified."
+            echo "[download] All 4 expected files verified."
+
+            # --- Determine the folder where images was located when photogrammetry was run ---
+            # Photogrammetry exports a camera file which includes absolute paths to the images.
+            # These are based on where the images were located for the photogrammetry processing
+            # workflow. We must extract this initial path so it can be replaced with one that is
+            # appropriate for this workflow.
+            # The log's "photo_path" list (under the "project:" key) holds the raw-imagery paths used
+            # when photogrammetry was run, of the form
+            # "{root}/${PROCESSED_DRONE_DATASET_ID}/photogrammetry/downloaded-raw-imagery/...". Read
+            # the config as YAML (list items only start capturing right after the "  photo_path:" key,
+            # so this can't be confused with the other "- " lists in the file, e.g. lower_offset_folders)
+            # and take the portion of its first entry before the processed-drone-dataset-id path segment.
+            FIRST_PHOTO_PATH=$(awk '
+              /^  photo_path:$/ { capture=1; next }
+              capture && /^  - / { sub(/^  - /, ""); print; exit }
+              capture { exit }
+            ' "$LOG_FILE")
+            if [ -z "$FIRST_PHOTO_PATH" ]; then
+              echo "[download] ERROR: Could not parse photo_path from log file: $LOG_FILE"
+              exit 1
+            fi
+            PHOTOGRAMMETRY_DOWNLOAD_ROOT="${FIRST_PHOTO_PATH%%downloaded-raw-imagery/*}downloaded-raw-imagery"
+            if [ "$PHOTOGRAMMETRY_DOWNLOAD_ROOT" = "$FIRST_PHOTO_PATH" ]; then
+              echo "[download] ERROR: 'downloaded-raw-imagery' not found in photo_path: $FIRST_PHOTO_PATH"
+              exit 1
+            fi
+            echo "[download] Parsed photogrammetry download root: $PHOTOGRAMMETRY_DOWNLOAD_ROOT"
 
             # Build JSON dict of downloaded file paths
-            printf '{"camera":"%s","mesh":"%s","mesh-metadata":"%s"}' \
-              "$CAMERA_FILE" "$MESH_FILE" "$MESH_METADATA_FILE" \
+            printf '{"cameras":"%s","mesh":"%s","mesh_metadata_file":"%s", "photogrammetry_download_root":"%s"}' \
+              "$CAMERAS_FILE" "$MESH_FILE" "$MESH_METADATA_FILE" "$PHOTOGRAMMETRY_DOWNLOAD_ROOT" \
               > /tmp/file-paths.json
 
             echo "[download] File paths written to /tmp/file-paths.json"
@@ -283,6 +332,10 @@ spec:
           requests:
             cpu: "2"
             memory: "2Gi"
+      outputs:
+        parameters:
+          - name: output-folder
+            value: "{{inputs.parameters.download-folder}}"
 
     - name: chip-images
       inputs:
@@ -344,3 +397,49 @@ spec:
         parameters:
           - name: output-folder
             value: "{{inputs.parameters.output-folder}}"
+
+    - name: project-segmentations
+      inputs:
+        parameters:
+          - name: collect-id
+          - name: mesh-file
+          - name: mesh-metadata-file
+          - name: cameras-file
+          - name: image-folder
+          - name: label-folder
+          - name: original-image-folder
+          - name: predicted-face-classes-savefile
+      container:
+        image: ghcr.io/open-forest-observatory/geograypher:{{workflow.parameters.GEOGRAYPHER_IMAGE_TAG}}
+        volumeMounts:
+          - name: data
+            mountPath: /data
+        resources:
+          requests:
+            cpu: 2
+            memory: "8Gi"
+          limits:
+            memory: "8Gi"
+        command: [
+                  "python",
+                  "-m",
+                  "geograypher.entrypoints.aggregate_images",
+                  "--mesh-file",
+                  "{{inputs.parameters.mesh-file}}",
+                  "--mesh-metadata-file",
+                  "{{inputs.parameters.mesh-metadata-file}}",
+                  "--cameras-file",
+                  "{{inputs.parameters.cameras-file}}",
+                  "--image-folder",
+                  "{{inputs.parameters.image-folder}}",
+                  "--label-folder",
+                  "{{inputs.parameters.label-folder}}",
+                  "--original-image-folder",
+                  "{{inputs.parameters.original-image-folder}}",
+                  "--predicted-face-classes-savefile",
+                  "{{inputs.parameters.predicted-face-classes-savefile}}",
+                ]
+      outputs:
+        parameters:
+          - name: predicted-face-classes-savefile
+            value: "{{inputs.parameters.predicted-face-classes-savefile}}"
