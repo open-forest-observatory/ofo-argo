@@ -123,10 +123,10 @@ spec:
             depends: "download-imagery.Succeeded"
             arguments:
               parameters:
-                - name: collect-id
-                  value: "{{inputs.parameters.collect-id}}"
                 - name: image-folder
-                  value: "{{tasks.download-imagery.outputs.parameters.output-folder}}"
+                  value: "{{tasks.download-imagery.outputs.parameters.output-folder}}/{{inputs.parameters.collect-id}}_images"
+                - name: output-folder
+                  value: "{{workflow.parameters.TEMP_FOLDER}}/{{workflow.name}}/{{inputs.parameters.collect-id}}/chipped"
           - name: segment-images
             template: segment-images
             depends: "chip-images.Succeeded"
@@ -142,7 +142,7 @@ spec:
                   value: "{{tasks.chip-images.outputs.parameters.output-folder}}"
           - name: project-segmentations
             template: project-segmentations
-            depends: "segment-images.Succeeded & download-photogrammetry-data.Succeeded"
+            depends: "segment-images.Succeeded && download-photogrammetry-data.Succeeded"
             arguments:
               parameters:
                 - name: collect-id
@@ -340,10 +340,8 @@ spec:
     - name: chip-images
       inputs:
         parameters:
-          - name: collect-id
           - name: image-folder
           - name: output-folder
-            value: "{{workflow.parameters.TEMP_FOLDER}}/{{workflow.name}}/{{inputs.parameters.collect-id}}/chipped"
       container:
         image: ghcr.io/open-forest-observatory/geograypher:{{workflow.parameters.GEOGRAYPHER_IMAGE_TAG}}
         volumeMounts:
@@ -360,7 +358,9 @@ spec:
                   "-m",
                   "geograypher.entrypoints.equirectangular_to_cube_mapped",
                   "{{inputs.parameters.image-folder}}",
-                  "{{inputs.parameters.output-folder}}"
+                  "{{inputs.parameters.output-folder}}",
+                  "--oversample-factor", # TODO consider increasing this for production
+                  "1"
                 ]
       outputs:
         parameters:

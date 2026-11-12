@@ -152,8 +152,6 @@ spec:
     # Parse the newline-separated list of datasets and return a list of dicts with the dataset-id and
     # search-str for each dataset. The search-str is used to filter the files to download from S3.
     - name: determine-datasets
-      nodeSelector:
-        feature.node.kubernetes.io/workload-type: cpu
       script:
         image: python:3.9
         volumeMounts:
@@ -335,8 +333,6 @@ spec:
           - name: dataset-folder
           - name: num-files
             value: "400"
-      nodeSelector:
-        feature.node.kubernetes.io/workload-type: cpu
       script:
         image: ghcr.io/open-forest-observatory/tree-classification-framework:{{workflow.parameters.TCF_IMAGE_TAG}}
         resources:
@@ -427,8 +423,6 @@ spec:
           - name: data-dir
           - name: model-upload-dir-s3
           - name: workdir-subdir
-      nodeSelector:
-        feature.node.kubernetes.io/workload-type: cpu
       container:
         image: rclone/rclone:sha-7a53f24
         volumeMounts:

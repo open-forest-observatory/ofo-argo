@@ -155,3 +155,5 @@ From there, a model is trained using the `MMPretrain` framework. Once trained, t
 - **`TRAINING_EPOCHS`** (default: `"10"`): Number of epochs to train for.
 
 - **`MMPRETRAIN_IMAGE_TAG`** (default: `"main"`): Version tag for the mmpretrain Docker image.
+
+# Segmenent under-canopy meshes
