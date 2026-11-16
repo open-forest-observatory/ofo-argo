@@ -154,13 +154,17 @@ spec:
                 - name: cameras-file
                   value: '{{=jsonpath(tasks["download-photogrammetry-data"].outputs.parameters["local-files"], "$.cameras")}}'
                 - name: image-folder
-                  value: "{{tasks.download-imagery.outputs.parameters.output-folder}}"
+                  value: "{{tasks.chip-images.outputs.parameters.output-folder}}"
                 - name: label-folder
                   value: "{{tasks.segment-images.outputs.parameters.output-folder}}"
                 - name: original-image-folder
                   value: '{{=jsonpath(tasks["download-photogrammetry-data"].outputs.parameters["local-files"], "$.photogrammetry_download_root")}}'
                 - name: predicted-face-classes-savefile
                   value: "{{workflow.parameters.TEMP_FOLDER}}/{{workflow.name}}/{{inputs.parameters.collect-id}}/predicted_face_classes.npy"
+                - name: vis-mesh-savefile
+                  value: "{{workflow.parameters.TEMP_FOLDER}}/{{workflow.name}}/{{inputs.parameters.collect-id}}/vis_mesh.ply"
+                - name: vis-cameras-savefile
+                  value: "{{workflow.parameters.TEMP_FOLDER}}/{{workflow.name}}/{{inputs.parameters.collect-id}}/vis_cameras.ply"
 
 
 
@@ -347,12 +351,13 @@ spec:
         volumeMounts:
           - name: data
             mountPath: /data
+        # This requires an m3.xl
         resources:
           requests:
-            cpu: 2
-            memory: "14Gi"
+            cpu: 32
+            memory: "108Gi"
           limits:
-            memory: "14Gi"
+            memory: "108Gi"
         command: [
                   "python",
                   "-m",
@@ -360,7 +365,9 @@ spec:
                   "{{inputs.parameters.image-folder}}",
                   "{{inputs.parameters.output-folder}}",
                   "--oversample-factor", # TODO consider increasing this for production
-                  "1"
+                  "1",
+                  "--n-workers",
+                  "32",
                 ]
       outputs:
         parameters:
@@ -409,21 +416,24 @@ spec:
           - name: label-folder
           - name: original-image-folder
           - name: predicted-face-classes-savefile
+          - name: vis-mesh-savefile
+          - name: vis-cameras-savefile
       container:
-        image: ghcr.io/open-forest-observatory/geograypher:{{workflow.parameters.GEOGRAYPHER_IMAGE_TAG}}
+        #image: ghcr.io/open-forest-observatory/geograypher:{{workflow.parameters.GEOGRAYPHER_IMAGE_TAG}}
+        image: ghcr.io/open-forest-observatory/geograypher:pr-237
         volumeMounts:
           - name: data
             mountPath: /data
         resources:
           requests:
-            cpu: 2
-            memory: "8Gi"
+            cpu: 32
+            memory: "108Gi"
           limits:
-            memory: "8Gi"
+            memory: "108Gi"
         command: [
                   "python",
                   "-m",
-                  "geograypher.entrypoints.aggregate_images",
+                  "geograypher.entrypoints.project_equirectangular_images",
                   "--mesh-file",
                   "{{inputs.parameters.mesh-file}}",
                   "--mesh-metadata-file",
@@ -432,12 +442,16 @@ spec:
                   "{{inputs.parameters.cameras-file}}",
                   "--image-folder",
                   "{{inputs.parameters.image-folder}}",
-                  "--label-folder",
+                  "--predicted-image-labels-folder",
                   "{{inputs.parameters.label-folder}}",
                   "--original-image-folder",
                   "{{inputs.parameters.original-image-folder}}",
                   "--predicted-face-classes-savefile",
                   "{{inputs.parameters.predicted-face-classes-savefile}}",
+                  "--vis-mesh-path",
+                  "{{inputs.parameters.vis-mesh-savefile}}",
+                  "--vis-cameras-path",
+                  "{{inputs.parameters.vis-cameras-savefile}}",
                 ]
       outputs:
         parameters:
