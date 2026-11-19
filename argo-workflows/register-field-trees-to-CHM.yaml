@@ -48,6 +48,11 @@ spec:
       - name: GROUND_REFERENCE_TREES_FILE
       # Path to the file of ground reference plot boundaries for all plots, with a `plot_id` column
       - name: GROUND_REFERENCE_PLOTS_FILE
+      # Values of the registration ratio_quality_metric below this will count as plots which should
+      # be automatically trusted. Pairings with values higher than this require manual assessment
+      # and an image is saved out to support that.
+      - name: RATIO_QUALITY_METRIC_THRESHOLD
+        value: "0.5"
       # S3 bucket to obtain drone mission bounds metadata and CHM files from
       - name: S3_BUCKET_PUBLIC
         value: "ofo-public"
@@ -138,10 +143,31 @@ spec:
                   value: "{{workflow.parameters.TEMP_FOLDER}}/{{workflow.name}}/{{inputs.parameters.mission-id}}_{{inputs.parameters.plot-id}}/{{inputs.parameters.mission-id}}_chm-mesh.tif"
                 - name: output-shift-file
                   value: "{{workflow.parameters.TEMP_FOLDER}}/{{workflow.name}}/{{inputs.parameters.mission-id}}_{{inputs.parameters.plot-id}}/{{inputs.parameters.mission-id}}_{{inputs.parameters.plot-id}}_shift.csv"
-
+          - name: check-quality
+            template: check-quality
+            depends: register-trees.Succeeded
+            arguments:
+              parameters:
+                - name: shift-file
+                  value: "{{tasks.register-trees.outputs.parameters.shift-file}}"
+          - name: save-visualization
+            template: save-visualization
+            depends: "check-quality.Succeeded"
+            when: "{{tasks.check-quality.outputs.result}} > {{workflow.parameters.RATIO_QUALITY_METRIC_THRESHOLD}}"
+            arguments:
+              parameters:
+                - name: input-trees-file
+                  value: "{{tasks.prepare-ground-reference-data.outputs.parameters.ground-reference-trees-output-file}}"
+                - name: input-bounds-file
+                  value: "{{tasks.prepare-ground-reference-data.outputs.parameters.ground-reference-bounds-output-file}}"
+                - name: CHM-file
+                  value: "{{workflow.parameters.TEMP_FOLDER}}/{{workflow.name}}/{{inputs.parameters.mission-id}}_{{inputs.parameters.plot-id}}/{{inputs.parameters.mission-id}}_chm-mesh.tif"
+                - name: output-vis-file
+                  value: "{{workflow.parameters.TEMP_FOLDER}}/{{workflow.name}}/shifts-to-validate/{{inputs.parameters.mission-id}}_{{inputs.parameters.plot-id}}.png"
           - name: upload-shift-file
             template: rclone-upload-template
-            depends: "register-trees.Succeeded"
+            depends: "check-quality.Succeeded"
+            when: "{{tasks.check-quality.outputs.result}} <= {{workflow.parameters.RATIO_QUALITY_METRIC_THRESHOLD}}"
             arguments:
               parameters:
                 - name: plot-id
@@ -350,6 +376,10 @@ spec:
           - name: input-trees-file
           - name: CHM-file
           - name: output-shift-file
+      outputs:
+        parameters:
+          - name: shift-file
+            value: "{{inputs.parameters.output-shift-file}}"
       container:
         image: ghcr.io/open-forest-observatory/tree-registration-and-matching:{{workflow.parameters.TRAM_IMAGE_TAG}}
         volumeMounts:
@@ -370,6 +400,56 @@ spec:
                   "--output-shift-summary",
                   "{{inputs.parameters.output-shift-file}}",
                 ]
+
+    # Reads the single-row shift CSV written by register-trees and prints its ratio_quality_metric value.
+    # The value is returned via stdout (outputs.result), so nothing else should be printed.
+    - name: check-quality
+      inputs:
+        parameters:
+          - name: shift-file
+      nodeSelector:
+        feature.node.kubernetes.io/workload-type: cpu
+      script:
+        image: python:3.9
+        volumeMounts:
+          - name: data
+            mountPath: /data
+        resources:
+          requests:
+            cpu: 100m
+            memory: "128Mi"
+          limits:
+            memory: "128Mi"
+        command: ["python3"]
+        source: |
+          import csv
+
+          with open("{{inputs.parameters.shift-file}}", newline="") as f:
+              row = next(csv.DictReader(f))
+
+          # Parse as float so a malformed value fails here rather than in the downstream `when` expressions
+          ratio_quality_metric = float(row["ratio_quality_metric"])
+
+          print(ratio_quality_metric, end="")
+
+    - name: save-visualization
+      inputs:
+        parameters:
+          - name: input-trees-file
+          - name: input-bounds-file
+          - name: CHM-file
+          - name: output-vis-file
+      container:
+        image: ghcr.io/open-forest-observatory/tree-registration-and-matching:{{workflow.parameters.TRAM_IMAGE_TAG}}
+        volumeMounts:
+          - name: data
+            mountPath: /data
+        resources:
+          requests:
+            cpu: "2"
+            memory: "4Gi"
+        # TODO include the proper command once it is implemented
+        command: ["python"]
 
     # --------- RCLONE UPLOAD ---------
     # Uploads the two final output files to S3, then cleans up the local dataset directory.
