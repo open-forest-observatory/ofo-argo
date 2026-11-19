@@ -40,6 +40,13 @@ spec:
   # These parameters can be referenced throughout the workflow templates using {{workflow.parameters.<name>}}
   arguments:
     parameters:
+      # The file on the mounted drive specifying the (drone mission, field plot) pairs to run on.
+      # This should be a .csv, with no column and one line per pairing, ordered: drone mission id, field plot id.
+      - name: DATASETS_FILE
+      # Path to the file of ground reference trees for all plots, with a `plot_id` column
+      - name: GROUND_REFERENCE_TREES_FILE
+      # Path to the file of ground reference plot boundaries for all plots, with a `plot_id` column
+      - name: GROUND_REFERENCE_PLOTS_FILE
       # S3 bucket to obtain drone mission bounds metadata and CHM files from
       - name: S3_BUCKET_PUBLIC
         value: "ofo-public"
@@ -56,10 +63,6 @@ spec:
       # Image from tree-detection-and-matching repo to use.
       - name: TRAM_IMAGE_TAG
         value: "main"
-      # Path on the shared volume to the single field trees file, which will be subset by plot_id.
-      - name: FIELD_TREES_FILE
-      # Path on the shared volume to the plot bounds file, representing the extent of each survey
-      - name: FIELD_PLOT_BOUNDS_FILE
 
   # Defining where to read raw drone imagery data and write out imagery products to `/ofo-share`
   volumes:
@@ -71,10 +74,12 @@ spec:
     # The 'main' template determines datasets and fans out to process each in parallel.
     - name: main
       steps:
-        - - name: download-mission-metadata
-            template: download-mission-metadata
         - - name: determine-datasets
             template: determine-datasets
+            arguments:
+              parameters:
+                - name: datasets-file
+                  value: "{{workflow.parameters.DATASETS_FILE}}"
         - - name: process-datasets
             template: process-dataset-workflow
             arguments:
@@ -107,13 +112,27 @@ spec:
                   value: "{{workflow.parameters.S3_DATA_FOLDER}}"
                 - name: local-dir
                   value: "{{workflow.parameters.TEMP_FOLDER}}/{{workflow.name}}/{{inputs.parameters.mission-id}}_{{inputs.parameters.plot-id}}"
+          - name: prepare-ground-reference-data
+            template: prepare-ground-reference-data
+            arguments:
+              parameters:
+                - name: ground-plot-id
+                  value: "{{inputs.parameters.plot-id}}"
+                - name: ground-reference-trees-file
+                  value: "{{workflow.parameters.GROUND_REFERENCE_TREES_FILE}}"
+                - name: ground-reference-bounds-file
+                  value: "{{workflow.parameters.GROUND_REFERENCE_PLOTS_FILE}}"
+                - name: ground-reference-trees-output-file
+                  value: "{{workflow.parameters.TEMP_FOLDER}}/{{workflow.name}}/{{inputs.parameters.mission-id}}_{{inputs.parameters.plot-id}}/ground-reference-trees.gpkg"
+                - name: ground-reference-bounds-output-file
+                  value: "{{workflow.parameters.TEMP_FOLDER}}/{{workflow.name}}/{{inputs.parameters.mission-id}}_{{inputs.parameters.plot-id}}/ground-reference-bounds.gpkg"
           - name: register-trees
             template: register-trees
-            depends: "download-input-data.Succeeded"
+            depends: "download-input-data.Succeeded && prepare-ground-reference-data.Succeeded"
             arguments:
               parameters:
                 - name: input-trees-file
-                  value: "{{workflow.parameters.TEMP_FOLDER}}/{{workflow.name}}/{{inputs.parameters.mission-id}}_{{inputs.parameters.plot-id}}/{{inputs.parameters.mission-id}}_{{inputs.parameters.plot-id}}_field-trees.gpkg"
+                  value: "{{tasks.prepare-ground-reference-data.outputs.parameters.ground-reference-trees-output-file}}"
                 - name: CHM-file
                   value: "{{workflow.parameters.TEMP_FOLDER}}/{{workflow.name}}/{{inputs.parameters.mission-id}}_{{inputs.parameters.plot-id}}/{{inputs.parameters.mission-id}}_chm-mesh.tif"
                 - name: output-shift-file
@@ -132,61 +151,65 @@ spec:
                   value: "{{workflow.parameters.TEMP_FOLDER}}/{{workflow.name}}/{{inputs.parameters.mission-id}}_{{inputs.parameters.plot-id}}"
                 - name: shift-file
                   value: "{{workflow.parameters.TEMP_FOLDER}}/{{workflow.name}}/{{inputs.parameters.mission-id}}_{{inputs.parameters.plot-id}}/{{inputs.parameters.mission-id}}_{{inputs.parameters.plot-id}}_shift.csv"
-## Definitions of individual steps (templates)
-    # Download mission-metadata gpkg files from S3 to the shared volume.
-    - name: download-mission-metadata
-      container:
-        image: rclone/rclone:sha-7a53f24
-        volumeMounts:
-          - name: data
-            mountPath: /data
-        command: ["/bin/sh", "-lc"]
-        args:
-          - |
-            set -euo pipefail
-            DST="{{workflow.parameters.TEMP_FOLDER}}/{{workflow.name}}/mission-metadata"
-            mkdir -p "$DST"
-            rclone copy "s3:{{workflow.parameters.S3_BUCKET_PUBLIC}}/{{workflow.parameters.S3_DATA_FOLDER}}" \
-              "$DST" \
-              --include "*_mission-metadata.gpkg" \
-              --transfers 4 --checkers 4 --retries 5 --retries-sleep=15s \
-              --stats 15s --stats-log-level NOTICE
-        resources:
-          requests:
-            cpu: 1
-            memory: "2Gi"
-          limits:
-            memory: "4Gi"
-        env:
-          - name: RCLONE_CONFIG_S3_TYPE
-            value: "s3"
-          - name: RCLONE_CONFIG_S3_PROVIDER
-            valueFrom:
-              secretKeyRef:
-                name: s3-credentials
-                key: provider
-          - name: RCLONE_CONFIG_S3_ENDPOINT
-            valueFrom:
-              secretKeyRef:
-                name: s3-credentials
-                key: endpoint
-          - name: RCLONE_CONFIG_S3_ACCESS_KEY_ID
-            valueFrom:
-              secretKeyRef:
-                name: s3-credentials
-                key: access_key
-          - name: RCLONE_CONFIG_S3_SECRET_ACCESS_KEY
-            valueFrom:
-              secretKeyRef:
-                name: s3-credentials
-                key: secret_key
 
-    # Overlay mission footprints with field plot bounds to determine which (mission, plot) pairs
-    # to process. Subsets the field trees file by plot_id for each pair and saves to disk.
-    # Outputs a JSON array of {"mission-id": ..., "plot-id": ...} objects.
+## Definitions of individual steps (templates)
+    # Parses a .csv with drone_mission_id, plot_id columns (no header)
+    # Returns a json list of dicts with "plot-id" and "mission-id" keys
     - name: determine-datasets
+      inputs:
+        parameters:
+          - name: datasets-file
+      nodeSelector:
+        feature.node.kubernetes.io/workload-type: cpu
       script:
-        image: uhoosborne/geopandas@sha256:42bdd13882321a2647668446dae9ee1a8d76f2ac95aa8c3cb4e8eacadd5070d9
+        image: python:3.9
+        volumeMounts:
+          - name: data
+            mountPath: /data
+        command: ["python3"]
+        source: |
+          import json, sys
+
+          datasets = []
+          # Track seen pairs so duplicate lines don't launch parallel jobs writing to the same directory
+          seen = set()
+          with open("{{inputs.parameters.datasets-file}}", "r") as f:
+              for line in f:
+                  line = line.strip()
+                  if not line:
+                      continue
+                  drone_mission_id, ground_plot_id = [x.strip() for x in line.split(",")]
+                  if (drone_mission_id, ground_plot_id) in seen:
+                      continue
+                  seen.add((drone_mission_id, ground_plot_id))
+                  datasets.append({
+                    "plot-id": ground_plot_id,
+                    "mission-id": drone_mission_id,
+                  })
+          json.dump(datasets, sys.stdout)
+
+    # This script takes in the full file of ground reference trees and plot bounds. It extracts the
+    # appropriate subset of ground reference trees and plot bounds and writes them out.
+    - name: prepare-ground-reference-data
+      inputs:
+        parameters:
+          - name: ground-plot-id
+          - name: ground-reference-trees-file
+          - name: ground-reference-bounds-file
+          - name: ground-reference-trees-output-file
+          - name: ground-reference-bounds-output-file
+      outputs:
+        parameters:
+          - name: ground-reference-trees-output-file
+            value: "{{inputs.parameters.ground-reference-trees-output-file}}"
+          - name: ground-reference-bounds-output-file
+            value: "{{inputs.parameters.ground-reference-bounds-output-file}}"
+      nodeSelector:
+        feature.node.kubernetes.io/workload-type: cpu
+      script:
+        # Note this only relies on core geopandas functionality but this means this image will be cached
+        # for the following step.
+        image: ghcr.io/open-forest-observatory/tree-registration-and-matching:{{workflow.parameters.TRAM_IMAGE_TAG}}
         volumeMounts:
           - name: data
             mountPath: /data
@@ -195,136 +218,44 @@ spec:
             cpu: 1
             memory: "4Gi"
           limits:
-            memory: "8Gi"
+            memory: "4Gi"
         command: ["python"]
         source: |
-          import json
-          import sys
-          import shapely
-          import shutil
-          import pyproj
           from pathlib import Path
 
-
           import geopandas as gpd
-          import pandas as pd
 
-          metadata_folder = Path("{{workflow.parameters.TEMP_FOLDER}}/{{workflow.name}}/mission-metadata")
-          field_trees_file = Path("{{workflow.parameters.FIELD_TREES_FILE}}")
-          plot_bounds_file = Path("{{workflow.parameters.FIELD_PLOT_BOUNDS_FILE}}")
-          temp_folder = Path("{{workflow.parameters.TEMP_FOLDER}}/{{workflow.name}}")
+          # Input variables
+          ground_reference_plot_id = "{{inputs.parameters.ground-plot-id}}"
+          ground_reference_trees_file = "{{inputs.parameters.ground-reference-trees-file}}"
+          ground_reference_bounds_file = "{{inputs.parameters.ground-reference-bounds-file}}"
+          ground_reference_trees_output_file = Path("{{inputs.parameters.ground-reference-trees-output-file}}")
+          ground_reference_bounds_output_file = Path("{{inputs.parameters.ground-reference-bounds-output-file}}")
 
-          # The threshold in square meters for inclusion, even if the field plot isn't fully contained within
-          # the mission footprint
-          PLOT_SIZE_THRESHOLD = 1000
+          # Read the other products, which contain the data for all plots
+          ground_reference_trees = gpd.read_file(ground_reference_trees_file)
+          ground_reference_bounds = gpd.read_file(ground_reference_bounds_file)
 
-
-          def get_projected_CRS(lat, lon, assume_western_hem=True):
-              if assume_western_hem and lon > 0:
-                  lon = -lon
-              # https://gis.stackexchange.com/questions/190198/how-to-get-appropriate-crs-for-a-position-specified-in-lat-lon-coordinates
-              epgs_code = 32700 - round((45 + lat) / 90) * 100 + round((183 + lon) / 6)
-              crs = pyproj.CRS.from_epsg(epgs_code)
-              return crs
-
-
-          def ensure_projected_CRS(geodata: gpd.GeoDataFrame):
-              """Returns a projected geodataframe from the provided geodataframe by converting it to
-              ESPG:4326 (if not already) and determining the projected CRS from the point
-              coordinates.
-              Args:
-                  geodata (gpd.GeoDataGrame): Original geodataframe that is potentially unprojected
-              Returns:
-                  gpd.GeoDataGrame: projected geodataframe
-              """
-              # If CRS is projected return immediately
-              if geodata.crs.is_projected:
-                  return geodata
-
-              # If CRS is geographic and not long-lat, convert it to long-lat
-              if geodata.crs.is_geographic and geodata.crs != pyproj.CRS.from_epsg(4326):
-                  geodata = geodata.to_crs(pyproj.CRS.from_epsg(4326))
-
-              # Convert geographic long-lat CRS to projected CRS
-              point = geodata["geometry"].iloc[0].centroid
-              geometric_crs = get_projected_CRS(lon=point.x, lat=point.y)
-              return geodata.to_crs(geometric_crs)
-
-
-          # Read field trees
-          field_trees = gpd.read_file(field_trees_file)
-          plot_bounds = gpd.read_file(plot_bounds_file)
-
-          # Read all downloaded mission metadata files
-          metadata_files = list(metadata_folder.rglob("*.gpkg"))
-          mission_metadata = [gpd.read_file(f) for f in metadata_files]
-
-          # Once mission metadata has been read, delete it
-          shutil.rmtree(metadata_folder)
-
-          # Some composite missions have different polygons per constituent flight, so find the intersection
-          # of both. The mission_ID should be the concatenation of the constituent mission IDs,
-          # separated by an underscore
-          mission_metadata = [
-              gpd.GeoDataFrame(
-                  [
-                    {
-                        "geometry": shapely.intersection_all(gdf.geometry.to_list()),
-                        "mission_id": "_".join(gdf["mission_id"].to_list()),
-                    }
-                  ],
-                  crs=gdf.crs,
-              )
-              for gdf in mission_metadata
+          # Subset to the specified plot
+          # Compare as strings since the plot ID comes from the datasets file as text
+          ground_reference_trees = ground_reference_trees[
+              ground_reference_trees["plot_id"].astype(str) == ground_reference_plot_id
+          ]
+          ground_reference_bounds = ground_reference_bounds[
+              ground_reference_bounds["plot_id"].astype(str) == ground_reference_plot_id
           ]
 
-          mission_metadata = gpd.GeoDataFrame(
-              pd.concat(mission_metadata),
-              crs=mission_metadata[0].crs,
-          )
+          # Fail early with a clear message if the plot is missing from either file
+          if ground_reference_trees.empty:
+              raise ValueError(f"No ground reference trees found for plot {ground_reference_plot_id}")
+          if ground_reference_bounds.empty:
+              raise ValueError(f"No ground reference bounds found for plot {ground_reference_plot_id}")
 
-          # Convert mission metadata to projected CRS
-          mission_metadata = ensure_projected_CRS(mission_metadata)
-
-          # Convert mission metadata to the same CRS as the mission_metadata
-          plot_bounds = plot_bounds.to_crs(mission_metadata.crs)
-
-          # Add a column noting the original area of the plots
-          plot_bounds["original_plot_area"] = plot_bounds.geometry.area
-
-          # Overlay mission footprints with field tree bounds
-          pairs = gpd.overlay(
-              mission_metadata[["mission_id", "geometry"]],
-              plot_bounds,
-          )
-          # Subset to relevant columns
-          pairs = pairs[["mission_id", "plot_id", "original_plot_area", "geometry"]]
-
-          # Retain pairs where the overlapping area is greater than the threshold or the field plot is fully
-          # contained within the mission footprint. The second check is done by checking whether the area
-          # is the same before and after the clipping to the plot bounds. But a small tolerence is required
-          # to avoid numerical issues.
-          pairs = pairs[
-              (pairs.geometry.area > PLOT_SIZE_THRESHOLD)
-              | ((pairs.geometry.area - pairs["original_plot_area"]).abs() < 1e-4)
-          ]
-
-          # For each (mission, plot) pair, subset field trees to that plot and save to disk
-          datasets = []
-          for _, row in pairs.iterrows():
-              mission_id = str(row["mission_id"])
-              plot_id = str(row["plot_id"])
-              dataset_name = f"{mission_id}_{plot_id}"
-
-              subset = field_trees[field_trees["plot_id"] == row["plot_id"]]
-
-              out_dir = temp_folder / dataset_name
-              out_dir.mkdir(parents=True, exist_ok=True)
-              subset.to_file(out_dir / f"{dataset_name}_field-trees.gpkg")
-
-              datasets.append({"mission-id": mission_id, "plot-id": plot_id})
-
-          json.dump(datasets, sys.stdout)
+          # Save out the result
+          ground_reference_trees_output_file.parent.mkdir(exist_ok=True, parents=True)
+          ground_reference_bounds_output_file.parent.mkdir(exist_ok=True, parents=True)
+          ground_reference_trees.to_file(ground_reference_trees_output_file)
+          ground_reference_bounds.to_file(ground_reference_bounds_output_file)
 
     # Download photogrammetry products (for a single or composite mission) from S3 to the shared volume.
     # Returns a JSON dict of local file paths via outputs.parameters.local-files.
