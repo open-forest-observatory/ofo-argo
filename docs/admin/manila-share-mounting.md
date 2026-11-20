@@ -127,9 +127,9 @@ Note that the namespaces of the various resources are defined within the yaml, s
 envsubst < setup/k8s/manila-cephfs-csi-config2.yaml | kubectl apply -f -
 
 # Verify resources were created
-kubectl describe secret -n ceph-csi-cephfs manila-share-secret
-kubectl describe persistentvolume ceph-share-rw-pv
-kubectl describe -n argo persistentvolumeclaim ceph-share-rw-pvc
+kubectl describe secret -n ceph-csi-cephfs manila-share-secret2
+kubectl describe persistentvolume ceph-share-rw-pv2
+kubectl describe -n argo persistentvolumeclaim ceph-share-rw-pvc2
 ```
 
 ## Test the PVC mount
