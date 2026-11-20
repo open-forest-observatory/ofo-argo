@@ -1,0 +1,73 @@
+# Purpose: Dedicated service account and long-lived token for logging in to the Argo UI.
+#
+# The Argo server runs in "client" auth mode: whoever presents a token gets that service account's
+# permissions. This account is scoped to the argo namespace and can manage workflows and view their
+# pods, logs, and events, but (unlike the argo-server account) cannot exec into pods or read secrets
+# other than the S3 credentials needed to view archived logs.
+#
+# The token lives in the argo-ui.service-account-token Secret. Deleting that Secret revokes the
+# token; re-applying the kustomization creates a new one (see "Create Argo UI access token" in
+# docs/admin/argo-installation-on-cluster.md).
+#
+# Applied via setup/argo/kustomization.yaml.
+
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: argo-ui
+  namespace: argo
+---
+# Workflow, WorkflowTemplate, CronWorkflow, and WorkflowEventBinding management in the argo
+# namespace, using the edit role shipped in Argo's install.yaml.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: argo-ui-workflows
+  namespace: argo
+subjects:
+- kind: ServiceAccount
+  name: argo-ui
+  namespace: argo
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: argo-aggregate-to-edit
+---
+# Read-only access to what the UI shows alongside workflows.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: argo-ui
+  namespace: argo
+rules:
+- apiGroups: [""]
+  resources: ["pods", "pods/log", "events", "configmaps", "serviceaccounts"]
+  verbs: ["get", "list", "watch"]
+# Viewing logs/artifacts archived in S3 reads the artifact repository credentials as the user.
+- apiGroups: [""]
+  resources: ["secrets"]
+  resourceNames: ["s3-credentials"]
+  verbs: ["get"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: argo-ui
+  namespace: argo
+subjects:
+- kind: ServiceAccount
+  name: argo-ui
+  namespace: argo
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: argo-ui
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: argo-ui.service-account-token
+  namespace: argo
+  annotations:
+    kubernetes.io/service-account.name: argo-ui
+type: kubernetes.io/service-account-token

@@ -1,0 +1,20 @@
+# Argo Workflows installation: the official release manifest plus our configuration, applied as one
+# unit so our settings can't be wiped by re-installing or upgrading Argo. Apply with:
+#   kubectl apply --server-side -k setup/argo
+# (--server-side is required: Argo v4's CRDs are too large for client-side apply.)
+#
+# To upgrade Argo, change the version in the install.yaml URL (keep it in sync with the CLI version
+# in docs/admin/argo-installation-on-cluster.md) and check Argo's upgrading guide first.
+#
+# gateway-argo.yaml and issuer-letsencrypt.yaml in this directory are NOT included: they depend on
+# Envoy Gateway and cert-manager, which are installed in a later step of the install doc.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: argo
+resources:
+- https://github.com/argoproj/argo-workflows/releases/download/v4.1.6/install.yaml
+- workflow-executor-rbac.yaml
+- argo-ui-access.yaml
+patches:
+# Merged into the empty workflow-controller-configmap that install.yaml ships.
+- path: workflow-controller-configmap.yaml

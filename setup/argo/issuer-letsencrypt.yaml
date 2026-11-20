@@ -1,0 +1,28 @@
+# Purpose: Part of setting up argo server. Issues Let's Encrypt certificates for the argo namespace,
+# solving HTTP-01 challenges through the Envoy Gateway's port-80 listener
+# (setup/argo/gateway-argo.yaml). Requires cert-manager installed with Gateway API support enabled
+# (config.gatewayAPI.enabled=true).
+#
+# A namespaced Issuer (not a ClusterIssuer) because only the argo namespace needs certificates.
+# No ACME contact email: Let's Encrypt no longer sends expiry emails or stores account emails
+# (https://letsencrypt.org/2025/06/26/expiration-notification-service-has-ended/); cert-manager
+# renews automatically, and `kubectl get certificate -n argo` shows certificate status.
+
+apiVersion: cert-manager.io/v1
+kind: Issuer
+metadata:
+  name: letsencrypt-prod
+  namespace: argo
+spec:
+  acme:
+    server: https://acme-v02.api.letsencrypt.org/directory
+    privateKeySecretRef:
+      name: letsencrypt-prod-account-key
+    solvers:
+    - http01:
+        gatewayHTTPRoute:
+          parentRefs:
+          - name: argo-gateway
+            namespace: argo
+            kind: Gateway
+            sectionName: http

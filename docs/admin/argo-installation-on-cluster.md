@@ -37,9 +37,11 @@ git pull
 ## Install the Argo CLI locally (one-time)
 
 The Argo CLI is a wrapper around `kubectl` that simplifies communication with Argo on the cluster.
+Use the same version for the CLI as for the cluster installation below (`ARGO_WORKFLOWS_VERSION` is
+reused there).
 
 ```bash
-ARGO_WORKFLOWS_VERSION="v3.7.6"
+ARGO_WORKFLOWS_VERSION="v4.1.6"
 ARGO_OS="linux"
 
 # Download the binary
@@ -60,66 +62,28 @@ argo version
 
 ## Install Argo workflow manager and server on the cluster
 
-Create the Argo namespace and install Argo components:
+We install Argo with [Kustomize](https://kustomize.io/) (built into `kubectl`), using
+`setup/argo/kustomization.yaml`. It combines:
+
+- the official Argo release manifest (`install.yaml`), pinned to a specific Argo version
+- our workflow controller configuration (`workflow-controller-configmap.yaml`), merged into the
+  release's empty `workflow-controller-configmap`
+- the service account and permissions that workflow pods run with (`workflow-executor-rbac.yaml`)
+- the service account and token for logging in to the Argo UI (`argo-ui-access.yaml`)
+
+Because our configuration is part of the same install, it can't be lost by re-installing or
+upgrading Argo. (Applying `install.yaml` on its own replaces the controller configuration with an
+empty one; this happened on our cluster around May 2026 and went unnoticed for five months. Never
+apply `install.yaml` directly; always use the kustomization.)
+
+### Create the namespace and S3 credentials
 
 ```bash
-# Create namespace
 kubectl create namespace argo
-
-# Install Argo workflows on cluster
-kubectl apply -n argo -f https://github.com/argoproj/argo-workflows/releases/download/${ARGO_WORKFLOWS_VERSION}/install.yaml
 ```
 
-!!! warning "Re-applying `install.yaml` wipes the workflow controller configuration"
-    `install.yaml` includes an empty `workflow-controller-configmap`. Re-applying it later (e.g. to
-    upgrade Argo or repair the install) silently erases our custom configuration: S3 log archiving,
-    pod GC, eviction protection, and pod-packing affinity. Workflows keep running, but their logs
-    are no longer archived. This happened on our cluster around May 2026 and went unnoticed for
-    five months. **Every time you apply `install.yaml`, re-run the steps in
-    [Configure workflow controller](#configure-workflow-controller-delete-completed-pods-and-use-s3-for-artifact-and-log-storage)
-    afterwards.**
-
-Optionally, check that the pods are running:
-
-```bash
-kubectl get pods -n argo
-kubectl describe pod -n argo <pod-name>
-```
-
-## Configure workflow permissions
-
-The standard `install.yaml` configures permissions for the workflow controller, but does not configure permissions for the service accounts that workflow pods run as. Without these permissions, workflows will fail with an error like:
-
-> workflowtaskresults.argoproj.io is forbidden: User "system:serviceaccount:argo:argo" cannot create resource "workflowtaskresults"
-
-This step grants the `argo` service account (used by all our workflows via `serviceAccountName: argo`) the minimal permissions needed to create and update workflowtaskresults.
-
-```bash
-# Apply role and role binding
-kubectl apply -f setup/argo/workflow-executor-rbac.yaml
-
-# Confirm the necessary permission was granted (should return: yes)
-kubectl auth can-i create workflowtaskresults.argoproj.io -n argo --as=system:serviceaccount:argo:argo
-```
-
-## Configure workflow controller: Delete completed pods, and use S3 for artifact and log storage
-
-Argo Workflows can store workflow logs and artifacts in S3-compatible object storage. Also, it can
-be configured to delete pods once they are done running (whether successful or unsuccessful). Given
-we are storing pod logs in S3 (we don't require the pod to be in existence in order for Arto to access its logs
-through kubernetes), there is no reason to keep pods around after they finish running. This section
-configures Argo to use JS2 (Jetstream2) object storage for logs and to remove workflow pods that
-have completed running. All of this is in support of configuring workflows to preferentially
-schedule pods on nodes that have other running pods on them (to minimize the chances of being
-evicted from an underutilized node that is being deleted by the autoscaler).
-
-### Prerequisites
-
-The S3 credentials secret must exist in the `argo` namespace. This secret should contain:
-- `access_key`: Your S3 access key
-- `secret_key`: Your S3 secret key
-
-To verify the secret exists:
+The workflow controller configuration stores workflow logs and artifacts in S3, using the
+`s3-credentials` secret in the `argo` namespace. Check whether it exists:
 
 ```bash
 kubectl get secret s3-credentials -n argo
@@ -135,46 +99,100 @@ kubectl create secret generic s3-credentials -n argo \
   --from-literal=provider='Other'
 ```
 
-### Apply the workflow controller configuration
-
-The workflow controller configmap tells Argo where to store artifacts and logs. Apply it:
+### Install Argo
 
 ```bash
-kubectl apply -f setup/argo/workflow-controller-configmap.yaml
+# Set the Argo version in the kustomization to match the CLI (ARGO_WORKFLOWS_VERSION, set above)
+sed -i -E "s#(argo-workflows/releases/download/)[^/]+(/install\.yaml)#\1${ARGO_WORKFLOWS_VERSION:?not set - set it as in the CLI install step}\2#" setup/argo/kustomization.yaml
+grep "releases/download" setup/argo/kustomization.yaml   # confirm the version
+
+# Install
+kubectl apply --server-side -k setup/argo
 ```
 
-This configures:
-- **Bucket**: `ofo-internal`
-- **Path prefix**: `argo-logs-artifacts/`
-- **Log archiving**: Enabled (workflow logs are stored in S3)
-- **Key format**: `argo-logs-artifacts/{workflow-name}/{pod-name}`
+`--server-side` is required as of Argo v4.0: the release manifests ship CRDs with full validation
+schemas, and the largest ones exceed the size limit of the annotation that a regular (client-side)
+`kubectl apply` writes (the error is `metadata.annotations: Too long: may not be more than 262144
+bytes`). If the command reports field-manager conflicts (e.g. on a cluster where Argo was
+previously installed differently), re-run it with `--force-conflicts` added.
 
-### Restart the workflow controller
+The Argo version is set by the `install.yaml` URL in `setup/argo/kustomization.yaml`; the `sed`
+command sets it from `ARGO_WORKFLOWS_VERSION` so the cluster and CLI versions match. If it changed
+the file, commit the change so the repo records the version that's installed.
 
-The workflow controller needs to be restarted to pick up the new configuration:
-
-```bash
-kubectl rollout restart deployment workflow-controller -n argo
-kubectl rollout status deployment workflow-controller -n argo
-```
-
-### Verify the configuration
-
-Check that the configmap was applied correctly:
+### Verify the installation
 
 ```bash
+# All 8 Argo CRDs exist
+kubectl get crd | grep argoproj.io
+
+# argo-server and workflow-controller are Running
+kubectl get pods -n argo
+
+# Our configuration is present: data should include workflowDefaults and artifactRepository
 kubectl get configmap workflow-controller-configmap -n argo -o yaml
+
+# Workflow pods' service account has the permissions it needs (should return: yes)
+kubectl auth can-i create workflowtaskresults.argoproj.io -n argo --as=system:serviceaccount:argo:argo-workflow
 ```
 
-You should see the `artifactRepository` section with the S3 configuration. If `data` is missing
-or empty, the configuration has been wiped (most likely by a re-apply of `install.yaml`; see the
-warning above) and needs to be re-applied.
+### What's configured
+
+**Workflow permissions** (`workflow-executor-rbac.yaml`). Workflow pods run as a dedicated
+`argo-workflow` service account that has only the minimal permissions Argo's executor needs (create
+and patch `workflowtaskresults`), following
+[Argo's workflow RBAC guidance](https://argo-workflows.readthedocs.io/en/latest/workflow-rbac/).
+Workflows use it by default via `workflowDefaults` in the controller configuration, so individual
+workflows don't set `serviceAccountName`. Workflows should not run as the `argo` service account: it
+belongs to the workflow controller and has cluster-wide permissions (creating, exec-ing into, and
+deleting any pod; reading all secrets) that every workflow container would inherit. Without the
+executor permissions, workflows fail with an error like:
+
+> workflowtaskresults.argoproj.io is forbidden: User "system:serviceaccount:argo:argo-workflow" cannot create resource "workflowtaskresults"
+
+**Workflow controller** (`workflow-controller-configmap.yaml`). Argo stores workflow logs and
+artifacts in JS2 (Jetstream2) S3-compatible object storage, and deletes workflow pods once they
+finish (successfully or not). Since logs are in S3, Argo doesn't need the pods to exist to show
+their logs. Deleting finished pods supports configuring workflows to preferentially schedule pods on
+nodes that have other running pods on them (to minimize the chances of being evicted from an
+underutilized node that is being deleted by the autoscaler). Settings:
+
+- **Workflow service account**: `argo-workflow`
+- **Pod GC**: delete each pod when it completes
+- **Eviction protection**: pods are annotated so the cluster autoscaler won't evict them
+- **Pod packing**: pods prefer nodes running other in-progress workflow pods
+- **Log S3 bucket**: `ofo-internal`
+- **Log path prefix**: `argo-logs-artifacts/`
+- **Log archiving**: Enabled (workflow logs are stored in S3)
+- **Log key format**: `argo-logs-artifacts/{workflow-name}/{pod-name}`
 
 To confirm logs are actually reaching S3, check that a recently completed workflow has a folder in
 the bucket:
 
 ```bash
 rclone lsf js2s3:ofo-internal/argo-logs-artifacts/<workflow-name>/
+```
+
+### Changing the configuration or upgrading Argo
+
+Edit the files in `setup/argo/` as needed. To upgrade Argo, first check Argo's
+[upgrading guide](https://argo-workflows.readthedocs.io/en/latest/upgrading/) for breaking changes,
+update the CLI ([Install the Argo CLI locally](#install-the-argo-cli-locally-one-time)) with the new
+`ARGO_WORKFLOWS_VERSION`, then set the same version in the kustomization:
+
+```bash
+# Set the Argo version in the kustomization to match the CLI (ARGO_WORKFLOWS_VERSION, set above)
+sed -i -E "s#(argo-workflows/releases/download/)[^/]+(/install\.yaml)#\1${ARGO_WORKFLOWS_VERSION:?not set - set it as in the CLI install step}\2#" setup/argo/kustomization.yaml
+grep "releases/download" setup/argo/kustomization.yaml   # confirm the version
+```
+
+Then re-apply the kustomization and restart the workflow controller so it picks up configuration
+changes, and commit the changed files:
+
+```bash
+kubectl apply --server-side -k setup/argo
+kubectl rollout restart deployment workflow-controller -n argo
+kubectl rollout status deployment workflow-controller -n argo
 ```
 
 ## Test the installation
@@ -187,11 +205,34 @@ argo submit -n argo test-workflows/dag-diamond.yaml --watch
 
 ## Set up Argo server with HTTPS access
 
-The following steps configure secure external access to the Argo UI.
+The following steps expose the Argo UI at https://argo.focal-lab.org, or at a different hostname
+(e.g. `argo3.focal-lab.org` for a new cluster while the previous one is still serving
+`argo.focal-lab.org`; point `argo.focal-lab.org` at the new cluster and re-run the gateway step with
+the default hostname once the old cluster is retired). Set the hostname to use:
+
+```bash
+ARGO_HOSTNAME="argo.focal-lab.org"
+```
+
+How it works:
+
+- [Envoy Gateway](https://gateway.envoyproxy.io/) (a [Gateway API](https://gateway-api.sigs.k8s.io/)
+  implementation) receives traffic from the internet on a public IP, terminates HTTPS with a Let's
+  Encrypt certificate, and redirects HTTP to HTTPS.
+- [cert-manager](https://cert-manager.io/) obtains and automatically renews the Let's Encrypt
+  certificate.
+- Envoy forwards requests to `argo-server` over HTTPS inside the cluster. `argo-server` uses its
+  default self-signed certificate, which Envoy is configured not to verify, so in-cluster traffic is
+  encrypted but the backend certificate isn't authenticated.
+
+!!! note "Why not ingress-nginx"
+    Earlier versions of this guide used the ingress-nginx controller. That project was
+    [retired](https://kubernetes.io/blog/2025/11/11/ingress-nginx-retirement/) in March 2026 and no
+    longer receives security fixes; Kubernetes recommends migrating to Gateway API.
 
 ### Verify Argo server is ClusterIP
 
-Ensure `argo-server` is set to ClusterIP, which means it's only accessible from within the cluster's internal network. We'll configure a secure gateway to the internet next.
+Ensure `argo-server` is set to ClusterIP, which means it's only accessible from within the cluster's internal network. The gateway provides the secure entry point from the internet.
 
 ```bash
 # Check current type
@@ -204,114 +245,163 @@ kubectl patch svc argo-server -n argo -p '{"spec":{"type":"ClusterIP"}}'
 kubectl get svc argo-server -n argo
 ```
 
+### Install Envoy Gateway
+
+This also installs the Gateway API CRDs (v1.6.1, experimental channel). Install it before
+cert-manager, which needs those CRDs to exist when it starts.
+
+```bash
+ENVOY_GATEWAY_VERSION="v1.10.0"
+
+helm install eg oci://docker.io/envoyproxy/gateway-helm --version ${ENVOY_GATEWAY_VERSION} \
+  -n envoy-gateway-system --create-namespace \
+  --set config.envoyGateway.extensionApis.enableBackend=true
+
+kubectl wait --timeout=5m -n envoy-gateway-system deployment/envoy-gateway --for=condition=Available
+```
+
+`enableBackend=true` enables Envoy Gateway's `Backend` resource (an alpha API), which we use to
+connect to `argo-server`'s self-signed HTTPS endpoint without verifying its certificate.
+
 ### Install cert-manager
 
 ```bash
-# Install cert-manager
-kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/v1.13.0/cert-manager.yaml
+CERT_MANAGER_VERSION="v1.21.3"
 
-# Wait for cert-manager to be ready (takes 5-60 seconds)
+helm install cert-manager oci://quay.io/jetstack/charts/cert-manager --version ${CERT_MANAGER_VERSION} \
+  -n cert-manager --create-namespace \
+  --set crds.enabled=true \
+  --set config.gatewayAPI.enabled=true
+
 kubectl wait --for=condition=available --timeout=300s deployment/cert-manager -n cert-manager
 kubectl wait --for=condition=available --timeout=300s deployment/cert-manager-webhook -n cert-manager
 kubectl wait --for=condition=available --timeout=300s deployment/cert-manager-cainjector -n cert-manager
 ```
 
-### Install nginx ingress controller
+`config.gatewayAPI.enabled=true` turns on cert-manager's Gateway API support (beta), which lets it
+issue certificates for Gateways and solve Let's Encrypt challenges through them.
+
+### Create Let's Encrypt issuer
 
 ```bash
-# Install nginx ingress controller
-kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/controller-v1.8.1/deploy/static/provider/cloud/deploy.yaml
-
-# Wait for LoadBalancer IP to be assigned (may take 1-3 minutes)
-kubectl get svc -n ingress-nginx ingress-nginx-controller -w
-
-# Press Ctrl+C once you see an EXTERNAL-IP appear. Save this IP - you'll need it for DNS.
+kubectl apply -f setup/argo/issuer-letsencrypt.yaml
 ```
+
+This is a namespaced `Issuer` in `argo`, since that's the only namespace that needs certificates.
+
+### Create the gateway and routes for Argo server
+
+```bash
+# Substitutes ARGO_HOSTNAME for argo.focal-lab.org (no change if they're the same)
+sed "s/argo\.focal-lab\.org/${ARGO_HOSTNAME:?not set - see the start of this section}/g" setup/argo/gateway-argo.yaml | kubectl apply -f -
+```
+
+This creates the `eg` GatewayClass, the `argo-gateway` Gateway (HTTP on port 80, HTTPS on port 443
+for `$ARGO_HOSTNAME`), the HTTP-to-HTTPS redirect, and the route to `argo-server`. See the
+comments in the file for details. Envoy Gateway then creates a LoadBalancer service for the gateway,
+which gets a public IP.
+
+```bash
+# Wait for the gateway to get its public IP (may take 1-3 minutes); the ADDRESS column shows it.
+# Save this IP - you'll need it for DNS.
+kubectl get gateway argo-gateway -n argo -w
+```
+
+Press Ctrl+C once the ADDRESS appears. (`PROGRAMMED` may stay `False` until the certificate is
+issued below.)
 
 ### Create DNS A record
 
-Go to your DNS provider (GoDaddy, Cloudflare, Route53, etc.) and create:
+Go to your DNS provider (GoDaddy, Cloudflare, Route53, etc.) and create (or update, if moving to a
+new cluster):
 
 - **Type**: A
-- **Name**: argo (or your preferred subdomain) (in Netlify DNS, replace the `@` with `argo`)
-- **Value**: `<IP from previous step>`
+- **Name**: the subdomain part of `$ARGO_HOSTNAME`, e.g. `argo` (in Netlify DNS, replace the `@` with `argo`)
+- **Value**: `<gateway IP from previous step>`
 - **TTL**: 300 (or auto/default)
-
-### Create Let's Encrypt cluster issuer
-
-```bash
-kubectl apply -f setup/argo/clusterissuer-letsencrypt.yaml
-```
-
-### Create ingress resource for Argo server
-
-```bash
-kubectl apply -f setup/argo/ingress-argo.yaml
-```
 
 Wait 1-10 minutes for DNS records to propagate, then verify:
 
 ```bash
-nslookup argo.focal-lab.org
+nslookup ${ARGO_HOSTNAME}
 ```
 
-This should return the ingress controller IP. A "non-authoritative answer" from DNS queries is OK.
+This should return the gateway IP. A "non-authoritative answer" from DNS queries is OK.
 
-### Request and wait for certificate
+### Wait for certificate
+
+cert-manager creates the certificate automatically from the annotation on the Gateway. Let's
+Encrypt can only validate it once DNS points at the gateway, so it may take a few minutes after the
+DNS step.
 
 ```bash
-# Watch certificate being issued (usually 1-3 minutes)
+# Watch certificate being issued (usually 1-3 minutes after DNS resolves)
 kubectl get certificate -n argo -w
 
 # Wait until you see READY show True:
 # NAME              READY   SECRET           AGE
-# argo-server-tls   True    argo-server-tls  2m
+# argo-gateway-tls  True    argo-gateway-tls 2m
 
 # Press Ctrl+C when READY shows True
 ```
 
+If it stays `False`, check progress with `kubectl describe certificate argo-gateway-tls -n argo` and
+`kubectl get challenges -n argo`. cert-manager renews the certificate automatically before it
+expires.
+
 ### Verify Argo UI access
 
-The Argo UI should now be accessible at https://argo.focal-lab.org
+The Argo UI should now be accessible at `https://$ARGO_HOSTNAME` (and http:// should redirect to
+https://).
 
 Verification commands:
 
 ```bash
 # Check all components are ready
+kubectl get pods -n envoy-gateway-system
 kubectl get pods -n cert-manager
-kubectl get pods -n ingress-nginx
 kubectl get pods -n argo
 
-# Check ingress created
-kubectl get ingress -n argo
+# Check gateway is programmed (PROGRAMMED = True) and routes are accepted
+kubectl get gateway argo-gateway -n argo
+kubectl get httproute -n argo
 
 # Check certificate issued
 kubectl get certificate -n argo
 
 # Check DNS resolves
-nslookup argo.focal-lab.org
+nslookup ${ARGO_HOSTNAME}
 ```
 
-## Create Argo UI server token
+## Create Argo UI access token
 
-Create a token that lasts one year. This token will need to be re-created annually.
-
-We're creating this for the `default` service account. In the future, we may want to create a dedicated service account for argo-server tokens, or separate accounts for each user to allow individual permission management.
+The Argo UI uses `client` auth mode (the default): you log in by pasting a Kubernetes service
+account token, and you get that service account's permissions. We use a dedicated `argo-ui`
+service account (created by the kustomization, from `setup/argo/argo-ui-access.yaml`), scoped to
+the `argo` namespace, with permission to manage workflows and view their pods, logs, and events.
+(Don't use a token for the `argo-server` service account: it has cluster-wide permissions,
+including reading all secrets and exec-ing into pods.)
 
 ```bash
-# Create token (valid for 1 year)
-kubectl create token argo-server -n argo --duration=8760h
+# Print the token
+kubectl get secret argo-ui.service-account-token -n argo -o jsonpath='{.data.token}' | base64 --decode; echo
 ```
 
 Copy the token, preface it with `Bearer `, and add/update it in [Vaultwarden](http://vault.focal-lab.org).
+Then confirm you can log in at `https://$ARGO_HOSTNAME`, open a completed workflow, and view its
+logs (which come from S3).
 
-### Token rotation (future)
+The token does not expire. It stays valid until its secret is deleted, or the cluster is rebuilt.
 
-To rotate the token in the future:
+### Token rotation
+
+To revoke the current token and issue a new one (e.g. if it may have leaked):
 
 ```bash
-# Delete all tokens for the service account
-kubectl delete secret -n argo -l kubernetes.io/service-account.name=argo-server
-```
+# Revoke: deleting the secret immediately invalidates the token
+kubectl delete secret argo-ui.service-account-token -n argo
 
-Then recreate it with the command above.
+# Re-apply to create a new token secret, then print it as above and update Vaultwarden
+kubectl apply --server-side -k setup/argo
+kubectl get secret argo-ui.service-account-token -n argo -o jsonpath='{.data.token}' | base64 --decode; echo
+```

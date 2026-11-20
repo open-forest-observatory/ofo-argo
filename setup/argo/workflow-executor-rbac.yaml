@@ -1,11 +1,25 @@
-# Purpose: The standard install.yaml configures permissions for the workflow controller, but does
-# not configure permissions for the service accounts that workflow pods run as. Without these
-# permissions, workflows will fail with:
+# Purpose: Service account that workflow pods run as, with the minimal permissions Argo's executor
+# needs. The standard install.yaml configures permissions for the workflow controller, but not for
+# the service account that workflow pods run as. Without these permissions, workflows fail with:
 #   "workflowtaskresults.argoproj.io is forbidden"
 #
-# This grants the 'argo' service account (used by all our workflows) the minimal permissions
-# needed to create and update workflowtaskresults.
+# Applied via setup/argo/kustomization.yaml.
+#
+# Workflows use this account via `serviceAccountName: argo-workflow` in workflowDefaults
+# (setup/argo/workflow-controller-configmap.yaml), so individual workflows don't set it.
+#
+# Don't run workflows as the 'argo' service account: it belongs to the workflow controller and has
+# cluster-wide permissions (create/exec/delete any pod, read all secrets), which every workflow
+# container would inherit. Our workflows don't call the Kubernetes API, so they need only the
+# executor's permissions. The Role matches the minimum in Argo's docs:
+# https://argo-workflows.readthedocs.io/en/latest/workflow-rbac/
 
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: argo-workflow
+  namespace: argo
+---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
@@ -19,11 +33,11 @@ rules:
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
 metadata:
-  name: executor-argo
+  name: executor-argo-workflow
   namespace: argo
 subjects:
 - kind: ServiceAccount
-  name: argo
+  name: argo-workflow
   namespace: argo
 roleRef:
   apiGroup: rbac.authorization.k8s.io

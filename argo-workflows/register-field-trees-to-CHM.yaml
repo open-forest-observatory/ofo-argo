@@ -3,7 +3,6 @@ kind: Workflow
 metadata:
   generateName: register-field-trees-to-chm-workflow-
 spec:
-  serviceAccountName: argo
   entrypoint: main
   # Max concurrent projects to process in parallel. Edit this value directly to change.
   # (Argo doesn't support parameter substitution for integer fields like parallelism)

@@ -28,7 +28,7 @@ authenticated `kubectl` following the [Cluster access](cluster-access-and-resizi
 
 ```bash
 # Specify the CLI version to install
-ARGO_WORKFLOWS_VERSION="v3.7.2"
+ARGO_WORKFLOWS_VERSION="v4.1.6"
 ARGO_OS="linux"
 
 # Download the binary

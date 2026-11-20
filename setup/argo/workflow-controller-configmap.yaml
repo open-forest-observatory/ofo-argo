@@ -1,4 +1,6 @@
-# Workflow controller configuration for S3 artifact and log storage
+# Workflow controller configuration (workflow defaults, S3 artifact and log storage).
+# Applied via setup/argo/kustomization.yaml, which merges it into install.yaml's empty configmap;
+# don't apply this file on its own.
 # Uses the existing s3-credentials secret for JS2 object store authentication
 apiVersion: v1
 kind: ConfigMap
@@ -8,6 +10,10 @@ metadata:
 data:
   workflowDefaults: |
     spec:
+      # Run workflow pods as a dedicated, minimally-privileged service account (see
+      # setup/argo/workflow-executor-rbac.yaml). Not the 'argo' account, which belongs to the
+      # workflow controller and has cluster-wide permissions.
+      serviceAccountName: argo-workflow
       podGC:
         strategy: OnPodCompletion
       podMetadata:

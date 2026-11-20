@@ -3,7 +3,6 @@ kind: Workflow
 metadata:
   generateName: train-classification-model-
 spec:
-  serviceAccountName: argo
   entrypoint: main
   # Max concurrent pairs to process in parallel. Edit this value directly to change.
   # (Argo doesn't support parameter substitution for integer fields like parallelism)

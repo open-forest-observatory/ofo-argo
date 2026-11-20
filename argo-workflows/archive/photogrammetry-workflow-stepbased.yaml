@@ -3,7 +3,6 @@ kind: Workflow
 metadata:
   generateName: automate-metashape-workflow-
 spec:
-  serviceAccountName: argo
   entrypoint: main
 
   # Set imagePullPolicy for all containers in the workflow
