@@ -154,7 +154,7 @@ For admin setup of CPU node labeling, see [CPU node labeling](../admin/cluster-c
 
 ### MIG (Multi-Instance GPU)
 
-For workloads with low GPU utilization, MIG nodegroups partition each A100 into multiple isolated slices. To use MIG, create a MIG nodegroup (see [MIG nodegroups](cluster-access-and-resizing.md#mig-nodegroups)).
+For workloads with low GPU utilization, MIG nodegroups partition each A100 or H100 into multiple isolated slices. To use MIG, create a MIG nodegroup (see [MIG nodegroups](cluster-access-and-resizing.md#mig-nodegroups)).
 
 **For custom workflows**, update the workflow GPU template to request MIG resources:
 
@@ -170,8 +170,13 @@ resources:
 
 Available MIG resource types:
 
-- `nvidia.com/mig-1g.5gb` - 1/7 compute, 5GB VRAM (7 per GPU)
-- `nvidia.com/mig-2g.10gb` - 2/7 compute, 10GB VRAM (3 per GPU)
-- `nvidia.com/mig-3g.20gb` - 3/7 compute, 20GB VRAM (2 per GPU)
+| Compute | Per GPU | A100-40GB nodes | H100-80GB nodes |
+|---------|---------|-----------------|-----------------|
+| 1/7 | 7 | `nvidia.com/mig-1g.5gb` (5GB VRAM) | `nvidia.com/mig-1g.10gb` (10GB VRAM) |
+| 2/7 | 3 | `nvidia.com/mig-2g.10gb` (10GB VRAM) | `nvidia.com/mig-2g.20gb` (20GB VRAM) |
+| 3/7 | 2 | `nvidia.com/mig-3g.20gb` (20GB VRAM) | `nvidia.com/mig-3g.40gb` (40GB VRAM) |
+
+Request the resource that matches the GPU type of your MIG nodegroup; a pod requesting an A100
+resource name will not schedule on an H100 node, and vice versa.
 
 GPU resource requests work for both MIG and non-MIG GPU nodes.

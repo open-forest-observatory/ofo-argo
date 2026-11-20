@@ -320,15 +320,21 @@ kubectl get cronjob gpu-operator-mig-enforcer -n gpu-operator
 
 ## Configure MIG (Multi-Instance GPU)
 
-MIG partitions A100 GPUs into isolated slices, allowing multiple pods to share one physical GPU with hardware-level isolation. This is optional - standard GPU nodegroups work without MIG.
+MIG partitions A100 and H100 GPUs into isolated slices, allowing multiple pods to share one physical GPU with hardware-level isolation. This is optional - standard GPU nodegroups work without MIG.
 
 ### MIG profiles
 
-| Nodegroup pattern | MIG profile | Pods/GPU | VRAM each | GPU compute each |
-|-------------------|-------------|----------|-----------|--------------|
-| `mig1-*` | `all-1g.5gb` | 7 | 10GB | 1/7 |
-| `mig2-*` | `all-2g.10gb` | 3 | 10GB | 2/7 |
-| `mig3-*` | `all-3g.20gb` | 2 | 20GB | 3/7 |
+MIG profile names include the memory per slice, so the profile (and the Kubernetes resource
+name pods request) depends on the GPU's total memory as well as on the nodegroup name:
+
+| Nodegroup pattern | Pods/GPU | GPU compute each | 40GB GPU (A100-40GB) profile | 80GB GPU (H100, A100-80GB) profile |
+|-------------------|----------|------------------|------------------------------|------------------------------------|
+| `mig1-*` | 7 | 1/7 | `all-1g.5gb` (5GB each) | `all-1g.10gb` (10GB each) |
+| `mig2-*` | 3 | 2/7 | `all-2g.10gb` (10GB each) | `all-2g.20gb` (20GB each) |
+| `mig3-*` | 2 | 3/7 | `all-3g.20gb` (20GB each) | `all-3g.40gb` (40GB each) |
+
+The resource exposed to pods is the profile name with `all-` replaced by `nvidia.com/mig-`
+(e.g. `all-1g.10gb` → `nvidia.com/mig-1g.10gb`).
 
 ### Apply MIG configuration rule
 
@@ -336,28 +342,38 @@ MIG partitions A100 GPUs into isolated slices, allowing multiple pods to share o
 kubectl apply -f setup/k8s/mig-nodegroup-labels.yaml
 ```
 
-This creates a NodeFeatureRule that automatically labels GPU nodes based on their nodegroup name. The NVIDIA MIG manager watches for these labels and configures the GPU accordingly.
+This creates a NodeFeatureRule that automatically labels GPU nodes based on their nodegroup name and GPU model (matched by PCI device ID; see the comments in the YAML for the supported IDs). A MIG-named node whose GPU isn't in the list gets no label, so MIG stays disabled on it. The NVIDIA MIG manager watches for these labels and configures the GPU accordingly.
 
 ### Verify MIG is working
 
 After creating a MIG nodegroup (see [MIG nodegroups](../usage/cluster-access-and-resizing.md#mig-nodegroups)):
 
 ```bash
-# Check node MIG config label
-kubectl get nodes -l nvidia.com/mig.config -o custom-columns='NAME:.metadata.name,MIG_CONFIG:.metadata.labels.nvidia\.com/mig\.config'
+# Check node MIG config label, GPU model, and whether MIG setup succeeded
+# (MIG_STATE goes pending -> success; it takes several minutes after the node joins
+# while the GPU Operator installs the driver)
+kubectl get nodes -l nvidia.com/mig.config -o custom-columns='NAME:.metadata.name,GPU:.metadata.labels.nvidia\.com/gpu\.product,MIG_CONFIG:.metadata.labels.nvidia\.com/mig\.config,MIG_STATE:.metadata.labels.nvidia\.com/mig\.config\.state'
 
 # Check MIG resources are available
-kubectl get nodes -o custom-columns='NAME:.metadata.name,MIG-1G:.status.allocatable.nvidia\.com/mig-1g\.10gb,MIG-2G:.status.allocatable.nvidia\.com/mig-2g\.10gb,MIG-3G:.status.allocatable.nvidia\.com/mig-3g\.20gb'
+kubectl get nodes -l nvidia.com/mig.config -o json | jq -r '.items[] | .metadata.name + "  " + ([.status.allocatable | to_entries[] | select(.key | startswith("nvidia.com/mig-")) | "\(.key)=\(.value)"] | join(" "))'
 ```
+
+If `MIG_STATE` is `failed`, the profile isn't valid for that GPU (check the GPU model against the
+table above) — see the `nvidia-mig-manager` pod logs on that node in the `gpu-operator` namespace.
+
+If a MIG node doesn't appear in the output at all, it has no `nvidia.com/mig.config` label: either
+its name lacks `-mig1-`/`-mig2-`/`-mig3-`, or its GPU isn't in the rule's supported list. Check the
+GPU model with `kubectl get node <name> -L nvidia.com/gpu.product` and compare it against the PCI
+device IDs in the comments of `setup/k8s/mig-nodegroup-labels.yaml`.
 
 ### How it works
 
 1. User creates nodegroup with MIG naming (e.g., `mig1-group`)
 2. Node joins cluster with name containing `-mig1-`
-3. NFD applies label `nvidia.com/mig.config=all-1g.5gb`
-4. MIG manager detects label, configures GPU into 3 partitions
-5. Device plugin exposes `nvidia.com/mig-1g.5gb: 3` as allocatable resources
-6. Pods requesting `nvidia.com/mig-1g.5gb: 1` get one partition
+3. NFD applies label `nvidia.com/mig.config=all-1g.5gb` (A100-40GB) or `all-1g.10gb` (H100/A100-80GB), based on the GPU's PCI device ID
+4. MIG manager detects label, configures GPU into 7 partitions
+5. Device plugin exposes e.g. `nvidia.com/mig-1g.10gb: 7` (per GPU) as allocatable resources
+6. Pods requesting `nvidia.com/mig-1g.10gb: 1` get one partition
 
 
 ## Kubernetes management

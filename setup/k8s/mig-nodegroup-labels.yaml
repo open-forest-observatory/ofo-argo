@@ -1,36 +1,83 @@
+# Labels MIG nodegroup nodes with the nvidia.com/mig.config profile the NVIDIA MIG manager
+# should apply. The profile depends on both the nodegroup name (mig1/mig2/mig3) and the GPU
+# model, because MIG profile names encode slice memory, which differs by GPU memory size:
+#
+#   Nodegroup | 40GB GPUs (A100-40GB) | 80GB GPUs (H100-80GB, A100-80GB) | Slices per GPU
+#   mig1      | all-1g.5gb            | all-1g.10gb                      | 7
+#   mig2      | all-2g.10gb           | all-2g.20gb                      | 3
+#   mig3      | all-3g.20gb           | all-3g.40gb                      | 2
+#
+# GPUs are matched by PCI device ID (vendor 10de = NVIDIA). The ID lists mirror the
+# device-filter lists in the GPU Operator's default-mig-parted-config ConfigMap. Each list is
+# defined once as a YAML anchor (&gpu40 / &gpu80) on its first use and reused with *gpu40 /
+# *gpu80; kubectl expands these before sending the object, so NFD never sees them. A MIG-named
+# node with a GPU not listed here gets no mig.config label (MIG stays disabled).
+#
+# 40GB: 20b0 A100-SXM4-40GB, 20b1 A100-PCIE-40GB, 20f1 A100-PCIE-40GB, 20f6 A800-40GB
+# 80GB: 2330 H100-SXM5-80GB, 2331 H100-PCIe-80GB, 2322 H800-PCIe-80GB, 2324 H800-SXM5-80GB,
+#       20b2 A100-SXM4-80GB, 20b5 A100-PCIE-80GB, 20f3 A800-SXM4-80GB, 20f5 A800-80GB
 apiVersion: nfd.k8s-sigs.io/v1alpha1
 kind: NodeFeatureRule
 metadata:
   name: mig-nodegroup-labels
 spec:
   rules:
-    - name: "MIG 1g nodes"
+    # ---- 40GB GPUs ----
+    - name: "MIG 1g nodes (40GB GPU)"
       labels:
         nvidia.com/mig.config: "all-1g.5gb"
       matchFeatures:
         - feature: system.name
           matchExpressions:
-            nodename:
-              op: InRegexp
-              value:
-                - "-mig1-"
-    - name: "MIG 2g nodes"
+            nodename: {op: InRegexp, value: ["-mig1-"]}
+        - &gpu40
+          feature: pci.device
+          matchExpressions:
+            vendor: {op: In, value: ["10de"]}
+            device: {op: In, value: ["20b0", "20b1", "20f1", "20f6"]}
+    - name: "MIG 2g nodes (40GB GPU)"
       labels:
         nvidia.com/mig.config: "all-2g.10gb"
       matchFeatures:
         - feature: system.name
           matchExpressions:
-            nodename:
-              op: InRegexp
-              value:
-                - "-mig2-"
-    - name: "MIG 3g nodes"
+            nodename: {op: InRegexp, value: ["-mig2-"]}
+        - *gpu40
+    - name: "MIG 3g nodes (40GB GPU)"
       labels:
         nvidia.com/mig.config: "all-3g.20gb"
       matchFeatures:
         - feature: system.name
           matchExpressions:
-            nodename:
-              op: InRegexp
-              value:
-                - "-mig3-"
+            nodename: {op: InRegexp, value: ["-mig3-"]}
+        - *gpu40
+
+    # ---- 80GB GPUs ----
+    - name: "MIG 1g nodes (80GB GPU)"
+      labels:
+        nvidia.com/mig.config: "all-1g.10gb"
+      matchFeatures:
+        - feature: system.name
+          matchExpressions:
+            nodename: {op: InRegexp, value: ["-mig1-"]}
+        - &gpu80
+          feature: pci.device
+          matchExpressions:
+            vendor: {op: In, value: ["10de"]}
+            device: {op: In, value: ["2330", "2331", "2322", "2324", "20b2", "20b5", "20f3", "20f5"]}
+    - name: "MIG 2g nodes (80GB GPU)"
+      labels:
+        nvidia.com/mig.config: "all-2g.20gb"
+      matchFeatures:
+        - feature: system.name
+          matchExpressions:
+            nodename: {op: InRegexp, value: ["-mig2-"]}
+        - *gpu80
+    - name: "MIG 3g nodes (80GB GPU)"
+      labels:
+        nvidia.com/mig.config: "all-3g.40gb"
+      matchFeatures:
+        - feature: system.name
+          matchExpressions:
+            nodename: {op: InRegexp, value: ["-mig3-"]}
+        - *gpu80

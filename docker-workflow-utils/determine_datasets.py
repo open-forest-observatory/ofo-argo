@@ -256,7 +256,8 @@ def process_config_file(config_path: str) -> Dict[str, Any]:
         imagery_downloads = []
 
     # Default GPU resource (full GPU). Can be overridden per-step with MIG resources like:
-    # "nvidia.com/mig-1g.5gb", "nvidia.com/mig-2g.10gb", "nvidia.com/mig-3g.20gb"
+    # A100-40GB: "nvidia.com/mig-1g.5gb", "nvidia.com/mig-2g.10gb", "nvidia.com/mig-3g.20gb"
+    # H100-80GB: "nvidia.com/mig-1g.10gb", "nvidia.com/mig-2g.20gb", "nvidia.com/mig-3g.40gb"
     DEFAULT_GPU_RESOURCE = "nvidia.com/gpu"
     DEFAULT_GPU_COUNT = 1
 

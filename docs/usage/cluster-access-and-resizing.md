@@ -158,7 +158,7 @@ openstack coe nodegroup create ofocluster2 gpu-group --min-nodes 1 --max-nodes 8
 
 #### MIG nodegroups
 
-MIG (Multi-Instance GPU) partitions full (e.g. JS2 g3.xl A100) GPUs into smaller isolated slices, allowing multiple pods per GPU. Use MIG when your GPU workloads have low utilization (<50%) and don't need full GPU memory. This is the preferred way to provide GPU resources to automate-metashape runs via the OFO Argo step-based workflow, as it provides much greater compute efficiency.
+MIG (Multi-Instance GPU) partitions full (e.g. JS2 A100 or H100) GPUs into smaller isolated slices, allowing multiple pods per GPU. Use MIG when your GPU workloads have low utilization (<50%) and don't need full GPU memory. This is the preferred way to provide GPU resources to automate-metashape runs via the OFO Argo step-based workflow, as it provides much greater compute efficiency.
 
 Create MIG nodegroups by including `mig1-`, `mig2-`, or `mig3-` in the nodegroup name. Our benchmarking has shown that automate-metashape is most efficient with `mig1` nodes 7 slices (and you can provide more than one slice to a step).
 
@@ -169,14 +169,17 @@ openstack coe nodegroup create ofocluster2 mig1-group --min-nodes 1 --max-nodes 
 !!! note "Resource limits for MIG"
     When using MIG, reduce CPU/memory requests to fit multiple pods per node:
 
-    | Profile | MIG resource request | Max pods/node | CPU each | RAM each |
-    |---------|----------------------|---------------|----------|----------|
-    | mig1 (7 slices) | `nvidia.com/mig-1g.5gb` | 7 | 4 | 16GB |
-    | mig2 (3 slices) | `nvidia.com/mig-2g.10gb` | 3 | 10 | 38GB |
-    | mig3 (2 slices) | `nvidia.com/mig-3g.20gb` | 2 | 15 | 55GB |
+    | Profile | MIG resource request (A100-40GB) | MIG resource request (H100-80GB) | Max pods/node | CPU each | RAM each |
+    |---------|----------------------------------|----------------------------------|---------------|----------|----------|
+    | mig1 (7 slices) | `nvidia.com/mig-1g.5gb` | `nvidia.com/mig-1g.10gb` | 7 | 4 | 16GB |
+    | mig2 (3 slices) | `nvidia.com/mig-2g.10gb` | `nvidia.com/mig-2g.20gb` | 3 | 10 | 38GB |
+    | mig3 (2 slices) | `nvidia.com/mig-3g.20gb` | `nvidia.com/mig-3g.40gb` | 2 | 15 | 55GB |
+
+    CPU/RAM figures were benchmarked on A100 (`g3.xl`) nodes; scale them to your H100 flavor's
+    CPU and RAM as needed.
 
 !!! warning "Workflow compatibility"
-    MIG nodegroups are only used by workflows that request MIG resources (e.g., `nvidia.com/mig-1g.5gb: 1`) instead of full GPUs (`nvidia.com/gpu: 1`). See [MIG workflow configuration](argo-usage.md#mig-multi-instance-gpu).
+    MIG nodegroups are only used by workflows that request MIG resources (e.g., `nvidia.com/mig-1g.5gb: 1`) instead of full GPUs (`nvidia.com/gpu: 1`). The resource name must match the GPU type of the nodegroup: an A100-40GB `mig1` node offers `mig-1g.5gb`, an H100 `mig1` node offers `mig-1g.10gb`, and a pod requesting one will never schedule on the other. See [MIG workflow configuration](argo-usage.md#mig-multi-instance-gpu).
 
 !!! note "GPU Node Scheduling"
     CPU-only workflow pods use `nodeSelector` to target CPU nodes explicitly, preventing them from scheduling on expensive GPU nodes. GPU pods request GPU resources, which naturally constrains them to GPU nodes. See [GPU node scheduling](argo-usage.md#gpu-node-scheduling) for details.

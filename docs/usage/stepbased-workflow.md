@@ -354,14 +354,21 @@ Available GPU resources:
 | Resource | Description | Pods per GPU |
 |----------|-------------|--------------|
 | `nvidia.com/gpu` | Full GPU (default if `gpu_resource` omitted) | 1 |
-| `nvidia.com/mig-1g.5gb` | 1/7 compute, 5GB VRAM | 7 |
-| `nvidia.com/mig-2g.10gb` | 2/7 compute, 10GB VRAM | 3 |
-| `nvidia.com/mig-3g.20gb` | 3/7 compute, 20GB VRAM | 2 |
+| `nvidia.com/mig-1g.5gb` | 1/7 compute, 5GB VRAM (A100-40GB nodes) | 7 |
+| `nvidia.com/mig-2g.10gb` | 2/7 compute, 10GB VRAM (A100-40GB nodes) | 3 |
+| `nvidia.com/mig-3g.20gb` | 3/7 compute, 20GB VRAM (A100-40GB nodes) | 2 |
+| `nvidia.com/mig-1g.10gb` | 1/7 compute, 10GB VRAM (H100-80GB nodes) | 7 |
+| `nvidia.com/mig-2g.20gb` | 2/7 compute, 20GB VRAM (H100-80GB nodes) | 3 |
+| `nvidia.com/mig-3g.40gb` | 3/7 compute, 40GB VRAM (H100-80GB nodes) | 2 |
+
+MIG resource names depend on the GPU type of the nodegroup. The examples on this page use A100-40GB
+names; on H100 MIG nodegroups substitute the H100 equivalent (`mig-1g.5gb` → `mig-1g.10gb`,
+`mig-2g.10gb` → `mig-2g.20gb`, `mig-3g.20gb` → `mig-3g.40gb`).
 
 Use `gpu_count` to request multiple MIG slices (e.g., `gpu_count: 2` with `mig-1g.5gb` to get 2/7 compute power).
 
 !!! tip "When to use MIG"
-    Use MIG partitions when your GPU steps have low utilization. This allows multiple workflow steps to share a single physical GPU, reducing costs. In extensive benchmarking, we have found that we get the greatest efficiency with mig-1g.5gb nodes, potentially providing more than one slice to GPU-intensive pods.
+    Use MIG partitions when your GPU steps have low utilization. This allows multiple workflow steps to share a single physical GPU, reducing costs. In extensive benchmarking, we have found that we get the greatest efficiency with mig1 (`mig-1g.5gb` on A100) nodes, potentially providing more than one slice to GPU-intensive pods.
 
 !!! note "Nodegroup requirement"
     MIG resources are only available on MIG-enabled nodegroups. Create a MIG nodegroup with a name containing `mig1-`, `mig2-`, or `mig3-` (see [MIG nodegroups](cluster-access-and-resizing.md#mig-nodegroups)).
@@ -1155,7 +1162,8 @@ argo logs <workflow-name> -c determine-datasets
 2. Verify the MIG NodeFeatureRule is applied: `kubectl get nodefeaturerule mig-nodegroup-labels`
 3. Check node has correct MIG label: `kubectl get node <name> -o yaml | grep mig.config`
 4. Check MIG resources are available: `kubectl describe node <name> | grep mig`
-5. Verify workflow requests correct MIG resource type (e.g., `nvidia.com/mig-2g.10gb`)
+5. Verify workflow requests correct MIG resource type for the node's GPU (e.g., `nvidia.com/mig-2g.10gb` on A100-40GB, `nvidia.com/mig-2g.20gb` on H100)
+6. Check MIG setup succeeded: `kubectl get node <name> -L nvidia.com/mig.config.state` should show `success`, not `failed`
 
 ### Project file not found in later steps
 
