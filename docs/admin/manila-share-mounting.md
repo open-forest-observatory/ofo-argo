@@ -40,7 +40,7 @@ If you are resuming cluster management after a reboot, you will need to re-set e
 
 ```bash
 source ~/venv/openstack/bin/activate
-export KUBECONFIG=~/.ofocluster/ofocluster.kubeconfig
+export KUBECONFIG=~/.ofocluster/ofocluster3.kubeconfig
 source ~/.ofocluster/app-cred-ofocluster-openrc.sh
 ```
 

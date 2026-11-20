@@ -11,8 +11,8 @@ cluster as a user. For details on initial cluster deployment and setup, includin
 installation of Argo and configuration of persistent volumes, see the [Admin
 guides](../admin/index.md).
 
-The OFO cluster is named `ofocluster`. The nodes that comprise it can be seen in Exosphere starting
-with the string `ofocluster-`. They appear as created by `dyoung@access-ci.org`. The nodes should
+The OFO cluster is named `ofocluster3`. The nodes that comprise it can be seen in Exosphere starting
+with the string `ofocluster3-`. They appear as created by `dyoung@access-ci.org`. The nodes should
 not be modified via Exosphere or Horizon, only through the command line tools described below.
 
 ## OFO cluster management principles
@@ -107,15 +107,15 @@ Get the Kubernetes configuration file (`kubeconfig`) and configure your environm
 
 ```bash
 # Get cluster configuration
-openstack coe cluster config "ofocluster2" --force
+openstack coe cluster config "ofocluster3" --force
 
 # Set permissions and move to appropriate location
 chmod 600 config
 mkdir -p ~/.ofocluster
-mv -i config ~/.ofocluster/ofocluster.kubeconfig
+mv -i config ~/.ofocluster/ofocluster3.kubeconfig
 
 # Set KUBECONFIG environment variable
-export KUBECONFIG=~/.ofocluster/ofocluster.kubeconfig
+export KUBECONFIG=~/.ofocluster/ofocluster3.kubeconfig
 ```
 
 
@@ -129,7 +129,7 @@ and source the application credential:
 
 ```bash
 source ~/venv/openstack/bin/activate
-export KUBECONFIG=~/.ofocluster/ofocluster.kubeconfig
+export KUBECONFIG=~/.ofocluster/ofocluster3.kubeconfig
 source ~/.ofocluster/app-cred-ofocluster-openrc.sh
 ```
 
@@ -143,7 +143,7 @@ Use OpenStack to create new nodegroups.
 CPU nodegroups must include `cpu` in the nodegroup name for automatic labeling to work:
 
 ```bash
-openstack coe nodegroup create ofocluster2 cpu-group --min-nodes 1 --max-nodes 8 --flavor m3.large
+openstack coe nodegroup create ofocluster3 cpu-group --min-nodes 1 --max-nodes 8 --flavor m3.large
 ```
 
 The `cpu` substring triggers automatic labeling (`workload-type: cpu`) via NodeFeatureRule, which is part of ensuring CPU-only workflow pods schedule on these nodes (the other part is the NodeSelector attribute specified for the CPU task template in the Argo workflow YAML).
@@ -153,7 +153,7 @@ The `cpu` substring triggers automatic labeling (`workload-type: cpu`) via NodeF
 GPU nodegroups consist of full-GPU nodes, and on JS2 must be an `xl` flavor. For automate-metashape runs via Argo, we now prefer MIG (split GPU) nodegroups (see below). Standard full-GPU nodegroups can use any name, as GPU resource requests handle scheduling:
 
 ```bash
-openstack coe nodegroup create ofocluster2 gpu-group --min-nodes 1 --max-nodes 8 --flavor g3.xl
+openstack coe nodegroup create ofocluster3 gpu-group --min-nodes 1 --max-nodes 8 --flavor g3.xl
 ```
 
 #### MIG nodegroups
@@ -163,7 +163,7 @@ MIG (Multi-Instance GPU) partitions full (e.g. JS2 A100 or H100) GPUs into small
 Create MIG nodegroups by including `mig1-`, `mig2-`, or `mig3-` in the nodegroup name. Our benchmarking has shown that automate-metashape is most efficient with `mig1` nodes 7 slices (and you can provide more than one slice to a step).
 
 ```bash
-openstack coe nodegroup create ofocluster2 mig1-group --min-nodes 1 --max-nodes 4 --flavor g3.xl
+openstack coe nodegroup create ofocluster3 mig1-group --min-nodes 1 --max-nodes 4 --flavor g3.xl
 ```
 
 !!! note "Resource limits for MIG"
@@ -206,7 +206,7 @@ effort to prevent cycling. You can change the min and max bounds on the number o
 autoscaler will request:
 
 ```bash
-openstack coe nodegroup update ofocluster2 cpu-group --min-nodes 1 --max-nodes 1
+openstack coe nodegroup update ofocluster3 cpu-group --min-nodes 1 --max-nodes 1
 ```
 
 ### Drain/cordon nodes before downsizing or deleting
@@ -247,8 +247,8 @@ count. To prevent this, first reduce the max size of the nodegroup to 1 (the low
 then delete.
 
 ```bash
-openstack coe nodegroup update ofocluster2 $NODEGROUP_NAME --min-nodes 1 --max-nodes 1
-openstack coe nodegroup delete ofocluster2 $NODEGROUP_NAME
+openstack coe nodegroup update ofocluster3 $NODEGROUP_NAME --min-nodes 1 --max-nodes 1
+openstack coe nodegroup delete ofocluster3 $NODEGROUP_NAME
 ```
 
 
@@ -259,7 +259,7 @@ and source the application credential:
 
 ```bash
 source ~/venv/openstack/bin/activate
-export KUBECONFIG=~/.ofocluster/ofocluster.kubeconfig
+export KUBECONFIG=~/.ofocluster/ofocluster3.kubeconfig
 source ~/.ofocluster/app-cred-ofocluster-openrc.sh
 ```
 
@@ -270,8 +270,8 @@ does not examine the state of the software on the nodes (e.g. Kubernetes, Argo).
 
 ```bash
 openstack coe cluster list
-openstack coe cluster show ofocluster
-openstack coe nodegroup list ofocluster
+openstack coe cluster show ofocluster3
+openstack coe nodegroup list ofocluster3
 ```
 
 

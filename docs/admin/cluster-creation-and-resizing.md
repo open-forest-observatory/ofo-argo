@@ -149,7 +149,7 @@ openstack coe cluster create \
     --keypair $KEYPAIR \
     --fixed-network "${NETWORK_ID}" \
     --fixed-subnet "${SUBNET_ID}" \
-    "ofocluster2"
+    "ofocluster3"
 
 
 
@@ -157,8 +157,8 @@ openstack coe cluster create \
 
 ```bash
 openstack coe cluster list
-openstack coe cluster show ofocluster
-openstack coe nodegroup list ofocluster
+openstack coe cluster show ofocluster3
+openstack coe nodegroup list ofocluster3
 ```
 
 Or with formatting that makes it easier to copy the cluster UUID:
@@ -176,15 +176,15 @@ Once the `openstack coe cluster list` status (command above) changes to `CREATE_
 
 ```bash
 # Get cluster configuration
-openstack coe cluster config "ofocluster2" --force
+openstack coe cluster config "ofocluster3" --force
 
 # Set permissions and move to appropriate location
 chmod 600 config
 mkdir -p ~/.ofocluster
-mv -i config ~/.ofocluster/ofocluster.kubeconfig
+mv -i config ~/.ofocluster/ofocluster3.kubeconfig
 
 # Set KUBECONFIG environment variable
-export KUBECONFIG=~/.ofocluster/ofocluster.kubeconfig
+export KUBECONFIG=~/.ofocluster/ofocluster3.kubeconfig
 ```
 
 ## Create the Argo namespace
@@ -382,7 +382,7 @@ If you are resuming cluster management after a reboot, you will need to re-set e
 
 ```bash
 source ~/venv/openstack/bin/activate
-export KUBECONFIG=~/.ofocluster/ofocluster.kubeconfig
+export KUBECONFIG=~/.ofocluster/ofocluster3.kubeconfig
 source ~/.ofocluster/app-cred-ofocluster-openrc.sh
 ```
 
@@ -445,7 +445,7 @@ These instructions are for managing which nodes are in the cluster, not what sof
 Resize the cluster by adding or removing nodes from the original worker group (not a later-added nodegroup). We will likely not do this, relying instead on nodegroups for specific runs.
 
 ```bash
-openstack coe cluster resize "ofocluster" 4
+openstack coe cluster resize "ofocluster3" 4
 ```
 
 ### Add, resize, or delete nodegroups
@@ -455,7 +455,7 @@ For nodegroup management, see the corresponding [user guide](../usage/cluster-ac
 ### Delete the cluster
 
 ```bash
-openstack coe cluster delete "ofocluster"
+openstack coe cluster delete "ofocluster3"
 ```
 
 ## Monitoring dashboards

@@ -13,7 +13,7 @@ For specific instructions on running the photogrammetry (automate-metashape) wor
 
 This guide assumes you already:
 
-- Have access to the `ofocluster` kubernetes cluster
+- Have access to the `ofocluster3` kubernetes cluster
 - Have resized the cluster to the apprpriate size for your workflow
 - Have `kubectl` configured to connect to the cluster
 
@@ -54,7 +54,7 @@ Once after every reboot, you will need to re-set your `KUBECONFIG` environment v
 
 ```bash
 source ~/venv/openstack/bin/activate
-export KUBECONFIG=~/.ofocluster/ofocluster.kubeconfig
+export KUBECONFIG=~/.ofocluster/ofocluster3.kubeconfig
 ```
 
 
@@ -73,7 +73,7 @@ argo submit -n argo photogrammetry-workflow.yaml \
 
 ### Argo web UI
 
-Access the Argo UI at [argo.focal-lab.org](https://argo.focal-lab.org). When prompted to log in,
+Access the Argo UI at [argo3.focal-lab.org](https://argo3.focal-lab.org). When prompted to log in,
 supply the client authentication token. You can find the token string in
 [Vaultwarden](https://vault.focal-lab.org) under the record "Argo UI token".
 

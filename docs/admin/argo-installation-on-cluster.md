@@ -205,13 +205,14 @@ argo submit -n argo test-workflows/dag-diamond.yaml --watch
 
 ## Set up Argo server with HTTPS access
 
-The following steps expose the Argo UI at https://argo.focal-lab.org, or at a different hostname
-(e.g. `argo3.focal-lab.org` for a new cluster while the previous one is still serving
-`argo.focal-lab.org`; point `argo.focal-lab.org` at the new cluster and re-run the gateway step with
-the default hostname once the old cluster is retired). Set the hostname to use:
+The following steps expose the Argo UI at `https://$ARGO_HOSTNAME`. The current cluster
+(`ofocluster3`) uses `argo3.focal-lab.org` while the previous cluster still serves
+`argo.focal-lab.org`. Once the old cluster is retired, point `argo.focal-lab.org` at the new
+cluster, set `ARGO_HOSTNAME="argo.focal-lab.org"`, and re-run the gateway step. Set the hostname to
+use:
 
 ```bash
-ARGO_HOSTNAME="argo.focal-lab.org"
+ARGO_HOSTNAME="argo3.focal-lab.org"
 ```
 
 How it works:

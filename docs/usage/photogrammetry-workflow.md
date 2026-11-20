@@ -31,7 +31,7 @@ Before running the workflow, ensure you have:
 ```
 source ~/venv/openstack/bin/activate
 source ~/.ofocluster/app-cred-ofocluster-openrc.sh
-export KUBECONFIG=~/.ofocluster/ofocluster.kubeconfig
+export KUBECONFIG=~/.ofocluster/ofocluster3.kubeconfig
 ```
 
 ## Workflow overview
@@ -187,7 +187,7 @@ These secrets should have been created (within the `argo` namespace) during [clu
 
 ### Using the Argo UI
 
-The Argo UI is great for troubleshooting and checking additional logs. Access it at [argo.focal-lab.org](https://argo.focal-lab.org), using the credentials from [Vaultwarden](https://vault.focal-lab.org) under the record "Argo UI token".
+The Argo UI is great for troubleshooting and checking additional logs. Access it at [argo3.focal-lab.org](https://argo3.focal-lab.org), using the credentials from [Vaultwarden](https://vault.focal-lab.org) under the record "Argo UI token".
 
 #### Navigating the Argo UI
 
