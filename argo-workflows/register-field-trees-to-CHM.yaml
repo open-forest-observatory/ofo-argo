@@ -41,7 +41,8 @@ spec:
   arguments:
     parameters:
       # The file on the mounted drive specifying the (drone mission, field plot) pairs to run on.
-      # This should be a .csv, with no column and one line per pairing, ordered: drone mission id, field plot id.
+      # Field drone plots should be zero-padded to six places while the field plots should four.
+      # This should be a .csv, with no column and one ofo_ground-reference_trees.gpkgline per pairing, ordered: drone mission id, field plot id.
       - name: DATASETS_FILE
       # Path to the file of ground reference trees for all plots, with a `plot_id` column
       - name: GROUND_REFERENCE_TREES_FILE
@@ -161,6 +162,8 @@ spec:
                   value: "{{tasks.prepare-ground-reference-data.outputs.parameters.ground-reference-bounds-output-file}}"
                 - name: CHM-file
                   value: "{{workflow.parameters.TEMP_FOLDER}}/{{workflow.name}}/{{inputs.parameters.mission-id}}_{{inputs.parameters.plot-id}}/{{inputs.parameters.mission-id}}_chm-mesh.tif"
+                - name: shift-file
+                  value: "{{tasks.register-trees.outputs.parameters.shift-file}}"
                 - name: output-vis-file
                   value: "{{workflow.parameters.TEMP_FOLDER}}/{{workflow.name}}/shifts-to-validate/{{inputs.parameters.mission-id}}_{{inputs.parameters.plot-id}}.png"
           - name: upload-shift-file
@@ -429,7 +432,9 @@ spec:
           # Parse as float so a malformed value fails here rather than in the downstream `when` expressions
           ratio_quality_metric = float(row["ratio_quality_metric"])
 
-          print(ratio_quality_metric, end="")
+          # Fixed-point format: Python prints small floats in scientific notation (e.g. 1e-05), which the
+          # downstream `when` expressions may not parse as a number
+          print(f"{ratio_quality_metric:.6f}", end="")
 
     - name: save-visualization
       inputs:
@@ -437,6 +442,7 @@ spec:
           - name: input-trees-file
           - name: input-bounds-file
           - name: CHM-file
+          - name: shift-file
           - name: output-vis-file
       container:
         image: ghcr.io/open-forest-observatory/tree-registration-and-matching:{{workflow.parameters.TRAM_IMAGE_TAG}}
@@ -448,7 +454,20 @@ spec:
             cpu: "2"
             memory: "4Gi"
         # TODO include the proper command once it is implemented
-        command: ["python"]
+        command: [
+            "python",
+            "-m",
+            "tree_registration_and_matching.entrypoints.plot_trees_on_raster",
+            "--raster",
+            "{{inputs.parameters.CHM-file}}",
+            "--tree-points",
+            "{{inputs.parameters.input-trees-file}}",
+            "--plot-bounds",
+            "{{inputs.parameters.input-bounds-file}}",
+            "--shift-file",
+            "{{inputs.parameters.shift-file}}",
+            "--visualization-output-file",
+            "{{inputs.parameters.output-vis-file}}"]
 
     # --------- RCLONE UPLOAD ---------
     # Uploads the two final output files to S3, then cleans up the local dataset directory.
