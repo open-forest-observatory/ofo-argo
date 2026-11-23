@@ -102,6 +102,9 @@ spec:
         parameters:
           - name: mission-id
           - name: plot-id
+          # Per-pair working directory. All per-pair intermediate files are written under this.
+          - name: pair-dir
+            value: "{{workflow.parameters.TEMP_FOLDER}}/{{workflow.name}}/per-pair-data/{{inputs.parameters.mission-id}}_{{inputs.parameters.plot-id}}"
       dag:
         # failFast=false ensures other datasets continue if this one fails
         failFast: false
@@ -117,7 +120,7 @@ spec:
                 - name: s3-data-folder
                   value: "{{workflow.parameters.S3_DATA_FOLDER}}"
                 - name: local-dir
-                  value: "{{workflow.parameters.TEMP_FOLDER}}/{{workflow.name}}/{{inputs.parameters.mission-id}}_{{inputs.parameters.plot-id}}"
+                  value: "{{inputs.parameters.pair-dir}}"
           - name: prepare-ground-reference-data
             template: prepare-ground-reference-data
             arguments:
@@ -129,9 +132,9 @@ spec:
                 - name: ground-reference-bounds-file
                   value: "{{workflow.parameters.GROUND_REFERENCE_PLOTS_FILE}}"
                 - name: ground-reference-trees-output-file
-                  value: "{{workflow.parameters.TEMP_FOLDER}}/{{workflow.name}}/{{inputs.parameters.mission-id}}_{{inputs.parameters.plot-id}}/ground-reference-trees.gpkg"
+                  value: "{{inputs.parameters.pair-dir}}/ground-reference-trees.gpkg"
                 - name: ground-reference-bounds-output-file
-                  value: "{{workflow.parameters.TEMP_FOLDER}}/{{workflow.name}}/{{inputs.parameters.mission-id}}_{{inputs.parameters.plot-id}}/ground-reference-bounds.gpkg"
+                  value: "{{inputs.parameters.pair-dir}}/ground-reference-bounds.gpkg"
           - name: register-trees
             template: register-trees
             depends: "download-input-data.Succeeded && prepare-ground-reference-data.Succeeded"
@@ -140,9 +143,9 @@ spec:
                 - name: input-trees-file
                   value: "{{tasks.prepare-ground-reference-data.outputs.parameters.ground-reference-trees-output-file}}"
                 - name: CHM-file
-                  value: "{{workflow.parameters.TEMP_FOLDER}}/{{workflow.name}}/{{inputs.parameters.mission-id}}_{{inputs.parameters.plot-id}}/{{inputs.parameters.mission-id}}_chm-mesh.tif"
+                  value: '{{=jsonpath(tasks["download-input-data"].outputs.parameters["local-files"], "$.chm")}}'
                 - name: output-shift-file
-                  value: "{{workflow.parameters.TEMP_FOLDER}}/{{workflow.name}}/{{inputs.parameters.mission-id}}_{{inputs.parameters.plot-id}}/{{inputs.parameters.mission-id}}_{{inputs.parameters.plot-id}}_shift.csv"
+                  value: "{{inputs.parameters.pair-dir}}/{{inputs.parameters.mission-id}}_{{inputs.parameters.plot-id}}_shift.csv"
           - name: check-quality
             template: check-quality
             depends: register-trees.Succeeded
@@ -161,7 +164,7 @@ spec:
                 - name: input-bounds-file
                   value: "{{tasks.prepare-ground-reference-data.outputs.parameters.ground-reference-bounds-output-file}}"
                 - name: CHM-file
-                  value: "{{workflow.parameters.TEMP_FOLDER}}/{{workflow.name}}/{{inputs.parameters.mission-id}}_{{inputs.parameters.plot-id}}/{{inputs.parameters.mission-id}}_chm-mesh.tif"
+                  value: '{{=jsonpath(tasks["download-input-data"].outputs.parameters["local-files"], "$.chm")}}'
                 - name: shift-file
                   value: "{{tasks.register-trees.outputs.parameters.shift-file}}"
                 - name: output-vis-file
@@ -177,9 +180,9 @@ spec:
                 - name: mission-id
                   value: "{{inputs.parameters.mission-id}}"
                 - name: temp-dir
-                  value: "{{workflow.parameters.TEMP_FOLDER}}/{{workflow.name}}/{{inputs.parameters.mission-id}}_{{inputs.parameters.plot-id}}"
+                  value: "{{inputs.parameters.pair-dir}}"
                 - name: shift-file
-                  value: "{{workflow.parameters.TEMP_FOLDER}}/{{workflow.name}}/{{inputs.parameters.mission-id}}_{{inputs.parameters.plot-id}}/{{inputs.parameters.mission-id}}_{{inputs.parameters.plot-id}}_shift.csv"
+                  value: "{{inputs.parameters.pair-dir}}/{{inputs.parameters.mission-id}}_{{inputs.parameters.plot-id}}_shift.csv"
 
 ## Definitions of individual steps (templates)
     # Parses a .csv with drone_mission_id, plot_id columns (no header)
@@ -288,7 +291,7 @@ spec:
 
     # Download photogrammetry products (for a single or composite mission) from S3 to the shared volume.
     # Returns a JSON dict of local file paths via outputs.parameters.local-files.
-    # Keys: camera, chm, dtm, mesh. Fails if any expected file is missing.
+    # Keys: chm. Fails if any expected file is missing.
     # S3 source path: <s3-bucket>/<S3_DATA_FOLDER>/<mission-id>/full/<mission-id>
     - name: download-input-data
       inputs:
@@ -299,7 +302,6 @@ spec:
           - name: s3-data-folder
             value: "{{workflow.parameters.S3_DATA_FOLDER}}"
           - name: local-dir
-            value: "{{workflow.parameters.TEMP_FOLDER}}/{{workflow.name}}/{{inputs.parameters.mission-id}}"
       outputs:
         parameters:
           - name: local-files
