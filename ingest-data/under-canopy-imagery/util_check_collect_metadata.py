@@ -1,5 +1,8 @@
-import pandas as pd
+import shutil
 from datetime import timedelta
+from pathlib import Path
+
+import pandas as pd
 import matplotlib.pyplot as plt
 
 import numpy as np
@@ -10,6 +13,7 @@ TIMESTAMPS = (
 )
 COLLECT_LEVEL_VIS_FOLDER = "/ofo-share/repos/david/ofo-argo/scratch/gopro-timestamp-issues/long_gap_visualizations"
 OUTPUT_UNMATCHED_IMAGES = "/ofo-share/repos/david/ofo-argo/scratch/gopro-timestamp-issues/unmatched_images.csv"
+UNMATCHED_VIS_FOLDER = "/ofo-share/repos/david/ofo-argo/scratch/gopro-timestamp-issues/unmatched_visualizations"
 
 #
 TIMESTAMP_FLEXIBILITY = timedelta(seconds=6 * 60)
@@ -18,7 +22,9 @@ TIMESTAMP_CHECK_DELTA = timedelta(seconds=60 * 60)
 TIMESTAMP_MAX_GAP = 60 * 0.5
 
 
-def check_for_duplicates(all_matched_image_metadata, unmatched_images_output_file):
+def check_for_duplicates(
+    image_metadata, all_matched_image_metadata, unmatched_images_output_file
+):
     # Check for images that were matched to more than one collect
     duplicated_images = all_matched_image_metadata[
         all_matched_image_metadata.SourceFile.duplicated(keep=False)
@@ -41,6 +47,8 @@ def check_for_duplicates(all_matched_image_metadata, unmatched_images_output_fil
     print(f"{len(unmatched_images)} images not matched to any collect")
 
     unmatched_images.to_csv(unmatched_images_output_file)
+
+    return unmatched_images
 
 
 def load_and_preprocess(mission_metadata_file, timestamps_file):
@@ -155,6 +163,70 @@ def match_images_to_collects(mission_metadata, image_metadata, vis_folder):
     return all_matched_image_metadata
 
 
+def plot_unmatched_by_date(unmatched_images, output_folder):
+    """One plot per date, with each prefix on its own row."""
+    output_folder = Path(output_folder)
+    output_folder.mkdir(parents=True, exist_ok=True)
+
+    df = unmatched_images.sort_values("DateTimeOriginal")
+    for date, group in df.groupby(df["DateTimeOriginal"].dt.date):
+        for i, (prefix, g) in enumerate(group.groupby("prefix", sort=True)):
+            plt.scatter(g["DateTimeOriginal"], [i] * len(g), label=prefix)
+
+        plt.legend()
+        plt.xticks(rotation=90)
+        plt.tight_layout()
+        plt.savefig(Path(output_folder, f"{date}.png"))
+        plt.close()
+
+
+def plot_unmatched_by_date_prefix(unmatched_images, output_folder):
+    """One plot per (date, prefix) group, file names ordered from largest group to smallest."""
+    output_folder = Path(output_folder)
+    output_folder.mkdir(parents=True, exist_ok=True)
+
+    df = unmatched_images.sort_values("DateTimeOriginal")
+    grouped = df.groupby([df["DateTimeOriginal"].dt.date.rename("date"), "prefix"])
+    group_sizes = grouped.size().sort_values(ascending=False)
+
+    for rank, ((date, prefix), size) in enumerate(group_sizes.items()):
+        g = grouped.get_group((date, prefix))
+
+        plt.scatter(g["DateTimeOriginal"], [0] * len(g), label=prefix)
+        plt.title(f"{date} | {prefix} | n={size}")
+        plt.yticks([])
+        plt.xticks(rotation=90)
+        plt.tight_layout()
+        plt.savefig(Path(output_folder, f"{rank:03d}_{date}_{prefix}_n{size}.png"))
+        plt.close()
+
+
+def plot_unmatched_images(unmatched_images, output_folder, mode="both"):
+    """Plot unmatched image timestamps.
+
+    mode:
+        "by_date"        - one plot per date, each prefix on its own row
+        "by_date_prefix" - one plot per (date, prefix) group, ordered by group size
+        "both"           - both, in by_date/ and by_date_prefix/ subfolders
+
+    output_folder is deleted and recreated so plots from earlier runs don't linger.
+    """
+    if mode not in ("by_date", "by_date_prefix", "both"):
+        raise ValueError(f"Unknown mode: {mode!r}")
+
+    shutil.rmtree(output_folder, ignore_errors=True)
+
+    if mode == "by_date":
+        plot_unmatched_by_date(unmatched_images, output_folder)
+    elif mode == "by_date_prefix":
+        plot_unmatched_by_date_prefix(unmatched_images, output_folder)
+    else:
+        plot_unmatched_by_date(unmatched_images, Path(output_folder, "by_date"))
+        plot_unmatched_by_date_prefix(
+            unmatched_images, Path(output_folder, "by_date_prefix")
+        )
+
+
 mission_metadata, image_metadata = load_and_preprocess(MISSION_METADATA, TIMESTAMPS)
 
 all_matched_image_metadata = match_images_to_collects(
@@ -162,7 +234,11 @@ all_matched_image_metadata = match_images_to_collects(
 )
 
 # Check for images matching zero or multiple collects
-check_for_duplicates(
+unmatched_images = check_for_duplicates(
+    image_metadata=image_metadata,
     all_matched_image_metadata=all_matched_image_metadata,
     unmatched_images_output_file=OUTPUT_UNMATCHED_IMAGES,
 )
+
+# Visualize the timestamps of images that weren't matched to any collect
+plot_unmatched_images(unmatched_images, UNMATCHED_VIS_FOLDER, mode="both")
