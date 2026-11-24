@@ -7,26 +7,40 @@ start/end times (with some flexibility for camera clock drift), then reports:
     outside the time bounds (each gets a timeline plot)
   - images matched to more than one collect
   - images not matched to any collect (written to a CSV and plotted)
+  - for unmatched images, which collects' time windows they fall within, i.e.
+    collects they would have matched if their prefix were listed
+  - maps of GPS locations of matched images and those potential matches, one
+    per collect (requires exiftool; GPS is cached between runs)
 
 Usage:
     python util_check_collect_metadata.py <mission_metadata_csv> <timestamps_json> \
         <output_folder>
 
-    # Only make the per-date plots of unmatched images:
+    # Only make the per-date plots of unmatched images, and skip the GPS maps:
     python util_check_collect_metadata.py <mission_metadata_csv> <timestamps_json> \
-        <output_folder> --unmatched-plot-mode by_date
+        <output_folder> --unmatched-plot-mode by_date --skip-location-plots
 
 Outputs, all inside <output_folder>:
     unmatched_images.csv        images not matched to any collect
     collect_visualizations/     timelines for collects flagged as problematic
     unmatched_visualizations/   timelines of unmatched images (cleared each run)
+    unmatched_images_in_collect_windows.csv
+                                each unmatched image paired with every collect
+                                whose time window it falls within
+    potential_match_locations/  GPS maps of matched vs. potential images per
+                                collect (cleared each run)
+    gps_cache.csv               GPS read from image EXIF, reused on later runs
 """
 
 import argparse
 import shutil
+import subprocess
+import tempfile
 from datetime import timedelta
+from io import StringIO
 from pathlib import Path
 
+import geopandas as gpd
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
@@ -39,6 +53,9 @@ TIMESTAMP_CHECK_DELTA = timedelta(seconds=60 * 60)
 TIMESTAMP_MAX_GAP = 60 * 0.5
 
 UNMATCHED_PLOT_MODES = ("by_date", "by_date_prefix", "both", "none")
+
+MATCHED_COLOR = "tab:blue"
+POTENTIAL_COLOR = "tab:orange"
 
 
 def check_for_duplicates(
@@ -71,7 +88,7 @@ def check_for_duplicates(
 
 
 def load_and_preprocess(mission_metadata_file, timestamps_file):
-    mission_metadata = pd.read_csv(mission_metadata_file)
+    mission_metadata = pd.read_csv(mission_metadata_file, encoding="utf-8-sig")
     image_metadata = pd.read_json(timestamps_file)
 
     # Standardization
@@ -84,15 +101,16 @@ def load_and_preprocess(mission_metadata_file, timestamps_file):
         image_metadata["SourceFile"].str.split("/").str[-1].str[:4]
     )
 
-    # Subset columns
-    mission_metadata = mission_metadata[
-        [
-            "collect_id",
-            "collect_start_datetime",
-            "collect_end_datetime",
-            "file_prefixes",
-        ]
+    # Subset columns. contributor_dataset_name is optional and only used for labels
+    columns = [
+        "collect_id",
+        "collect_start_datetime",
+        "collect_end_datetime",
+        "file_prefixes",
     ]
+    if "contributor_dataset_name" in mission_metadata:
+        columns.append("contributor_dataset_name")
+    mission_metadata = mission_metadata[columns].copy()
     # Get a list of file prefixes
     mission_metadata.file_prefixes = mission_metadata.file_prefixes.str.split(" ")
     # Convert the start and end time to datetimes
@@ -253,6 +271,257 @@ def plot_unmatched_images(unmatched_images, output_folder, mode="both"):
         )
 
 
+def find_potential_collects(
+    unmatched_images, mission_metadata, timestamp_flexibility=TIMESTAMP_FLEXIBILITY
+):
+    """Pair each unmatched image with every collect whose time window it falls in.
+
+    The window is the collect's start/end +/- timestamp_flexibility, the same as
+    used for matching, so each pair is a collect the image would have matched if
+    its prefix were listed in that collect's file_prefixes.
+
+    Returns one row per (image, collect) pair, sorted by time, with an
+    n_candidate_collects column giving how many collects each image could belong to.
+    """
+    collect_columns = [
+        c
+        for c in [
+            "collect_id",
+            "contributor_dataset_name",
+            "file_prefixes",
+            "collect_start_datetime",
+            "collect_end_datetime",
+        ]
+        if c in mission_metadata
+    ]
+    collects = mission_metadata.dropna(
+        subset=["collect_start_datetime", "collect_end_datetime"]
+    )[collect_columns]
+    n_skipped = len(mission_metadata) - len(collects)
+    if n_skipped:
+        print(f"Skipping {n_skipped} collects with missing start/end times")
+
+    pairs = unmatched_images.merge(collects, how="cross")
+    potential = pairs[
+        (
+            pairs["DateTimeOriginal"]
+            > pairs["collect_start_datetime"] - timestamp_flexibility
+        )
+        & (
+            pairs["DateTimeOriginal"]
+            < pairs["collect_end_datetime"] + timestamp_flexibility
+        )
+    ].copy()
+    potential["n_candidate_collects"] = potential.groupby("SourceFile")[
+        "collect_id"
+    ].transform("size")
+    return potential.sort_values(["DateTimeOriginal", "collect_id"])
+
+
+def summarize_potential_collects(potential, n_unmatched):
+    """Print how many unmatched images could belong to a collect, grouped by
+    collect and prefix, largest groups first. Returns the summary table."""
+    n_images = potential["SourceFile"].nunique()
+    n_multi = potential.loc[
+        potential["n_candidate_collects"] > 1, "SourceFile"
+    ].nunique()
+    print(
+        f"{n_images} of {n_unmatched} unmatched images fall within at least one "
+        f"collect's time window ({n_multi} within more than one)"
+    )
+    if potential.empty:
+        return None
+
+    group_columns = [
+        c
+        for c in ["collect_id", "contributor_dataset_name", "prefix"]
+        if c in potential
+    ]
+    summary = (
+        potential.assign(
+            collect_prefixes=potential["file_prefixes"].map(
+                lambda p: " ".join(p) if isinstance(p, list) else p
+            )
+        )
+        .groupby(group_columns, dropna=False)
+        .agg(
+            n_images=("SourceFile", "size"),
+            n_single_candidate=(
+                "n_candidate_collects",
+                lambda n: int((n == 1).sum()),
+            ),
+            first=("DateTimeOriginal", "min"),
+            last=("DateTimeOriginal", "max"),
+            collect_prefixes=("collect_prefixes", "first"),
+            collect_start=("collect_start_datetime", "first"),
+            collect_end=("collect_end_datetime", "first"),
+        )
+        .sort_values("n_images", ascending=False)
+    )
+    with pd.option_context(
+        "display.max_rows", None, "display.max_columns", None, "display.width", 250
+    ):
+        print(summary)
+    return summary
+
+
+def read_gps(files, cache_file):
+    """Return GPS lat/lon for the given image files.
+
+    Results are cached in cache_file (a CSV), and only files not already in the
+    cache are read with exiftool. Files without GPS are cached with empty values
+    so they aren't re-read on every run.
+    """
+    cache_file = Path(cache_file)
+    columns = ["SourceFile", "GPSLatitude", "GPSLongitude"]
+    cache = (
+        pd.read_csv(cache_file)
+        if cache_file.exists()
+        else pd.DataFrame(columns=columns)
+    )
+
+    missing = sorted(set(files) - set(cache["SourceFile"]))
+    if missing:
+        print(f"Reading GPS from {len(missing)} files with exiftool...")
+        with tempfile.NamedTemporaryFile("w", suffix=".txt") as argfile:
+            argfile.write("\n".join(missing))
+            argfile.flush()
+            result = subprocess.run(
+                [
+                    "exiftool",
+                    "-n",
+                    "-fast2",
+                    "-csv",
+                    "-GPSLatitude",
+                    "-GPSLongitude",
+                    "-@",
+                    argfile.name,
+                ],
+                capture_output=True,
+                text=True,
+            )
+        new = (
+            pd.read_csv(StringIO(result.stdout))
+            if result.stdout.strip()
+            else pd.DataFrame(columns=["SourceFile"])
+        )
+        for col in ["GPSLatitude", "GPSLongitude"]:
+            if col not in new:
+                new[col] = pd.NA
+        new = pd.DataFrame({"SourceFile": missing}).merge(
+            new[columns], on="SourceFile", how="left"
+        )
+        cache = pd.concat([cache, new], ignore_index=True)
+        cache_file.parent.mkdir(parents=True, exist_ok=True)
+        cache.to_csv(cache_file, index=False)
+
+    return cache[cache["SourceFile"].isin(files)]
+
+
+def plot_collect_locations(matched, potential, title, output_path):
+    """Map matched and potential images for one collect, in local UTM meters.
+
+    Both inputs need GPSLatitude, GPSLongitude and prefix columns. Images without
+    GPS are left out and counted in the title. Returns False if nothing had GPS.
+    """
+    both = pd.concat(
+        [matched.assign(kind="matched"), potential.assign(kind="potential")]
+    )
+    n_no_gps = both["GPSLatitude"].isna().sum()
+    both = both.dropna(subset=["GPSLatitude", "GPSLongitude"])
+    if both.empty:
+        return False
+
+    gdf = gpd.GeoDataFrame(
+        both,
+        geometry=gpd.points_from_xy(both["GPSLongitude"], both["GPSLatitude"]),
+        crs="EPSG:4326",
+    )
+    gdf = gdf.to_crs(gdf.estimate_utm_crs())
+
+    fig, ax = plt.subplots(figsize=(8, 8))
+    for kind, color in [("matched", MATCHED_COLOR), ("potential", POTENTIAL_COLOR)]:
+        sub = gdf[gdf["kind"] == kind]
+        prefixes = " ".join(sorted(sub["prefix"].unique()))
+        ax.scatter(
+            sub.geometry.x,
+            sub.geometry.y,
+            s=6,
+            c=color,
+            alpha=0.7,
+            label=f"{kind} (n={len(sub)}; {prefixes})",
+        )
+    ax.set_aspect("equal")
+    ax.set_xlabel(f"Easting (m, {gdf.crs.name})")
+    ax.set_ylabel("Northing (m)")
+    if n_no_gps:
+        title += f"\n({n_no_gps} images without GPS not shown)"
+    ax.set_title(title)
+    ax.legend()
+    fig.tight_layout()
+    fig.savefig(output_path, dpi=150)
+    plt.close(fig)
+    return True
+
+
+def plot_potential_match_locations(
+    all_matched_image_metadata,
+    potential,
+    output_folder,
+    gps_cache_file,
+    only_single_candidate=True,
+):
+    """Map matched vs. potential images for each collect that has potential matches.
+
+    potential is the output of find_potential_collects. If only_single_candidate
+    is True, images that fall within more than one collect's window are left out,
+    so every potential image shown has exactly one possible collect.
+
+    output_folder is deleted and recreated so maps from earlier runs don't linger.
+    """
+    if only_single_candidate:
+        n_multi = potential.loc[
+            potential["n_candidate_collects"] > 1, "SourceFile"
+        ].nunique()
+        print(f"Leaving out {n_multi} images that fall within more than one collect")
+        potential = potential[potential["n_candidate_collects"] == 1]
+
+    collect_ids = sorted(potential["collect_id"].unique())
+    matched = all_matched_image_metadata[
+        all_matched_image_metadata["collect_ID"].isin(collect_ids)
+    ]
+
+    gps = read_gps(
+        set(matched["SourceFile"]) | set(potential["SourceFile"]), gps_cache_file
+    )
+    matched = matched.merge(gps, on="SourceFile", how="left")
+    potential = potential.merge(gps, on="SourceFile", how="left")
+
+    output_folder = Path(output_folder)
+    shutil.rmtree(output_folder, ignore_errors=True)
+    output_folder.mkdir(parents=True, exist_ok=True)
+
+    for collect_id in collect_ids:
+        m = matched[matched["collect_ID"] == collect_id]
+        p = potential[potential["collect_id"] == collect_id]
+
+        title = f"collect {collect_id}"
+        if (
+            "contributor_dataset_name" in p
+            and p["contributor_dataset_name"].notna().any()
+        ):
+            title += f": {p['contributor_dataset_name'].dropna().iloc[0]}"
+
+        plotted = plot_collect_locations(
+            m, p, title, output_folder / f"collect_{collect_id}.png"
+        )
+        n_no_gps = m["GPSLatitude"].isna().sum() + p["GPSLatitude"].isna().sum()
+        print(
+            f"collect {collect_id}: {len(m)} matched, {len(p)} potential, "
+            f"{n_no_gps} without GPS" + ("" if plotted else " (no GPS, not plotted)")
+        )
+
+
 def parse_args():
     parser = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
@@ -311,6 +580,32 @@ def parse_args():
             "this. Default: %(default)s."
         ),
     )
+    parser.add_argument(
+        "--skip-location-plots",
+        action="store_true",
+        help=(
+            "Don't map GPS locations of matched and potential images. Mapping "
+            "reads GPS with exiftool, which needs the image files to be readable."
+        ),
+    )
+    parser.add_argument(
+        "--include-multi-candidate",
+        action="store_true",
+        help=(
+            "In the GPS maps, also show unmatched images that fall within more than "
+            "one collect's time window. By default only images with exactly one "
+            "possible collect are shown."
+        ),
+    )
+    parser.add_argument(
+        "--gps-cache",
+        type=Path,
+        default=None,
+        help=(
+            "CSV used to cache GPS read from images between runs. "
+            "Default: <output_folder>/gps_cache.csv."
+        ),
+    )
     return parser.parse_args()
 
 
@@ -346,6 +641,30 @@ def main():
             unmatched_images,
             args.output_folder / "unmatched_visualizations",
             mode=args.unmatched_plot_mode,
+        )
+
+    # Find collects that unmatched images would have matched if their prefix were listed
+    timestamp_flexibility = timedelta(minutes=args.timestamp_flexibility_minutes)
+    potential = find_potential_collects(
+        unmatched_images, mission_metadata, timestamp_flexibility
+    )
+    summarize_potential_collects(potential, n_unmatched=len(unmatched_images))
+    potential_csv = args.output_folder / "unmatched_images_in_collect_windows.csv"
+    potential.assign(
+        file_prefixes=potential["file_prefixes"].map(
+            lambda p: " ".join(p) if isinstance(p, list) else p
+        )
+    ).to_csv(potential_csv, index=False)
+    print(f"Wrote {potential_csv}")
+
+    # Map where those images were taken relative to each collect's matched images
+    if not args.skip_location_plots and not potential.empty:
+        plot_potential_match_locations(
+            all_matched_image_metadata,
+            potential,
+            args.output_folder / "potential_match_locations",
+            gps_cache_file=args.gps_cache or args.output_folder / "gps_cache.csv",
+            only_single_candidate=not args.include_multi_candidate,
         )
 
 
