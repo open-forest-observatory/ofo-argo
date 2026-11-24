@@ -1,25 +1,44 @@
+"""
+Check user-entered collect metadata against image timestamps.
+
+Matches each image to a collect using the collect's file prefixes and its
+start/end times (with some flexibility for camera clock drift), then reports:
+  - collects with no matching images, long gaps between images, or images
+    outside the time bounds (each gets a timeline plot)
+  - images matched to more than one collect
+  - images not matched to any collect (written to a CSV and plotted)
+
+Usage:
+    python util_check_collect_metadata.py <mission_metadata_csv> <timestamps_json> \
+        <output_folder>
+
+    # Only make the per-date plots of unmatched images:
+    python util_check_collect_metadata.py <mission_metadata_csv> <timestamps_json> \
+        <output_folder> --unmatched-plot-mode by_date
+
+Outputs, all inside <output_folder>:
+    unmatched_images.csv        images not matched to any collect
+    collect_visualizations/     timelines for collects flagged as problematic
+    unmatched_visualizations/   timelines of unmatched images (cleared each run)
+"""
+
+import argparse
 import shutil
 from datetime import timedelta
 from pathlib import Path
 
-import pandas as pd
 import matplotlib.pyplot as plt
-
 import numpy as np
+import pandas as pd
 
-MISSION_METADATA = "/ofo-share/repos/david/ofo-argo/scratch/gopro-timestamp-issues/mission_metadata.csv"
-TIMESTAMPS = (
-    "/ofo-share/repos/david/ofo-argo/scratch/gopro-timestamp-issues/timestamps.json"
-)
-COLLECT_LEVEL_VIS_FOLDER = "/ofo-share/repos/david/ofo-argo/scratch/gopro-timestamp-issues/long_gap_visualizations"
-OUTPUT_UNMATCHED_IMAGES = "/ofo-share/repos/david/ofo-argo/scratch/gopro-timestamp-issues/unmatched_images.csv"
-UNMATCHED_VIS_FOLDER = "/ofo-share/repos/david/ofo-argo/scratch/gopro-timestamp-issues/unmatched_visualizations"
-
-#
+# Images within this much of a collect's start/end times are matched to it
 TIMESTAMP_FLEXIBILITY = timedelta(seconds=6 * 60)
+# Wider window used to look for images that are close to, but outside, a collect
 TIMESTAMP_CHECK_DELTA = timedelta(seconds=60 * 60)
-
+# Gaps between consecutive images longer than this (seconds) are reported
 TIMESTAMP_MAX_GAP = 60 * 0.5
+
+UNMATCHED_PLOT_MODES = ("by_date", "by_date_prefix", "both", "none")
 
 
 def check_for_duplicates(
@@ -87,7 +106,14 @@ def load_and_preprocess(mission_metadata_file, timestamps_file):
     return mission_metadata, image_metadata
 
 
-def match_images_to_collects(mission_metadata, image_metadata, vis_folder):
+def match_images_to_collects(
+    mission_metadata,
+    image_metadata,
+    vis_folder,
+    timestamp_flexibility=TIMESTAMP_FLEXIBILITY,
+    timestamp_check_delta=TIMESTAMP_CHECK_DELTA,
+    timestamp_max_gap=TIMESTAMP_MAX_GAP,
+):
     all_matched_image_metadata = []
 
     for _, row in mission_metadata.iterrows():
@@ -99,8 +125,8 @@ def match_images_to_collects(mission_metadata, image_metadata, vis_folder):
 
         # Filter with a generous flexibility
         # This is meant to catch any images that could plausibly match to this user-entered metadata record
-        start_time = row["collect_start_datetime"] - TIMESTAMP_CHECK_DELTA
-        end_time = row["collect_end_datetime"] + TIMESTAMP_CHECK_DELTA
+        start_time = row["collect_start_datetime"] - timestamp_check_delta
+        end_time = row["collect_end_datetime"] + timestamp_check_delta
         images_to_check = images_matching_prefix[
             (images_matching_prefix.DateTimeOriginal > start_time)
             & (images_matching_prefix.DateTimeOriginal < end_time)
@@ -121,13 +147,13 @@ def match_images_to_collects(mission_metadata, image_metadata, vis_folder):
             print(f"collect id {collect_id}: had no matching images")
             plot = True
 
-        if max_delta_seconds > TIMESTAMP_MAX_GAP:
+        if max_delta_seconds > timestamp_max_gap:
             print(f"collect id {collect_id}: max delta {max_delta_seconds}")
             plot = True
 
         # See if there are any images outside of the flexibility afforded for timesync issues
-        start_time = row["collect_start_datetime"] - TIMESTAMP_FLEXIBILITY
-        end_time = row["collect_end_datetime"] + TIMESTAMP_FLEXIBILITY
+        start_time = row["collect_start_datetime"] - timestamp_flexibility
+        end_time = row["collect_end_datetime"] + timestamp_flexibility
 
         images_matching_time_bounds = images_to_check[
             (images_to_check.DateTimeOriginal > start_time)
@@ -227,18 +253,101 @@ def plot_unmatched_images(unmatched_images, output_folder, mode="both"):
         )
 
 
-mission_metadata, image_metadata = load_and_preprocess(MISSION_METADATA, TIMESTAMPS)
+def parse_args():
+    parser = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+    )
+    parser.add_argument(
+        "mission_metadata",
+        type=Path,
+        help=(
+            "CSV of user-entered collect metadata, with collect_id, "
+            "collect_start_datetime, collect_end_datetime and file_prefixes columns."
+        ),
+    )
+    parser.add_argument(
+        "timestamps",
+        type=Path,
+        help="JSON of image SourceFile and DateTimeOriginal, as written by exiftool -json.",
+    )
+    parser.add_argument(
+        "output_folder",
+        type=Path,
+        help="Folder to write the unmatched-images CSV and visualizations to.",
+    )
+    parser.add_argument(
+        "--unmatched-plot-mode",
+        choices=UNMATCHED_PLOT_MODES,
+        default="both",
+        help=(
+            "How to plot unmatched images: one plot per date (by_date), one per "
+            "date and prefix (by_date_prefix), both, or none. Default: both."
+        ),
+    )
+    parser.add_argument(
+        "--timestamp-flexibility-minutes",
+        type=float,
+        default=TIMESTAMP_FLEXIBILITY.total_seconds() / 60,
+        help=(
+            "Images within this many minutes of a collect's start/end are matched "
+            "to it. Default: %(default)s."
+        ),
+    )
+    parser.add_argument(
+        "--timestamp-check-delta-minutes",
+        type=float,
+        default=TIMESTAMP_CHECK_DELTA.total_seconds() / 60,
+        help=(
+            "Window, in minutes either side of a collect, searched for nearby "
+            "images that fall outside the matching bounds. Default: %(default)s."
+        ),
+    )
+    parser.add_argument(
+        "--max-gap-seconds",
+        type=float,
+        default=TIMESTAMP_MAX_GAP,
+        help=(
+            "Report collects with a gap between consecutive images longer than "
+            "this. Default: %(default)s."
+        ),
+    )
+    return parser.parse_args()
 
-all_matched_image_metadata = match_images_to_collects(
-    mission_metadata, image_metadata, vis_folder=COLLECT_LEVEL_VIS_FOLDER
-)
 
-# Check for images matching zero or multiple collects
-unmatched_images = check_for_duplicates(
-    image_metadata=image_metadata,
-    all_matched_image_metadata=all_matched_image_metadata,
-    unmatched_images_output_file=OUTPUT_UNMATCHED_IMAGES,
-)
+def main():
+    args = parse_args()
 
-# Visualize the timestamps of images that weren't matched to any collect
-plot_unmatched_images(unmatched_images, UNMATCHED_VIS_FOLDER, mode="both")
+    collect_vis_folder = args.output_folder / "collect_visualizations"
+    collect_vis_folder.mkdir(parents=True, exist_ok=True)
+
+    mission_metadata, image_metadata = load_and_preprocess(
+        args.mission_metadata, args.timestamps
+    )
+
+    all_matched_image_metadata = match_images_to_collects(
+        mission_metadata,
+        image_metadata,
+        vis_folder=collect_vis_folder,
+        timestamp_flexibility=timedelta(minutes=args.timestamp_flexibility_minutes),
+        timestamp_check_delta=timedelta(minutes=args.timestamp_check_delta_minutes),
+        timestamp_max_gap=args.max_gap_seconds,
+    )
+
+    # Check for images matching zero or multiple collects
+    unmatched_images = check_for_duplicates(
+        image_metadata=image_metadata,
+        all_matched_image_metadata=all_matched_image_metadata,
+        unmatched_images_output_file=args.output_folder / "unmatched_images.csv",
+    )
+
+    # Visualize the timestamps of images that weren't matched to any collect
+    if args.unmatched_plot_mode != "none":
+        plot_unmatched_images(
+            unmatched_images,
+            args.output_folder / "unmatched_visualizations",
+            mode=args.unmatched_plot_mode,
+        )
+
+
+if __name__ == "__main__":
+    main()
