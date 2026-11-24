@@ -1,9 +1,10 @@
 # Purpose: Dedicated service account and long-lived token for logging in to the Argo UI.
 #
 # The Argo server runs in "client" auth mode: whoever presents a token gets that service account's
-# permissions. This account is scoped to the argo namespace and can manage workflows and view their
-# pods, logs, and events, but (unlike the argo-server account) cannot exec into pods or read secrets
-# other than the S3 credentials needed to view archived logs.
+# permissions. This account is scoped to the argo namespace and can manage workflows (including
+# deleting their pods, which retrying a workflow requires) and view their pods, logs, and events,
+# but (unlike the argo-server account) cannot exec into pods or read secrets other than the S3
+# credentials needed to view archived logs.
 #
 # The token lives in the argo-ui.service-account-token Secret. Deleting that Secret revokes the
 # token; re-applying the kustomization creates a new one (see "Create Argo UI access token" in
@@ -43,6 +44,10 @@ rules:
 - apiGroups: [""]
   resources: ["pods", "pods/log", "events", "configmaps", "serviceaccounts"]
   verbs: ["get", "list", "watch"]
+# Retrying a workflow deletes the pods of its failed steps, using the logged-in user's permissions.
+- apiGroups: [""]
+  resources: ["pods"]
+  verbs: ["delete"]
 # Viewing logs/artifacts archived in S3 reads the artifact repository credentials as the user.
 - apiGroups: [""]
   resources: ["secrets"]
