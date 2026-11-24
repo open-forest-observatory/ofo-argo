@@ -52,7 +52,7 @@ spec:
       # be automatically trusted. Pairings with values higher than this require manual assessment
       # and an image is saved out to support that.
       - name: RATIO_QUALITY_METRIC_THRESHOLD
-        value: "0.5"
+        value: "0.4887"
       # S3 bucket to obtain drone mission bounds metadata and CHM files from
       - name: S3_BUCKET_PUBLIC
         value: "ofo-public"
@@ -241,8 +241,6 @@ spec:
       nodeSelector:
         feature.node.kubernetes.io/workload-type: cpu
       script:
-        # Note this only relies on core geopandas functionality but this means this image will be cached
-        # for the following step.
         image: ghcr.io/open-forest-observatory/tree-registration-and-matching:{{workflow.parameters.TRAM_IMAGE_TAG}}
         volumeMounts:
           - name: data
@@ -256,6 +254,8 @@ spec:
         command: ["python"]
         source: |
           from pathlib import Path
+
+          from tree_registration_and_matching.utils import ensure_height_is_present
 
           import geopandas as gpd
 
@@ -279,9 +279,16 @@ spec:
               ground_reference_bounds["plot_id"].astype(str) == ground_reference_plot_id
           ]
 
-          # Fail early with a clear message if the plot is missing from either file
-          if ground_reference_trees.empty:
-              raise ValueError(f"No ground reference trees found for plot {ground_reference_plot_id}")
+          # Impute height where needed and possible and drop remaining trees
+          # This is useful to get a more accurate count of trees, thought in neglects min height
+          # thresholding. More importantly, it is so downstream tasks such as visualization and
+          # manual registration have access to a consitent height column.
+          ground_reference_trees = ensure_height_is_present(ground_reference_trees)
+
+          # Fail early with a clear message if the plot is missing from either file or there aren't
+          # enough trees retained
+          if len(ground_reference_trees) < 2:
+              raise ValueError(f"Not enough ground reference trees found for plot {ground_reference_plot_id}, only {len(ground_reference_trees)}, when two are required")
           if ground_reference_bounds.empty:
               raise ValueError(f"No ground reference bounds found for plot {ground_reference_plot_id}")
 
