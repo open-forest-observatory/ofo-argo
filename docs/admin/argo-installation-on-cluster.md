@@ -379,7 +379,8 @@ nslookup ${ARGO_HOSTNAME}
 The Argo UI uses `client` auth mode (the default): you log in by pasting a Kubernetes service
 account token, and you get that service account's permissions. We use a dedicated `argo-ui`
 service account (created by the kustomization, from `setup/argo/argo-ui-access.yaml`), scoped to
-the `argo` namespace, with permission to manage workflows and view their pods, logs, and events.
+the `argo` namespace, with permission to manage workflows (including deleting their pods, which
+retrying a workflow requires) and view their pods, logs, and events.
 (Don't use a token for the `argo-server` service account: it has cluster-wide permissions,
 including reading all secrets and exec-ing into pods.)
 
