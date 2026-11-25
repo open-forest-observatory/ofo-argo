@@ -271,8 +271,27 @@ def match_images_to_collects(
             print(f"collect id {collect_id}: images outside of bounds")
             plot = True
 
-        images_matching_time_bounds["collect_id"] = collect_id
-        all_matched_image_metadata.append(images_matching_time_bounds)
+        # See if the matched images cover the whole collect, i.e. they don't start
+        # well after the collect's start or stop well before its end
+        if len(images_matching_time_bounds) > 0:
+            first_image = images_matching_time_bounds.DateTimeOriginal.min()
+            last_image = images_matching_time_bounds.DateTimeOriginal.max()
+            if first_image > row["collect_start_datetime"] + timestamp_flexibility:
+                print(
+                    f"collect id {collect_id}: images start "
+                    f"{first_image - row['collect_start_datetime']} after the collect start"
+                )
+                plot = True
+            if last_image < row["collect_end_datetime"] - timestamp_flexibility:
+                print(
+                    f"collect id {collect_id}: images end "
+                    f"{row['collect_end_datetime'] - last_image} before the collect end"
+                )
+                plot = True
+
+        all_matched_image_metadata.append(
+            images_matching_time_bounds.assign(collect_id=collect_id)
+        )
 
         if plot:
             plt.scatter(
