@@ -53,6 +53,9 @@ spec:
       # and an image is saved out to support that.
       - name: RATIO_QUALITY_METRIC_THRESHOLD
         value: "0.4887"
+      # The minimum height of a tree to use in registration
+      - name: MIN_TREE_HEIGHT
+        value: "5.0"
       # S3 bucket to obtain drone mission bounds metadata and CHM files from
       - name: S3_BUCKET_PUBLIC
         value: "ofo-public"
@@ -108,21 +111,7 @@ spec:
           - name: pair-dir
             value: "{{workflow.parameters.TEMP_FOLDER}}/{{workflow.name}}/per-pair-data/{{inputs.parameters.mission-id}}_{{inputs.parameters.plot-id}}"
       dag:
-        # failFast=false ensures other datasets continue if this one fails
-        failFast: false
         tasks:
-          - name: download-input-data
-            template: download-input-data
-            arguments:
-              parameters:
-                - name: mission-id
-                  value: "{{inputs.parameters.mission-id}}"
-                - name: s3-bucket
-                  value: "{{workflow.parameters.S3_BUCKET_PUBLIC}}"
-                - name: s3-data-folder
-                  value: "{{workflow.parameters.S3_DATA_FOLDER}}"
-                - name: local-dir
-                  value: "{{inputs.parameters.pair-dir}}"
           - name: prepare-ground-reference-data
             template: prepare-ground-reference-data
             arguments:
@@ -133,19 +122,36 @@ spec:
                   value: "{{workflow.parameters.GROUND_REFERENCE_TREES_FILE}}"
                 - name: ground-reference-bounds-file
                   value: "{{workflow.parameters.GROUND_REFERENCE_PLOTS_FILE}}"
+                - name: min-tree-height
+                  value: "{{workflow.parameters.MIN_TREE_HEIGHT}}"
                 - name: ground-reference-trees-output-file
                   value: "{{inputs.parameters.pair-dir}}/ground-reference-trees.gpkg"
                 - name: ground-reference-bounds-output-file
                   value: "{{inputs.parameters.pair-dir}}/ground-reference-bounds.gpkg"
+          - name: download-input-data
+            template: download-input-data
+            depends: "prepare-ground-reference-data.Succeeded"
+            arguments:
+              parameters:
+                - name: mission-id
+                  value: "{{inputs.parameters.mission-id}}"
+                - name: s3-bucket
+                  value: "{{workflow.parameters.S3_BUCKET_PUBLIC}}"
+                - name: s3-data-folder
+                  value: "{{workflow.parameters.S3_DATA_FOLDER}}"
+                - name: local-dir
+                  value: "{{inputs.parameters.pair-dir}}"
           - name: register-trees
             template: register-trees
-            depends: "download-input-data.Succeeded && prepare-ground-reference-data.Succeeded"
+            depends: "download-input-data.Succeeded"
             arguments:
               parameters:
                 - name: input-trees-file
                   value: "{{tasks.prepare-ground-reference-data.outputs.parameters.ground-reference-trees-output-file}}"
                 - name: CHM-file
                   value: '{{=jsonpath(tasks["download-input-data"].outputs.parameters["local-files"], "$.chm")}}'
+                - name: min-tree-height
+                  value: "{{workflow.parameters.MIN_TREE_HEIGHT}}"
                 - name: output-shift-file
                   value: "{{inputs.parameters.pair-dir}}/{{inputs.parameters.mission-id}}_{{inputs.parameters.plot-id}}_shift.csv"
           - name: check-quality
@@ -230,6 +236,7 @@ spec:
           - name: ground-plot-id
           - name: ground-reference-trees-file
           - name: ground-reference-bounds-file
+          - name: min-tree-height
           - name: ground-reference-trees-output-file
           - name: ground-reference-bounds-output-file
       outputs:
@@ -255,7 +262,7 @@ spec:
         source: |
           from pathlib import Path
 
-          from tree_registration_and_matching.utils import ensure_height_is_present
+          from tree_registration_and_matching.entrypoints.register_trees_to_CHM import cleanup_field_trees
 
           import geopandas as gpd
 
@@ -265,6 +272,7 @@ spec:
           ground_reference_bounds_file = "{{inputs.parameters.ground-reference-bounds-file}}"
           ground_reference_trees_output_file = Path("{{inputs.parameters.ground-reference-trees-output-file}}")
           ground_reference_bounds_output_file = Path("{{inputs.parameters.ground-reference-bounds-output-file}}")
+          min_tree_height = float("{{inputs.parameters.min-tree-height}}")
 
           # Read the other products, which contain the data for all plots
           ground_reference_trees = gpd.read_file(ground_reference_trees_file)
@@ -279,11 +287,13 @@ spec:
               ground_reference_bounds["plot_id"].astype(str) == ground_reference_plot_id
           ]
 
-          # Impute height where needed and possible and drop remaining trees
-          # This is useful to get a more accurate count of trees, thought in neglects min height
-          # thresholding. More importantly, it is so downstream tasks such as visualization and
-          # manual registration have access to a consitent height column.
-          ground_reference_trees = ensure_height_is_present(ground_reference_trees)
+          # Impute height where needed and possible and drop remaining trees, also drop trees that
+          # are below the height cutoff. This should match the preprocessing step in the registration
+          # step but it is useful to do now for two reasons. First, this allows us to get an
+          # accurate count of trees available for matching, to fail early if it's insufficient.
+          # Second, it means that downstream tasks such as visualization and manual referencing
+          # have access to only high quality trees with height values imputed.
+          ground_reference_trees = cleanup_field_trees(ground_reference_trees, min_height=min_tree_height)
 
           # Fail early with a clear message if the plot is missing from either file or there aren't
           # enough trees retained
@@ -388,6 +398,7 @@ spec:
         parameters:
           - name: input-trees-file
           - name: CHM-file
+          - name: min-tree-height
           - name: output-shift-file
       outputs:
         parameters:
@@ -412,6 +423,8 @@ spec:
                   "{{inputs.parameters.CHM-file}}",
                   "--output-shift-summary",
                   "{{inputs.parameters.output-shift-file}}",
+                  "--min-tree-height",
+                  "{{inputs.parameters.min-tree-height}}",
                 ]
 
     # Reads the single-row shift CSV written by register-trees and prints its ratio_quality_metric value.
