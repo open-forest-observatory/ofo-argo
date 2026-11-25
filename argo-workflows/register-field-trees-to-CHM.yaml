@@ -42,7 +42,9 @@ spec:
     parameters:
       # The file on the mounted drive specifying the (drone mission, field plot) pairs to run on.
       # Field drone plots should be zero-padded to six places while the field plots should four.
-      # This should be a .csv, with no column and one ofo_ground-reference_trees.gpkgline per pairing, ordered: drone mission id, field plot id.
+      # This should be a .csv, with no header and one line per pairing, ordered: drone mission id,
+      # field plot id, photogrammetry id (the photogrammetry run to use for that pair, e.g.
+      # photogrammetry_03).
       - name: DATASETS_FILE
       # Path to the file of ground reference trees for all plots, with a `plot_id` column
       - name: GROUND_REFERENCE_TREES_FILE
@@ -62,9 +64,6 @@ spec:
       # Which folder to use on S3
       - name: S3_DATA_FOLDER
         value: "drone/missions_03"
-      # Which photogrammetry run to use
-      - name: PHOTOGRAMMETRY_ID
-        value: "photogrammetry_03"
       # All per-dataset temp products and outputs are saved under:
       # TEMP_FOLDER/{{workflow.name}}/{{dataset-name}}/
       - name: TEMP_FOLDER
@@ -99,6 +98,8 @@ spec:
                   value: "{{item.mission-id}}"
                 - name: plot-id
                   value: "{{item.plot-id}}"
+                - name: photogrammetry-id
+                  value: "{{item.photogrammetry-id}}"
             # Continue processing remaining datasets even if one fails
             withParam: "{{steps.determine-datasets.outputs.result}}"
 
@@ -107,9 +108,10 @@ spec:
         parameters:
           - name: mission-id
           - name: plot-id
+          - name: photogrammetry-id
           # Per-pair working directory. All per-pair intermediate files are written under this.
           - name: pair-dir
-            value: "{{workflow.parameters.TEMP_FOLDER}}/{{workflow.name}}/per-pair-data/{{inputs.parameters.mission-id}}_{{inputs.parameters.plot-id}}"
+            value: "{{workflow.parameters.TEMP_FOLDER}}/{{workflow.name}}/per-pair-data/{{inputs.parameters.mission-id}}-{{inputs.parameters.plot-id}}-{{inputs.parameters.photogrammetry-id}}"
       dag:
         tasks:
           - name: prepare-ground-reference-data
@@ -139,6 +141,8 @@ spec:
                   value: "{{workflow.parameters.S3_BUCKET_PUBLIC}}"
                 - name: s3-data-folder
                   value: "{{workflow.parameters.S3_DATA_FOLDER}}"
+                - name: photogrammetry-id
+                  value: "{{inputs.parameters.photogrammetry-id}}"
                 - name: local-dir
                   value: "{{inputs.parameters.pair-dir}}"
           - name: register-trees
@@ -187,14 +191,16 @@ spec:
                   value: "{{inputs.parameters.plot-id}}"
                 - name: mission-id
                   value: "{{inputs.parameters.mission-id}}"
+                - name: photogrammetry-id
+                  value: "{{inputs.parameters.photogrammetry-id}}"
                 - name: temp-dir
                   value: "{{inputs.parameters.pair-dir}}"
                 - name: shift-file
                   value: "{{inputs.parameters.pair-dir}}/{{inputs.parameters.mission-id}}_{{inputs.parameters.plot-id}}_shift.csv"
 
 ## Definitions of individual steps (templates)
-    # Parses a .csv with drone_mission_id, plot_id columns (no header)
-    # Returns a json list of dicts with "plot-id" and "mission-id" keys
+    # Parses a .csv with drone_mission_id, plot_id, photogrammetry_id columns (no header)
+    # Returns a json list of dicts with "plot-id", "mission-id" and "photogrammetry-id" keys
     - name: determine-datasets
       inputs:
         parameters:
@@ -211,20 +217,36 @@ spec:
           import json, sys
 
           datasets = []
-          # Track seen pairs so duplicate lines don't launch parallel jobs writing to the same directory
-          seen = set()
+          # Map each seen (mission, plot) pair to its photogrammetry id, so duplicate lines don't launch
+          # parallel jobs writing to the same directory, and a pair can't be given two photogrammetry ids
+          seen = {}
           with open("{{inputs.parameters.datasets-file}}", "r") as f:
-              for line in f:
+              for line_number, line in enumerate(f, start=1):
                   line = line.strip()
                   if not line:
                       continue
-                  drone_mission_id, ground_plot_id = [x.strip() for x in line.split(",")]
-                  if (drone_mission_id, ground_plot_id) in seen:
+                  fields = [x.strip() for x in line.split(",")]
+                  if len(fields) != 3 or not all(fields):
+                      raise ValueError(
+                          f"Line {line_number} of the datasets file should have three non-empty "
+                          f"columns (drone mission id, field plot id, photogrammetry id), got: {line!r}"
+                      )
+                  drone_mission_id, ground_plot_id, photogrammetry_id = fields
+                  pair = (drone_mission_id, ground_plot_id)
+                  if pair in seen:
+                      if seen[pair] != photogrammetry_id:
+                          raise ValueError(
+                              f"Line {line_number} of the datasets file gives photogrammetry id "
+                              f"{photogrammetry_id!r} for drone mission {drone_mission_id}, field plot "
+                              f"{ground_plot_id}, but an earlier line gave {seen[pair]!r}. Each pair "
+                              f"must use a single photogrammetry id."
+                          )
                       continue
-                  seen.add((drone_mission_id, ground_plot_id))
+                  seen[pair] = photogrammetry_id
                   datasets.append({
                     "plot-id": ground_plot_id,
                     "mission-id": drone_mission_id,
+                    "photogrammetry-id": photogrammetry_id,
                   })
           json.dump(datasets, sys.stdout)
 
@@ -311,7 +333,7 @@ spec:
     # Download photogrammetry products (for a single or composite mission) from S3 to the shared volume.
     # Returns a JSON dict of local file paths via outputs.parameters.local-files.
     # Keys: chm. Fails if any expected file is missing.
-    # S3 source path: <s3-bucket>/<S3_DATA_FOLDER>/<mission-id>/full/<mission-id>
+    # S3 source path: <s3-bucket>/<S3_DATA_FOLDER>/<mission-id>/<photogrammetry-id>/full/
     - name: download-input-data
       inputs:
         parameters:
@@ -320,6 +342,7 @@ spec:
             value: "ofo-public"
           - name: s3-data-folder
             value: "{{workflow.parameters.S3_DATA_FOLDER}}"
+          - name: photogrammetry-id
           - name: local-dir
       outputs:
         parameters:
@@ -337,7 +360,7 @@ spec:
             set -euo pipefail
             MISSION_ID="{{inputs.parameters.mission-id}}"
             LOCAL_DIR="{{inputs.parameters.local-dir}}"
-            S3_SRC="s3:{{inputs.parameters.s3-bucket}}/{{inputs.parameters.s3-data-folder}}/${MISSION_ID}/{{workflow.parameters.PHOTOGRAMMETRY_ID}}/full/"
+            S3_SRC="s3:{{inputs.parameters.s3-bucket}}/{{inputs.parameters.s3-data-folder}}/${MISSION_ID}/{{inputs.parameters.photogrammetry-id}}/full/"
             # TODO this could also be updated to include the tree top files
             INCLUDES="--include ${MISSION_ID}_chm-mesh.tif"
 
@@ -500,6 +523,7 @@ spec:
         parameters:
           - name: plot-id
           - name: mission-id
+          - name: photogrammetry-id
           - name: shift-file
           - name: temp-dir
       nodeSelector:
@@ -515,7 +539,7 @@ spec:
             set -euo pipefail
             SRC="{{inputs.parameters.shift-file}}"
             TEMP_DIR="{{inputs.parameters.temp-dir}}"
-            DST="s3:{{workflow.parameters.S3_UPLOAD_PATH}}/{{inputs.parameters.mission-id}}/{{workflow.parameters.PHOTOGRAMMETRY_ID}}/ground-reference-shifts/{{inputs.parameters.mission-id}}_{{inputs.parameters.plot-id}}_ground-reference-shift.csv"
+            DST="s3:{{workflow.parameters.S3_UPLOAD_PATH}}/{{inputs.parameters.mission-id}}/{{inputs.parameters.photogrammetry-id}}/ground-reference-shifts/{{inputs.parameters.mission-id}}_{{inputs.parameters.plot-id}}_ground-reference-shift.csv"
 
             echo "[rclone] Uploading selected files from $SRC -> $DST"
             rclone copyto "$SRC" "$DST" \
