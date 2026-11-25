@@ -513,8 +513,13 @@ def plot_potential_match_locations(
             title += f": {p['contributor_dataset_name'].dropna().iloc[0]}"
 
         plotted = plot_collect_locations(
-            m, p, title, output_folder / f"collect_{collect_id}.png"
+            m,
+            p,
+            title,
+            output_folder
+            / f"collect_{collect_id:06}_prefix_{'_'.join(sorted(p['prefix'].unique()))}.png",
         )
+
         n_no_gps = m["GPSLatitude"].isna().sum() + p["GPSLatitude"].isna().sum()
         print(
             f"collect {collect_id}: {len(m)} matched, {len(p)} potential, "
