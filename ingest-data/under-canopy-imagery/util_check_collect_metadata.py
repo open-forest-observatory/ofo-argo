@@ -5,6 +5,8 @@ Matches each image to a collect using the collect's file prefixes and its
 start/end times (with some flexibility for camera clock drift), then reports:
   - collects with no matching images, long gaps between images, or images
     outside the time bounds (each gets a timeline plot)
+  - duplicate images: the same filename and timestamp stored at more than one
+    path, e.g. a card copied into two folders
   - images matched to more than one collect
   - images not matched to any collect (written to a CSV and plotted)
   - for unmatched images, which collects' time windows they fall within, i.e.
@@ -21,14 +23,18 @@ Usage:
     python util_check_collect_metadata.py <mission_metadata_csv> <image_metadata> \
         <output_folder>
 
-    # Only make the per-date plots of unmatched images, and skip the GPS maps:
+    # Skip the timelines of unmatched images and the GPS maps:
     python util_check_collect_metadata.py <mission_metadata_csv> <image_metadata> \
-        <output_folder> --unmatched-plot-mode by_date --skip-location-plots
+        <output_folder> --skip-unmatched-plots --skip-location-plots
 
 Outputs, all inside <output_folder>:
+    duplicate_images.csv        images with the same filename and timestamp as
+                                another image at a different path
     unmatched_images.csv        images not matched to any collect
     collect_visualizations/     timelines for collects flagged as problematic
-    unmatched_visualizations/   timelines of unmatched images (cleared each run)
+                                (cleared each run)
+    unmatched_visualizations/   timelines of unmatched images, one per date
+                                (cleared each run)
     unmatched_images_in_collect_windows.csv
                                 each unmatched image paired with every collect
                                 whose time window it falls within
@@ -53,15 +59,51 @@ TIMESTAMP_CHECK_DELTA = timedelta(seconds=60 * 60)
 # Gaps between consecutive images longer than this (seconds) are reported
 TIMESTAMP_MAX_GAP = 60 * 0.5
 
-UNMATCHED_PLOT_MODES = ("by_date", "by_date_prefix", "both", "none")
-
 MATCHED_COLOR = "tab:blue"
 POTENTIAL_COLOR = "tab:orange"
 
 
-def check_for_duplicates(
+def find_duplicate_images(image_metadata):
+    """Find images stored at more than one path, e.g. a card copied into two folders.
+
+    Images are treated as duplicates when they share both a filename and a
+    DateTimeOriginal. Filename alone isn't enough, because GoPro filenames are
+    reused across cards and cameras.
+
+    Prints a summary and returns the duplicated rows, with a duplicate_group column
+    identifying which rows are copies of each other.
+    """
+    df = image_metadata.copy()
+    df["filename"] = df["SourceFile"].str.split("/").str[-1]
+    df["folder"] = df["SourceFile"].str.rsplit("/", n=1).str[0]
+
+    key = ["filename", "DateTimeOriginal"]
+    duplicates = df[df.duplicated(key, keep=False)].copy()
+    duplicates["duplicate_group"] = duplicates.groupby(key).ngroup()
+    duplicates = duplicates.sort_values(["duplicate_group", "SourceFile"])
+
+    n_groups = duplicates["duplicate_group"].nunique()
+    print(
+        f"{n_groups} images are stored at more than one path "
+        f"({len(duplicates)} files, {len(duplicates) - n_groups} extra copies)"
+    )
+    if n_groups:
+        folder_sets = duplicates.groupby("duplicate_group")["folder"].agg(
+            lambda folders: " | ".join(sorted(folders))
+        )
+        print("Folders containing the same images (and number of images):")
+        print(folder_sets.value_counts().to_string())
+
+    return duplicates
+
+
+def report_match_problems(
     image_metadata, all_matched_image_metadata, unmatched_images_output_file
 ):
+    """Report images matched to more than one collect, and find images matched to none.
+
+    Writes the unmatched images to unmatched_images_output_file and returns them.
+    """
     # Check for images that were matched to more than one collect
     duplicated_images = all_matched_image_metadata[
         all_matched_image_metadata.SourceFile.duplicated(keep=False)
@@ -73,7 +115,7 @@ def check_for_duplicates(
     if len(duplicated_images) > 0:
         collects_per_duplicated_image = duplicated_images.groupby(
             "SourceFile"
-        ).collect_ID.apply(lambda ids: tuple(sorted(ids)))
+        ).collect_id.apply(lambda ids: tuple(sorted(ids)))
         print("Collect ID combinations for duplicated images (and counts):")
         print(collects_per_duplicated_image.value_counts().to_string())
 
@@ -83,7 +125,7 @@ def check_for_duplicates(
     ]
     print(f"{len(unmatched_images)} images not matched to any collect")
 
-    unmatched_images.to_csv(unmatched_images_output_file)
+    unmatched_images.to_csv(unmatched_images_output_file, index=False)
 
     return unmatched_images
 
@@ -130,6 +172,15 @@ def load_and_preprocess(mission_metadata_file, image_metadata_file):
     mission_metadata = pd.read_csv(mission_metadata_file, encoding="utf-8-sig")
     image_metadata = read_image_metadata(image_metadata_file)
 
+    # Drop images without a timestamp, since they can't be matched to a collect
+    no_datetime = image_metadata["DateTimeOriginal"].isna()
+    if no_datetime.any():
+        print(
+            f"Dropping {no_datetime.sum()} of {len(image_metadata)} images with no "
+            "DateTimeOriginal"
+        )
+        image_metadata = image_metadata[~no_datetime].copy()
+
     # Standardization
     # Convert from string to datetime
     image_metadata["DateTimeOriginal"] = pd.to_datetime(
@@ -151,7 +202,7 @@ def load_and_preprocess(mission_metadata_file, image_metadata_file):
         columns.append("contributor_dataset_name")
     mission_metadata = mission_metadata[columns].copy()
     # Get a list of file prefixes
-    mission_metadata.file_prefixes = mission_metadata.file_prefixes.str.split(" ")
+    mission_metadata.file_prefixes = mission_metadata.file_prefixes.str.split()
     # Convert the start and end time to datetimes
     mission_metadata["collect_start_datetime"] = pd.to_datetime(
         mission_metadata["collect_start_datetime"], format="%Y-%m-%d %H:%M"
@@ -200,7 +251,6 @@ def match_images_to_collects(
         plot = False
 
         if len(images_to_check) == 0:
-            images_matching_prefix.DateTimeOriginal.dt.date().unique()
             print(f"collect id {collect_id}: had no matching images")
             plot = True
 
@@ -221,7 +271,7 @@ def match_images_to_collects(
             print(f"collect id {collect_id}: images outside of bounds")
             plot = True
 
-        images_matching_time_bounds["collect_ID"] = collect_id
+        images_matching_time_bounds["collect_id"] = collect_id
         all_matched_image_metadata.append(images_matching_time_bounds)
 
         if plot:
@@ -237,6 +287,11 @@ def match_images_to_collects(
                 c="r",
                 label="User-provided start and end",
             )
+            title = f"collect {collect_id}"
+            if pd.notna(row.get("contributor_dataset_name")):
+                title += f": {row['contributor_dataset_name']}"
+            plt.title(title)
+            plt.yticks([])
             plt.legend()
             plt.savefig(f"{vis_folder}/{collect_id}.png")
             plt.close("all")
@@ -246,9 +301,13 @@ def match_images_to_collects(
     return all_matched_image_metadata
 
 
-def plot_unmatched_by_date(unmatched_images, output_folder):
-    """One plot per date, with each prefix on its own row."""
+def plot_unmatched_images(unmatched_images, output_folder):
+    """Plot unmatched image timestamps, one plot per date with each prefix on its own row.
+
+    output_folder is deleted and recreated so plots from earlier runs don't linger.
+    """
     output_folder = Path(output_folder)
+    shutil.rmtree(output_folder, ignore_errors=True)
     output_folder.mkdir(parents=True, exist_ok=True)
 
     df = unmatched_images.sort_values("DateTimeOriginal")
@@ -261,53 +320,6 @@ def plot_unmatched_by_date(unmatched_images, output_folder):
         plt.tight_layout()
         plt.savefig(Path(output_folder, f"{date}.png"))
         plt.close()
-
-
-def plot_unmatched_by_date_prefix(unmatched_images, output_folder):
-    """One plot per (date, prefix) group, file names ordered from largest group to smallest."""
-    output_folder = Path(output_folder)
-    output_folder.mkdir(parents=True, exist_ok=True)
-
-    df = unmatched_images.sort_values("DateTimeOriginal")
-    grouped = df.groupby([df["DateTimeOriginal"].dt.date.rename("date"), "prefix"])
-    group_sizes = grouped.size().sort_values(ascending=False)
-
-    for rank, ((date, prefix), size) in enumerate(group_sizes.items()):
-        g = grouped.get_group((date, prefix))
-
-        plt.scatter(g["DateTimeOriginal"], [0] * len(g), label=prefix)
-        plt.title(f"{date} | {prefix} | n={size}")
-        plt.yticks([])
-        plt.xticks(rotation=90)
-        plt.tight_layout()
-        plt.savefig(Path(output_folder, f"{rank:03d}_{date}_{prefix}_n{size}.png"))
-        plt.close()
-
-
-def plot_unmatched_images(unmatched_images, output_folder, mode="both"):
-    """Plot unmatched image timestamps.
-
-    mode:
-        "by_date"        - one plot per date, each prefix on its own row
-        "by_date_prefix" - one plot per (date, prefix) group, ordered by group size
-        "both"           - both, in by_date/ and by_date_prefix/ subfolders
-
-    output_folder is deleted and recreated so plots from earlier runs don't linger.
-    """
-    if mode not in ("by_date", "by_date_prefix", "both"):
-        raise ValueError(f"Unknown mode: {mode!r}")
-
-    shutil.rmtree(output_folder, ignore_errors=True)
-
-    if mode == "by_date":
-        plot_unmatched_by_date(unmatched_images, output_folder)
-    elif mode == "by_date_prefix":
-        plot_unmatched_by_date_prefix(unmatched_images, output_folder)
-    else:
-        plot_unmatched_by_date(unmatched_images, Path(output_folder, "by_date"))
-        plot_unmatched_by_date_prefix(
-            unmatched_images, Path(output_folder, "by_date_prefix")
-        )
 
 
 def find_potential_collects(
@@ -454,15 +466,17 @@ def plot_potential_match_locations(
     all_matched_image_metadata,
     potential,
     output_folder,
-    only_single_candidate=True,
+    only_single_candidate=False,
 ):
     """Map matched vs. potential images for each collect that has potential matches.
 
     Both inputs need the GPSLatitude and GPSLongitude columns carried through from
-    the image metadata. potential is the output of find_potential_collects. If
-    only_single_candidate
-    is True, images that fall within more than one collect's window are left out,
-    so every potential image shown has exactly one possible collect.
+    the image metadata. potential is the output of find_potential_collects.
+
+    By default every collect an image could belong to gets a map showing it, so an
+    image that falls within several collects' windows appears on each of their
+    maps. If only_single_candidate is True, those images are left out, so every
+    potential image shown has exactly one possible collect.
 
     output_folder is deleted and recreated so maps from earlier runs don't linger.
     """
@@ -475,7 +489,7 @@ def plot_potential_match_locations(
 
     collect_ids = sorted(potential["collect_id"].unique())
     matched = all_matched_image_metadata[
-        all_matched_image_metadata["collect_ID"].isin(collect_ids)
+        all_matched_image_metadata["collect_id"].isin(collect_ids)
     ]
 
     output_folder = Path(output_folder)
@@ -483,7 +497,7 @@ def plot_potential_match_locations(
     output_folder.mkdir(parents=True, exist_ok=True)
 
     for collect_id in collect_ids:
-        m = matched[matched["collect_ID"] == collect_id]
+        m = matched[matched["collect_id"] == collect_id]
         p = potential[potential["collect_id"] == collect_id]
 
         title = f"collect {collect_id}"
@@ -535,13 +549,9 @@ def parse_args():
         help="Folder to write the unmatched-images CSV and visualizations to.",
     )
     parser.add_argument(
-        "--unmatched-plot-mode",
-        choices=UNMATCHED_PLOT_MODES,
-        default="both",
-        help=(
-            "How to plot unmatched images: one plot per date (by_date), one per "
-            "date and prefix (by_date_prefix), both, or none. Default: both."
-        ),
+        "--skip-unmatched-plots",
+        action="store_true",
+        help="Don't plot timelines of images not matched to any collect.",
     )
     parser.add_argument(
         "--timestamp-flexibility-minutes",
@@ -576,12 +586,13 @@ def parse_args():
         help=("Don't map GPS locations of matched and potential images."),
     )
     parser.add_argument(
-        "--include-multi-candidate",
+        "--only-single-candidate",
         action="store_true",
         help=(
-            "In the GPS maps, also show unmatched images that fall within more than "
-            "one collect's time window. By default only images with exactly one "
-            "possible collect are shown."
+            "In the GPS maps, leave out unmatched images that fall within more than "
+            "one collect's time window, so only images with exactly one possible "
+            "collect are shown. By default they appear on every collect they could "
+            "belong to."
         ),
     )
     return parser.parse_args()
@@ -590,12 +601,18 @@ def parse_args():
 def main():
     args = parse_args()
 
+    # Remove timelines from previous runs so collects no longer flagged don't linger
     collect_vis_folder = args.output_folder / "collect_visualizations"
+    shutil.rmtree(collect_vis_folder, ignore_errors=True)
     collect_vis_folder.mkdir(parents=True, exist_ok=True)
 
     mission_metadata, image_metadata = load_and_preprocess(
         args.mission_metadata, args.image_metadata
     )
+
+    # Check for the same image stored at more than one path
+    duplicate_images = find_duplicate_images(image_metadata)
+    duplicate_images.to_csv(args.output_folder / "duplicate_images.csv", index=False)
 
     all_matched_image_metadata = match_images_to_collects(
         mission_metadata,
@@ -607,18 +624,16 @@ def main():
     )
 
     # Check for images matching zero or multiple collects
-    unmatched_images = check_for_duplicates(
+    unmatched_images = report_match_problems(
         image_metadata=image_metadata,
         all_matched_image_metadata=all_matched_image_metadata,
         unmatched_images_output_file=args.output_folder / "unmatched_images.csv",
     )
 
     # Visualize the timestamps of images that weren't matched to any collect
-    if args.unmatched_plot_mode != "none":
+    if not args.skip_unmatched_plots:
         plot_unmatched_images(
-            unmatched_images,
-            args.output_folder / "unmatched_visualizations",
-            mode=args.unmatched_plot_mode,
+            unmatched_images, args.output_folder / "unmatched_visualizations"
         )
 
     # Find collects that unmatched images would have matched if their prefix were listed
@@ -641,7 +656,7 @@ def main():
             all_matched_image_metadata,
             potential,
             args.output_folder / "potential_match_locations",
-            only_single_candidate=not args.include_multi_candidate,
+            only_single_candidate=args.only_single_candidate,
         )
 
 
