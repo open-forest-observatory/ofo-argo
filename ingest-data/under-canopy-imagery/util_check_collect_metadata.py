@@ -1,5 +1,5 @@
 """
-Check user-entered collect metadata against image timestamps.
+Check user-entered collect metadata against image metadata.
 
 Matches each image to a collect using the collect's file prefixes and its
 start/end times (with some flexibility for camera clock drift), then reports:
@@ -10,14 +10,19 @@ start/end times (with some flexibility for camera clock drift), then reports:
   - for unmatched images, which collects' time windows they fall within, i.e.
     collects they would have matched if their prefix were listed
   - maps of GPS locations of matched images and those potential matches, one
-    per collect (requires exiftool; GPS is cached between runs)
+    per collect (only for images with GPSLatitude/GPSLongitude)
+
+The image metadata can be the GeoPackage written by 02_extract_and_upload_metadata.py
+(.gpkg), exiftool JSON output (.json), or a CSV (.csv). It needs SourceFile and
+DateTimeOriginal ("YYYY:MM:DD HH:MM:SS") columns, and GPSLatitude and GPSLongitude
+in decimal degrees for the location maps (as written by exiftool -n).
 
 Usage:
-    python util_check_collect_metadata.py <mission_metadata_csv> <timestamps_json> \
+    python util_check_collect_metadata.py <mission_metadata_csv> <image_metadata> \
         <output_folder>
 
     # Only make the per-date plots of unmatched images, and skip the GPS maps:
-    python util_check_collect_metadata.py <mission_metadata_csv> <timestamps_json> \
+    python util_check_collect_metadata.py <mission_metadata_csv> <image_metadata> \
         <output_folder> --unmatched-plot-mode by_date --skip-location-plots
 
 Outputs, all inside <output_folder>:
@@ -29,15 +34,11 @@ Outputs, all inside <output_folder>:
                                 whose time window it falls within
     potential_match_locations/  GPS maps of matched vs. potential images per
                                 collect (cleared each run)
-    gps_cache.csv               GPS read from image EXIF, reused on later runs
 """
 
 import argparse
 import shutil
-import subprocess
-import tempfile
 from datetime import timedelta
-from io import StringIO
 from pathlib import Path
 
 import geopandas as gpd
@@ -87,9 +88,47 @@ def check_for_duplicates(
     return unmatched_images
 
 
-def load_and_preprocess(mission_metadata_file, timestamps_file):
+def read_image_metadata(image_metadata_file):
+    """Read per-image metadata from a GeoPackage, exiftool JSON or CSV file.
+
+    Returns a DataFrame with SourceFile, DateTimeOriginal, GPSLatitude and
+    GPSLongitude columns. GPS columns are filled with NaN if the file has none.
+    """
+    image_metadata_file = Path(image_metadata_file)
+    suffix = image_metadata_file.suffix.lower()
+    if suffix == ".gpkg":
+        image_metadata = pd.DataFrame(
+            gpd.read_file(image_metadata_file).drop(columns="geometry")
+        )
+    elif suffix == ".json":
+        image_metadata = pd.read_json(image_metadata_file)
+    elif suffix == ".csv":
+        image_metadata = pd.read_csv(image_metadata_file)
+    else:
+        raise ValueError(
+            f"Unsupported image metadata file type {suffix!r}; "
+            "expected .gpkg, .json or .csv"
+        )
+
+    missing = {"SourceFile", "DateTimeOriginal"} - set(image_metadata.columns)
+    if missing:
+        raise ValueError(
+            f"{image_metadata_file} is missing required columns: {sorted(missing)}"
+        )
+
+    columns = ["SourceFile", "DateTimeOriginal", "GPSLatitude", "GPSLongitude"]
+    for col in ["GPSLatitude", "GPSLongitude"]:
+        if col not in image_metadata:
+            print(f"{image_metadata_file} has no {col} column; images have no GPS")
+            image_metadata[col] = np.nan
+        image_metadata[col] = pd.to_numeric(image_metadata[col], errors="coerce")
+
+    return image_metadata[columns].copy()
+
+
+def load_and_preprocess(mission_metadata_file, image_metadata_file):
     mission_metadata = pd.read_csv(mission_metadata_file, encoding="utf-8-sig")
-    image_metadata = pd.read_json(timestamps_file)
+    image_metadata = read_image_metadata(image_metadata_file)
 
     # Standardization
     # Convert from string to datetime
@@ -365,59 +404,6 @@ def summarize_potential_collects(potential, n_unmatched):
     return summary
 
 
-def read_gps(files, cache_file):
-    """Return GPS lat/lon for the given image files.
-
-    Results are cached in cache_file (a CSV), and only files not already in the
-    cache are read with exiftool. Files without GPS are cached with empty values
-    so they aren't re-read on every run.
-    """
-    cache_file = Path(cache_file)
-    columns = ["SourceFile", "GPSLatitude", "GPSLongitude"]
-    cache = (
-        pd.read_csv(cache_file)
-        if cache_file.exists()
-        else pd.DataFrame(columns=columns)
-    )
-
-    missing = sorted(set(files) - set(cache["SourceFile"]))
-    if missing:
-        print(f"Reading GPS from {len(missing)} files with exiftool...")
-        with tempfile.NamedTemporaryFile("w", suffix=".txt") as argfile:
-            argfile.write("\n".join(missing))
-            argfile.flush()
-            result = subprocess.run(
-                [
-                    "exiftool",
-                    "-n",
-                    "-fast2",
-                    "-csv",
-                    "-GPSLatitude",
-                    "-GPSLongitude",
-                    "-@",
-                    argfile.name,
-                ],
-                capture_output=True,
-                text=True,
-            )
-        new = (
-            pd.read_csv(StringIO(result.stdout))
-            if result.stdout.strip()
-            else pd.DataFrame(columns=["SourceFile"])
-        )
-        for col in ["GPSLatitude", "GPSLongitude"]:
-            if col not in new:
-                new[col] = pd.NA
-        new = pd.DataFrame({"SourceFile": missing}).merge(
-            new[columns], on="SourceFile", how="left"
-        )
-        cache = pd.concat([cache, new], ignore_index=True)
-        cache_file.parent.mkdir(parents=True, exist_ok=True)
-        cache.to_csv(cache_file, index=False)
-
-    return cache[cache["SourceFile"].isin(files)]
-
-
 def plot_collect_locations(matched, potential, title, output_path):
     """Map matched and potential images for one collect, in local UTM meters.
 
@@ -468,12 +454,13 @@ def plot_potential_match_locations(
     all_matched_image_metadata,
     potential,
     output_folder,
-    gps_cache_file,
     only_single_candidate=True,
 ):
     """Map matched vs. potential images for each collect that has potential matches.
 
-    potential is the output of find_potential_collects. If only_single_candidate
+    Both inputs need the GPSLatitude and GPSLongitude columns carried through from
+    the image metadata. potential is the output of find_potential_collects. If
+    only_single_candidate
     is True, images that fall within more than one collect's window are left out,
     so every potential image shown has exactly one possible collect.
 
@@ -490,12 +477,6 @@ def plot_potential_match_locations(
     matched = all_matched_image_metadata[
         all_matched_image_metadata["collect_ID"].isin(collect_ids)
     ]
-
-    gps = read_gps(
-        set(matched["SourceFile"]) | set(potential["SourceFile"]), gps_cache_file
-    )
-    matched = matched.merge(gps, on="SourceFile", how="left")
-    potential = potential.merge(gps, on="SourceFile", how="left")
 
     output_folder = Path(output_folder)
     shutil.rmtree(output_folder, ignore_errors=True)
@@ -540,9 +521,13 @@ def parse_args():
         ),
     )
     parser.add_argument(
-        "timestamps",
+        "image_metadata",
         type=Path,
-        help="JSON of image SourceFile and DateTimeOriginal, as written by exiftool -json.",
+        help=(
+            "Per-image metadata as a GeoPackage (from 02_extract_and_upload_metadata.py), "
+            "exiftool -json -n output, or CSV. Needs SourceFile and DateTimeOriginal; "
+            "GPSLatitude and GPSLongitude are used for the location maps."
+        ),
     )
     parser.add_argument(
         "output_folder",
@@ -588,10 +573,7 @@ def parse_args():
     parser.add_argument(
         "--skip-location-plots",
         action="store_true",
-        help=(
-            "Don't map GPS locations of matched and potential images. Mapping "
-            "reads GPS with exiftool, which needs the image files to be readable."
-        ),
+        help=("Don't map GPS locations of matched and potential images."),
     )
     parser.add_argument(
         "--include-multi-candidate",
@@ -600,15 +582,6 @@ def parse_args():
             "In the GPS maps, also show unmatched images that fall within more than "
             "one collect's time window. By default only images with exactly one "
             "possible collect are shown."
-        ),
-    )
-    parser.add_argument(
-        "--gps-cache",
-        type=Path,
-        default=None,
-        help=(
-            "CSV used to cache GPS read from images between runs. "
-            "Default: <output_folder>/gps_cache.csv."
         ),
     )
     return parser.parse_args()
@@ -621,7 +594,7 @@ def main():
     collect_vis_folder.mkdir(parents=True, exist_ok=True)
 
     mission_metadata, image_metadata = load_and_preprocess(
-        args.mission_metadata, args.timestamps
+        args.mission_metadata, args.image_metadata
     )
 
     all_matched_image_metadata = match_images_to_collects(
@@ -668,7 +641,6 @@ def main():
             all_matched_image_metadata,
             potential,
             args.output_folder / "potential_match_locations",
-            gps_cache_file=args.gps_cache or args.output_folder / "gps_cache.csv",
             only_single_candidate=not args.include_multi_candidate,
         )
 
