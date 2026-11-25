@@ -220,6 +220,8 @@ spec:
           - "{{inputs.parameters.collect-start-datetime}}"
           - "--collect-end-datetime"
           - "{{inputs.parameters.collect-end-datetime}}"
+          - "--time-bounds-tolerance"
+          - "360.0"
 
     # extract-metadata: builds the per-image metadata GeoPackage for one collect's reorganized
     # images, via 02_extract_and_upload_metadata.py, and uploads it to S3.

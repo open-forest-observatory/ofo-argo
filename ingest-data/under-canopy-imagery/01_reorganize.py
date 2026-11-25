@@ -57,7 +57,7 @@ def parse_args():
     parser.add_argument(
         "--time-bounds-tolerance",
         type=float,
-        default=120.0,
+        default=360.0,
         help="Include images within this number of seconds of the provided time bounds to account for sychronization errors between devices",
     )
 
@@ -72,7 +72,7 @@ def main(
     collect_start_datetime: str,
     collect_end_datetime: str,
     max_allowable_delta: float = 120.0,
-    time_bounds_tolerance: float = 120.0,
+    time_bounds_tolerance: float = 360.0,
 ):
     """Subset images based on file_prefixes and a datetime range and hardlink to an output folder named based on the collect_id
 
